@@ -72,7 +72,18 @@ sudo -u postgres psql -c "CREATE ROLE luxeride LOGIN PASSWORD '<yours>';"
 sudo -u postgres createdb -O luxeride luxeride
 ```
 
-Then `.env.local` holds `DATABASE_URL="postgresql://luxeride:<yours>@localhost:5432/luxeride"`.
+Then `.env.local` holds `DATABASE_URL="postgresql://luxeride:<yours>@localhost:5432/luxeride"` —
+**and it already does**, with a generated password. Run the `ALTER ROLE` above with that same password
+(or put yours in `.env.local` instead), then confirm the whole thing in one command:
+
+```bash
+npm run db:check
+```
+
+That is E4's exit gate: it reads the URL out of `.env.local`, refuses the placeholder, runs
+`select 1`, and reports the role, the database, the server version and how many tables exist. It is
+also the command that tells you which half you forgot when you rotate the password — `.env.local` or
+Postgres. The connection string is never printed on any path, including the failures.
 
 **A local Postgres cluster ships no managed backups, and there is no history for the data the way there
 is for the code.** That leaves exactly one recovery path:
