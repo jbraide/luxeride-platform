@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import JsonLd from "@/components/JsonLd";
 import ProductFaq from "@/components/ProductFaq";
 import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
@@ -7,7 +9,7 @@ import { LinkButton } from "@/components/Button";
 import { PRODUCTS, getCategoryBySlug, getProductBySlug } from "@/data/products";
 import { formatDeliverySummary, formatPriceFrom } from "@/lib/availability";
 import { resolveMedia } from "@/lib/media-manifest";
-import { pageMetadata } from "@/lib/seo";
+import { breadcrumbJsonLd, faqJsonLd, pageMetadata, productJsonLd } from "@/lib/seo";
 
 /**
  * The catalogue is a compile-time constant, so the seven pages are generated at
@@ -63,12 +65,57 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!product) notFound();
 
   const price = formatPriceFrom(product);
+  const media = resolveMedia(product.slug);
+  const category = getCategoryBySlug(product.categorySlug);
+
+  /**
+   * One array, two consumers: the visible trail and the BreadcrumbList. A
+   * structured-data trail that does not match the page a visitor sees is a
+   * policy violation, so they are built from the same source rather than
+   * written twice.
+   *
+   * The category crumb points at `/shop?category=<slug>` because that is where
+   * the category actually lives today; storefront-catalog §6.5 promotes it to a
+   * real path, and this line changes with it.
+   */
+  const trail = [
+    { name: "Home", path: "/" },
+    { name: "Shop", path: "/shop" },
+    { name: category?.name ?? "Shop", path: `/shop?category=${product.categorySlug}` },
+    { name: product.name, path: `/products/${product.slug}` },
+  ];
+
+  // §12.5: the real photography from the manifest, so the image crawler is
+  // offered the product rather than the placeholder. Falls back to the product's
+  // own og:image when the product has no photography yet.
+  //
+  // The manifest path is ALREADY site-relative and already starts with
+  // `products/`, so it gets a bare leading slash. Prefixing `/products/` here
+  // produced `/products/products/...`, which was caught by reading the rendered
+  // JSON-LD rather than the source.
+  const images = media && media.images.length > 0
+    ? media.images.map((entry) => `/${entry.path}`)
+    : [`/products/${product.slug}/opengraph-image`];
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12">
+      <JsonLd
+        data={productJsonLd({
+          name: product.name,
+          description: product.seoDescription,
+          image: images[0],
+          slug: product.slug,
+          category: category?.name ?? "Car accessories",
+          url: `/products/${product.slug}`,
+        })}
+      />
+      <JsonLd data={breadcrumbJsonLd(trail)} />
+      {faqJsonLd(product.faq) ? <JsonLd data={faqJsonLd(product.faq)!} /> : null}
+
+      <Breadcrumbs trail={trail} />
       <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
         <div>
-          <ProductGallery media={resolveMedia(product.slug)} name={product.name} />
+          <ProductGallery media={media} name={product.name} />
         </div>
 
         <div>
