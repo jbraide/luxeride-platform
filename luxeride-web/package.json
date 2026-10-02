@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run media:check && next build",
     "start": "next start",
     "lint": "eslint",
+    "media:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/media.mjs --check",
+    "verify": "tsc --noEmit && eslint . && npm run media:check && next build",
     "postinstall": "prisma generate",
     "db:seed": "node prisma/seed.mts"
   },

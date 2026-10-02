@@ -49,3 +49,18 @@ export function comingSoonMessage(what: string, phone?: string): string {
 export function notFoundMessage(query: string): string {
   return `Hi! I couldn't find my exact car ("${query}") in your configurator. Can you help me check the fit?`;
 }
+
+/**
+ * For a 404 that was not a car search — a dead link, a mistyped URL or a
+ * retired product page. `notFoundMessage()` is about a car and would confuse
+ * someone who followed a broken product link.
+ */
+export function brokenLinkMessage(path: string): string {
+  return `Hi! I followed a link on your site to "${path}" and it wasn't there. Can you point me to the right page?`;
+}
+
+/** For `src/app/error.tsx`, when a page failed to load rather than being absent. */
+export function siteErrorMessage(path: string): string {
+  return `Hi! Something went wrong when I tried to open "${path}" on your site. Can you help me place my order?`;
+}
+

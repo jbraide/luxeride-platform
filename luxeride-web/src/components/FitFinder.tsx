@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import SafeImage from "@/components/SafeImage";
+import ProductImage from "@/components/ProductImage";
+import ProductPlaceholder from "@/components/ProductPlaceholder";
 import Link from "next/link";
 import { BRANDS, FLAT_CARS, POPULAR_CARS, Tier } from "@/data/cars";
 import { PRODUCTS, getProductBySlug, Product } from "@/data/products";
+import type { ProductMedia } from "@/lib/media";
 import { productBase } from "@/lib/pricing";
 import { fmtNaira } from "@/lib/pricing";
 import { Chip } from "@/components/Chip";
@@ -18,7 +20,18 @@ const YEAR_FROM = 2000;
 const YEAR_TO = 2026;
 const YEARS = Array.from({ length: YEAR_TO - YEAR_FROM + 1 }, (_, i) => YEAR_TO - i);
 
-export default function FitFinder({ lockedProductSlug }: { lockedProductSlug?: string }) {
+export default function FitFinder({
+  lockedProductSlug,
+  mediaBySlug,
+}: {
+  lockedProductSlug?: string;
+  /**
+   * Resolved on the server by `src/app/fit-finder/page.tsx` and passed down,
+   * because a Client Component cannot read the media manifest. `null` per
+   * product means no photography yet, which renders `ProductPlaceholder`.
+   */
+  mediaBySlug: Record<string, ProductMedia | null>;
+}) {
   const lockedProduct = lockedProductSlug ? getProductBySlug(lockedProductSlug) : undefined;
 
   const [step, setStep] = useState<Step>("car");
@@ -80,6 +93,7 @@ export default function FitFinder({ lockedProductSlug }: { lockedProductSlug?: s
 
   const tier: Tier = brand ? BRANDS[brand].tier : "regular";
   const unitPrice = product ? productBase(product, tier, rows) : 0;
+  const resultMedia = product ? (mediaBySlug[product.slug] ?? null) : null;
 
   function handleAddToCart() {
     if (!product || !brand || !model) return;
@@ -248,11 +262,20 @@ export default function FitFinder({ lockedProductSlug }: { lockedProductSlug?: s
           </p>
 
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {product.images.map((src) => (
-              <div key={src} className="relative h-24 w-32 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-panel-2">
-                <SafeImage src={src} alt="" fill className="object-cover" />
+            {resultMedia && resultMedia.images.length > 0 ? (
+              resultMedia.images.map((entry, i) => (
+                <div
+                  key={entry.path}
+                  className="relative aspect-[4/3] w-32 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-panel-2"
+                >
+                  <ProductImage media={resultMedia} name={product.name} index={i} sizes="128px" />
+                </div>
+              ))
+            ) : (
+              <div className="relative aspect-[4/3] w-32 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-panel-2">
+                <ProductPlaceholder name={product.name} showLabel={false} />
               </div>
-            ))}
+            )}
           </div>
 
           <div className="mt-4 rounded-xl border border-line bg-gradient-to-b from-panel to-panel-2 p-5">
