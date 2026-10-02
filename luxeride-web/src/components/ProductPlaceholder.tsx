@@ -18,7 +18,11 @@ export default function ProductPlaceholder({
   showLabel?: boolean;
 }) {
   return (
-    <div
+    // A <span>, not a <div>. The PDP gallery renders this inside a <button>,
+    // whose content model is phrasing content only — a <div> there is invalid
+    // HTML that browsers tolerate and validators do not. `absolute` blockifies
+    // the span, so the layout is identical either way.
+    <span
       className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-panel-2 to-ink"
       {...(showLabel
         ? { role: "img", "aria-label": `${name} — photograph not yet available` }
@@ -41,6 +45,6 @@ export default function ProductPlaceholder({
           </span>
         </span>
       )}
-    </div>
+    </span>
   );
 }

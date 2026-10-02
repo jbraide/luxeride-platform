@@ -39,8 +39,10 @@ export default async function ShopPage({
       </div>
 
       <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {products.map((p) => (
-          <ProductCard key={p.slug} product={p} />
+        {products.map((p, i) => (
+          // §14.4: first row only. Two is the first row at `grid-cols-2`, the
+          // narrowest layout, and the one above the fold on a phone.
+          <ProductCard key={p.slug} product={p} preload={i < 2} />
         ))}
       </div>
     </div>

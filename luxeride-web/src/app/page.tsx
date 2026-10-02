@@ -53,8 +53,14 @@ export default function HomePage() {
           </Link>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {featured.map((p) => (
-            <ProductCard key={p.slug} product={p} />
+          {featured.map((p, i) => (
+            // storefront-catalog §14.4: a preload hint for the first row only,
+            // everything else lazy. Two is the first row at the narrowest
+            // layout (`grid-cols-2`), which is also the row above the fold on a
+            // phone; preloading the full four-wide desktop row would make a
+            // phone fetch two images it never shows. `preload`, never `priority`
+            // — Next 16 deprecated the latter.
+            <ProductCard key={p.slug} product={p} preload={i < 2} />
           ))}
         </div>
       </section>
