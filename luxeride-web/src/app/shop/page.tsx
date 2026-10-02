@@ -11,14 +11,16 @@ export const metadata: Metadata = pageMetadata({
   path: "/shop",
 });
 
-export default async function ShopPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ category?: string }>;
-}) {
-  const { category } = await searchParams;
-  const active = category && CATEGORIES.some((c) => c.slug === category) ? category : undefined;
-  const products = active ? PRODUCTS.filter((p) => p.categorySlug === active) : PRODUCTS;
+/**
+ * The whole catalogue, unconditionally. A category filter used to be a query
+ * string here, which made `/shop` a dynamic route that could not be prerendered
+ * and could not be canonicalised; categories are real paths now
+ * (`src/app/shop/[category]/page.tsx`) and `next.config.ts` redirects the old
+ * `?category=` form onto them, so this page renders every product and links out
+ * to the categories.
+ */
+export default function ShopPage() {
+  const products = PRODUCTS;
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-12">
@@ -28,19 +30,15 @@ export default async function ShopPage({
       <div className="mt-6 flex flex-wrap gap-2">
         <Link
           href="/shop"
-          className={`rounded-full border px-4 py-1.5 text-sm ${
-            !active ? "border-gold text-gold" : "border-line text-white/70 hover:border-gold"
-          }`}
+          className="rounded-full border border-gold px-4 py-1.5 text-sm text-gold"
         >
           All
         </Link>
         {CATEGORIES.map((c) => (
           <Link
             key={c.slug}
-            href={`/shop?category=${c.slug}`}
-            className={`rounded-full border px-4 py-1.5 text-sm ${
-              active === c.slug ? "border-gold text-gold" : "border-line text-white/70 hover:border-gold"
-            }`}
+            href={`/shop/${c.slug}`}
+            className="rounded-full border border-line px-4 py-1.5 text-sm text-white/70 hover:border-gold hover:text-gold"
           >
             {c.name}
           </Link>

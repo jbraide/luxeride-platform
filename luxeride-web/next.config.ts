@@ -1,6 +1,25 @@
 import type { NextConfig } from "next";
 
+import { CATEGORIES } from "./src/data/products";
+
 const nextConfig: NextConfig = {
+  async redirects() {
+    // Categories were query filters (`/shop?category=floor-mats`); they are real
+    // paths now (storefront-catalog §6). Any ad, bookmark or shared link still
+    // carrying the old form is redirected rather than 404ing, and the redirect
+    // is permanent because the new form is canonical — a 308 keeps the signal
+    // with the path that is now the real one.
+    return CATEGORIES.map((category) => ({
+      // A query string cannot go in `source` — Next rejects it as an invalid
+      // route source, which the first attempt discovered the hard way. The
+      // `has` matcher is how a query is matched.
+      source: "/shop",
+      has: [{ type: "query" as const, key: "category", value: category.slug }],
+      destination: `/shop/${category.slug}`,
+      permanent: true,
+    }));
+  },
+
   async headers() {
     return [
       {

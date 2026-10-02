@@ -50,14 +50,21 @@ export default function sitemap(): MetadataRoute.Sitemap {
     lastModified: newestMtime([path.join(SRC, "app", "shop", "page.tsx")]),
   });
 
-  // Categories are deliberately ABSENT. Today a category is a filter —
-  // `/shop?category=floor-mats` — and a query string in a sitemap is exactly
-  // what storefront-catalog §13.1 forbids: a crawler cannot canonicalise it, and
-  // `/shop?category=floor-mats` and `/shop?category=bundles` are the same
-  // document. They are listed here the moment §6.5 promotes them to real
-  // `/shop/<slug>` paths. Listing a URL that does not yet resolve would be worse
-  // than omitting one that does.
-  void CATEGORIES;
+  // Categories are real paths now (`/shop/[category]`), so they can be listed.
+  // They could not be while they were `/shop?category=<slug>` — §13.1 forbids a
+  // query string in a sitemap, because a crawler cannot canonicalise it and
+  // every filter of the same document competes as one page.
+  for (const category of CATEGORIES) {
+    routes.push({
+      url: absoluteUrl(`/shop/${category.slug}`),
+      changeFrequency: "weekly",
+      priority: 0.8,
+      lastModified: newestMtime([
+        path.join(SRC, "app", "shop", "[category]", "page.tsx"),
+        path.join(SRC, "data", "products.ts"),
+      ]),
+    });
+  }
 
   for (const product of PRODUCTS) {
     routes.push({

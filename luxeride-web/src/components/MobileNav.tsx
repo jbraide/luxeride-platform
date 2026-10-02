@@ -116,7 +116,7 @@ export default function MobileNav() {
                 {/* Category routes (/shop/<slug>) arrive in M3.3; the query form
                     is what exists today and it resolves to the same grid. */}
                 <Link
-                  href={`/shop?category=${category.slug}`}
+                  href={`/shop/${category.slug}`}
                   onClick={close}
                   className="block rounded-lg px-3 py-3 text-sm text-white/85 hover:bg-panel-2"
                 >

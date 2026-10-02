@@ -56,14 +56,60 @@ export interface Category {
   slug: string;
   name: string;
   blurb: string;
+  /** ≤60 characters, asserted by `scripts/seo-check.mjs`. */
+  seoTitle: string;
+  /** 120–160 characters, asserted by `scripts/seo-check.mjs`. */
+  seoDescription: string;
+  /** The one line under the category heading. */
+  heroLine: string;
 }
 
 export const CATEGORIES: Category[] = [
-  { slug: "floor-mats", name: "Floor Mats", blurb: "Laser-measured TPE mats for your exact model" },
-  { slug: "seat-covers", name: "Seat Covers", blurb: "Full-set custom seat covers" },
-  { slug: "bundles", name: "Bundles", blurb: "Mats + seat covers, priced together" },
-  { slug: "cargo-liners", name: "Cargo Liners", blurb: "Trunk/boot protection" },
-  { slug: "exterior", name: "Exterior", blurb: "Mud flaps & sun shades" },
+  {
+    slug: "floor-mats",
+    name: "Floor Mats",
+    blurb: "Laser-measured TPE mats for your exact model",
+    seoTitle: "Custom-Fit Car Floor Mats",
+    seoDescription:
+      "Laser-measured TPE floor mats cut to your exact car, single or double layer, covering every footwell in the rows you choose. Drop-in, no tools.",
+    heroLine: "Laser-measured to your exact car. Drop-in, no tools, no drilling.",
+  },
+  {
+    slug: "seat-covers",
+    name: "Seat Covers",
+    blurb: "Full-set custom seat covers",
+    seoTitle: "Custom-Fit Car Seat Covers",
+    seoDescription:
+      "Full-set custom seat covers made for your exact car, fitted over the existing seats. We confirm your row layout with you on WhatsApp before dispatch.",
+    heroLine: "Full-set covers, made for your seats and confirmed before we cut.",
+  },
+  {
+    slug: "bundles",
+    name: "Bundles",
+    blurb: "Mats + seat covers, priced together",
+    seoTitle: "Mats and Seat Covers Bundles",
+    seoDescription:
+      "Double layer mats and full-set seat covers together, priced below buying the two separately. One order, one delivery, made for your exact car.",
+    heroLine: "The mats and the covers together, priced below buying them separately.",
+  },
+  {
+    slug: "cargo-liners",
+    name: "Cargo Liners",
+    blurb: "Trunk/boot protection",
+    seoTitle: "Custom-Fit Cargo and Boot Liners",
+    seoDescription:
+      "A laser-measured boot liner made for your exact car, laying flat on the boot floor to take the knocks that luggage, shopping and loads bring.",
+    heroLine: "Laser-measured to your boot floor, so it lies flat and stays put.",
+  },
+  {
+    slug: "exterior",
+    name: "Exterior",
+    blurb: "Mud flaps & sun shades",
+    seoTitle: "Mud Flaps and Sun Shades",
+    seoDescription:
+      "Mud flaps fitted at your car's existing mounting points with no drilling, and folding sun shades for the front and rear windscreens. Made to order.",
+    heroLine: "Fitted at your car's existing mounting points. No drilling.",
+  },
 ];
 
 // Ported from CONFIG.PRODUCTS in the prototype, now with slugs + categories

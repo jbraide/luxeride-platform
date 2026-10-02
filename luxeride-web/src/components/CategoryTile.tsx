@@ -4,7 +4,7 @@ import { Category } from "@/data/products";
 export default function CategoryTile({ category }: { category: Category }) {
   return (
     <Link
-      href={`/shop?category=${category.slug}`}
+      href={`/shop/${category.slug}`}
       className="group rounded-xl border border-line bg-panel p-5 transition hover:border-gold"
     >
       <h3 className="font-display text-lg font-semibold group-hover:text-gold">{category.name}</h3>

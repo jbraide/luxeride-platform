@@ -37,8 +37,12 @@ const failures = [];
 const productsPath = path.join(ROOT, "src", "data", "products.ts");
 const source = fs.readFileSync(productsPath, "utf8");
 
+// CATEGORIES entries also carry `slug` and `seoDescription`, and an unanchored
+// `.*?` happily spans from a category slug to a product description. Excluding
+// `seoTitle` (which only categories have) keeps each match inside its own
+// array — without it this reported 12 products instead of 7.
 const entryRe =
-  /slug:\s*"([a-z0-9-]+)"[\s\S]*?seoDescription:\s*\n?\s*"((?:[^"\\]|\\.)*)"/g;
+  /slug:\s*"([a-z0-9-]+)"(?![\s\S]{0,600}?seoTitle)[\s\S]*?seoDescription:\s*\n?\s*"((?:[^"\\]|\\.)*)"/g;
 
 const descriptions = [];
 let match;
@@ -53,6 +57,34 @@ if (descriptions.length === 0) {
 }
 
 for (const { slug, description } of descriptions) {
+  const length = description.length;
+  if (length < DESCRIPTION_MIN || length > DESCRIPTION_MAX) {
+    failures.push(
+      `${slug}: seoDescription is ${length} characters, outside the ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} band`,
+    );
+  }
+}
+
+// ── Category metadata ───────────────────────────────────────────────────────
+// The same two bands, for the five category pages. A category title over 60
+// characters is truncated in the SERP, and a description outside 120–160 is
+// either wasted or cut — both are invisible in the source, which is why they
+// are asserted here.
+
+const categoryRe =
+  /slug:\s*"([a-z0-9-]+)",[\s\S]*?seoTitle:\s*"((?:[^"\\]|\\.)*)",[\s\S]*?seoDescription:\s*\n?\s*"((?:[^"\\]|\\.)*)"/g;
+
+const categories = [];
+while ((match = categoryRe.exec(source)) !== null) {
+  categories.push({ slug: match[1], title: match[2], description: match[3] });
+}
+
+for (const { slug, title, description } of categories) {
+  if (title.length > 60) {
+    failures.push(
+      `${slug}: seoTitle is ${title.length} characters, over the 60-character ceiling and will be truncated in search results`,
+    );
+  }
   const length = description.length;
   if (length < DESCRIPTION_MIN || length > DESCRIPTION_MAX) {
     failures.push(
@@ -87,5 +119,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `seo-check: ${descriptions.length} product descriptions within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} characters; no aggregateRating in the structured-data path.`,
+  `seo-check: ${descriptions.length} product descriptions within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} characters, ${categories.length} category titles within 60 and descriptions within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}; no aggregateRating in the structured-data path.`,
 );
