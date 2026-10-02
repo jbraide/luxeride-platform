@@ -47,9 +47,50 @@ explicit "environment failure, not a passing check" message rather than reportin
 read the `probe` block: `href` must be the route you asked for and `textLen` must be non-trivial. `npm run build` on its own also runs `media:check` first, so a missing product image fails the
 production build rather than shipping an empty slot to paid traffic.
 
-> **No database is required to run or build the app.** Nothing under `src/` imports `@prisma/client`
-> yet, and `npm run build` never touches Postgres. `prisma/schema.prisma` exists but has never been
-> migrated — see `../.kiro/specs/commerce-backend/tasks.md` §2.
+> **No database is required to run or build the app yet.** `npm run build` never touches Postgres, and
+> nothing renders from it. `src/lib/db.ts` exists and guards the connection string, but only
+> `prisma/seed.mts` opens a connection, and `prisma/schema.prisma` has never been migrated — see
+> `../.kiro/specs/commerce-backend/tasks.md` §2.
+
+## Environment
+
+Two files, and the difference matters:
+
+- **`.env.example`** is **committed** and carries **no values**. It is the record of which variables the
+  app needs. It is the one exception to `.gitignore`'s `.env*` rule, on purpose.
+- **`.env.local`** is **never committed** and holds the real `DATABASE_URL`. Load order is
+  `.env.$(NODE_ENV).local` → `.env.local` → `.env.$(NODE_ENV)` → `.env`, so `.env.local` wins.
+
+`src/lib/db.ts` throws at first import if `DATABASE_URL` is missing or still the placeholder from
+`.env`. That is deliberate (`commerce-backend` §2.4): a build that cannot reach a database should fail
+at the door rather than surface later as an empty product list or an order that silently did not save.
+
+## The database, and the entire backup story
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE luxeride LOGIN PASSWORD '<yours>';"
+sudo -u postgres createdb -O luxeride luxeride
+```
+
+Then `.env.local` holds `DATABASE_URL="postgresql://luxeride:<yours>@localhost:5432/luxeride"`.
+
+**A local Postgres cluster ships no managed backups, and there is no history for the data the way there
+is for the code.** That leaves exactly one recovery path:
+
+```bash
+npm run db:backup                     # pg_dump -Fc into ~/luxeride-backups, 14-day retention
+npm run db:backup -- --list           # what is on disk, and how old
+npm run db:backup -- --restore FILE   # the rehearsal: restore into a scratch database
+```
+
+**A backup that has never been restored is a hypothesis, not a backup.** `--restore` creates a
+`luxeride_restore_<timestamp>` database, restores into it, prints per-table row counts and the
+one-liner to compare them against the live database, then tells you how to drop the scratch copy. Run
+it weekly, and after any migration that changes a table. It never touches the live database: a scratch
+copy is always the target.
+
+Schedule the nightly dump with a `systemd --user` timer or a crontab entry — there is one workstation
+and one person, so whatever is not scheduled will not happen.
 
 ## What's here
 

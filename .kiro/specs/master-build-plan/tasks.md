@@ -81,9 +81,20 @@ laptop (M10.3).
 
   - [x] E1. Survey the environment for anything that would change the plan — `uname -m`, `node -v`, `npm -v`, `command -v psql pg_dump postgres initdb pg_ctl docker brew`, `apt-cache policy postgresql postgresql-16 docker.io`, `ss -ltn | grep 5432`, `cat /etc/os-release`, read `luxeride-web/.env` _(P0)_ _(verified: x86_64 · Node v22.23.1 · npm 10.9.8 · psql/pg_dump/postgres/initdb/pg_ctl/docker/brew all "NOT INSTALLED" · `postgresql` candidate `16+257build1.1`, `postgresql-16` candidate `16.15-0ubuntu0.24.04.1` · `docker.io` candidate `29.1.3-0ubuntu3~24.04.2` · no listener on 5432 · `/etc/os-release` = elementary OS 8.1 on a noble apt base · `luxeride-web/.env` = four lines ending `DATABASE_URL="postgresql://user:pass@localhost:5432/luxeride"`)_ _Requirements: 8.1_
   - [x] E2. Establish that the install is the owner's to run — `id`, `sudo -n true` _(P0)_ _(verified: uid=1000(joseph), not in the sudo group; `sudo -n true` returns "The 'no new privileges' flag is set, which prevents sudo from running as root" and "/etc/sudo.conf is owned by uid 65534, should be 0")_ _Requirements: 8.1_
-  - [ ] E3. **[own] — OWNER-RUN, blocked on `sudo`.** Install the cluster — **owner-run**; the exact commands are in `design.md` § *Environment strategy*: `sudo apt-get install -y postgresql-16 && sudo systemctl enable --now postgresql`. Native apt, not a container: no container runtime is installed (E1), apt already has Postgres resolved, and a host-side `pg_dump` is what E5 needs. _Requirements: 8.2_ _(P0)_
-  - [ ] E4. **[own]** Create the role and database, and move the real URL into `luxeride-web/.env.local` — → `commerce-backend/tasks.md` 2.2 (role and database) and 2.3 (the `.env.local` move), plus the placeholder guard in `luxeride-web/src/lib/db.ts` from 2.4. Leave `luxeride-web/.env` holding only the commented placeholder and add `luxeride-web/.env.example` with an empty `DATABASE_URL=`. **Do not run this before M0.1**: there is no repository, so an uncommitted secret is an unprotected secret. _Requirements: 8.1, 3.2_ _(P0)_
-  - [ ] E5. **[own]** Stand up the backup discipline that replaces managed backups — nightly `pg_dump -Fc -U luxeride -d luxeride` into `~/luxeride-backups/` (outside the repo, 14-day retention) plus one `pg_restore` rehearsal per week → `commerce-backend/tasks.md` 10.2. The rehearsal is the task, not a nicety. Re-verify **D-01** against it. _Requirements: 8.3_ _(P1)_
+
+  > **E3 verified done 2026-10-02.** `pg_isready -h localhost -p 5432` reports `accepting connections`;
+  > `psql --version` is `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `pg_lsclusters` shows `16 main … online`
+  > on port 5432, listening on `127.0.0.1` and `::1` only. `psql`, `pg_dump`, `pg_restore`, `pg_isready`
+  > and `createdb` are all on PATH; `initdb` and `postgres` are not, which is expected for the packaged
+  > single-cluster layout.
+  >
+  > **E4's role creation is still not possible from the agent's shell**, and the reason is worth writing
+  > down because it is not the same as E2's: there is no superuser path at all. `sudo` still cannot run
+  > as root, peer auth as `postgres` fails (the agent runs as `joseph`), there is no `joseph` role in the
+  > cluster, and no superuser password is set. So the two commands in E4 remain the owner's.
+  - [x] E3. **[own] — DONE BY THE OWNER 2026-10-02.** Install the cluster — **owner-run**; the exact commands are in `design.md` § *Environment strategy*: `sudo apt-get install -y postgresql-16 && sudo systemctl enable --now postgresql`. Native apt, not a container: no container runtime is installed (E1), apt already has Postgres resolved, and a host-side `pg_dump` is what E5 needs. _Requirements: 8.2_ _(P0)_
+  - [~] E4. **[own] — FILE HALF DONE, DATABASE HALF IS YOURS.** Create the role and database, and move the real URL into `luxeride-web/.env.local` — → `commerce-backend/tasks.md` 2.2 (role and database) and 2.3 (the `.env.local` move), plus the placeholder guard in `luxeride-web/src/lib/db.ts` from 2.4. Leave `luxeride-web/.env` holding only the commented placeholder and add `luxeride-web/.env.example` with an empty `DATABASE_URL=`. **Do not run this before M0.1**: there is no repository, so an uncommitted secret is an unprotected secret. _Requirements: 8.1, 3.2_ _(P0)_
+  - [~] E5. **[own] — SCRIPT DONE, SCHEDULE AND DRILL ARE YOURS.** Stand up the backup discipline that replaces managed backups — nightly `pg_dump -Fc -U luxeride -d luxeride` into `~/luxeride-backups/` (outside the repo, 14-day retention) plus one `pg_restore` rehearsal per week → `commerce-backend/tasks.md` 10.2. The rehearsal is the task, not a nicety. Re-verify **D-01** against it. _Requirements: 8.3_ _(P1)_
 
   > **Do not start M6 until E4 is green.** Requirement 9.2: E3 and E4 may run beside M0–M5, and
   > nothing in M0–M5 may depend on their result.
@@ -457,3 +468,42 @@ still renders `100% precision-molded {product} in stock for your {year} {brand} 
 behind any of them. This is blocker **B2** and the single most damaging false claim in the app. M1's
 gate does not cover it and M2.5/M2.7 rewrite it. It is flagged here so that M1's completion is not
 read as "the site is honest now".
+
+### E-track progress, 2026-10-02
+
+**E3 done** (owner). PostgreSQL 16.15 installed and the `16 main` cluster is online on
+`127.0.0.1:5432`, verified with `pg_isready`.
+
+**E4's file half done, database half yours.** Created: `luxeride-web/.env.example` (committed, no
+values — the one exception to `.gitignore`'s `.env*`), `luxeride-web/.env` reduced to the commented
+placeholder, and `luxeride-web/src/lib/db.ts` with the guard from `commerce-backend` §2.4 plus the
+`globalThis` client cache from §4.1. Verified: the guard throws on both a missing and a placeholder
+`DATABASE_URL`; `npm run verify` still exits 0.
+
+Two things found while doing it. **`.env` is not tracked, and should not be** — `luxeride-web/.gitignore`
+ignores `.env*`, so an earlier note in this file claiming `.env` was "committed with its commented
+placeholder" was wrong; `.env.example` is the tracked record instead, and M0.1's exit gate ("a first
+commit that does not contain `luxeride-web/.env`") is satisfied by it being untracked at all. And
+**`import "server-only"` is deliberately absent from `db.ts`** — the package is not installed, so the
+import would fail the build; `commerce-backend` §4.2 adds both together.
+
+**Still yours, two commands:**
+
+```
+sudo -u postgres psql -c "CREATE ROLE luxeride LOGIN PASSWORD '<yours>';"
+sudo -u postgres createdb -O luxeride luxeride
+```
+
+There is no superuser path from the agent's shell: `sudo` cannot run as root, peer auth as `postgres`
+fails, there is no `joseph` role, and no superuser password is set. Then `.env.local` gets
+`DATABASE_URL="postgresql://luxeride:<yours>@localhost:5432/luxeride"`, and E4 is closed.
+
+**E5's script is done; the schedule and the drill are yours.** `luxeride-web/scripts/db-backup.sh` and
+`npm run db:backup`: `pg_dump -Fc` into `~/luxeride-backups/` with 14-day retention, refusing to treat
+an empty dump as a backup, and never echoing the connection string. `--restore FILE` is the rehearsal
+made cheap — it creates a `luxeride_restore_<timestamp>` scratch database, restores into it, prints
+per-table row counts and the exact comparison command, and never targets the live database. All four
+failure paths verified: no `.env.local`, placeholder URL, `--restore` with no file, and `--list` with no
+backup directory each exit non-zero with a message that says what to do. **What is not done is the part
+that matters:** nothing is scheduled yet, and no dump has ever been restored. A backup that has never
+been restored is a hypothesis.

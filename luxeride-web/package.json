@@ -12,7 +12,8 @@
     "verify": "tsc --noEmit && eslint . && npm run media:check && next build",
     "check:hydration": "node scripts/hydration-check.mjs",
     "postinstall": "prisma generate",
-    "db:seed": "node prisma/seed.mts"
+    "db:seed": "node prisma/seed.mts",
+    "db:backup": "bash scripts/db-backup.sh"
   },
   "prisma": {
     "seed": "node prisma/seed.mts"

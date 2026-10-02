@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the example is the point of the example: it is the committed record of
+# which variables the app needs, and it must carry no values.
+!.env.example
 
 # vercel
 .vercel
