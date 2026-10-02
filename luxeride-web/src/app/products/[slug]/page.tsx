@@ -1,9 +1,20 @@
 import { notFound } from "next/navigation";
+import ProductFaq from "@/components/ProductFaq";
 import ProductGallery from "@/components/ProductGallery";
+import RelatedProducts from "@/components/RelatedProducts";
 import { LinkButton } from "@/components/Button";
 import { PRODUCTS, getProductBySlug } from "@/data/products";
 import { formatDeliverySummary, formatPriceFrom } from "@/lib/availability";
 import { resolveMedia } from "@/lib/media-manifest";
+
+/**
+ * The catalogue is a compile-time constant, so the seven pages are generated at
+ * build time and nothing else may be rendered on demand (storefront-catalog
+ * §14.3). Without this, `/products/<anything>` renders a page that then calls
+ * `notFound()` — a 404 that arrives as a 200-worthy render instead of a real
+ * 404 at the routing layer.
+ */
+export const dynamicParams = false;
 
 export function generateStaticParams() {
   return PRODUCTS.map((p) => ({ slug: p.slug }));
@@ -47,8 +58,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               Select My Car &amp; Add to Cart
             </LinkButton>
           </div>
+
+          <ProductFaq product={product} />
         </div>
       </div>
+
+      <RelatedProducts product={product} />
     </div>
   );
 }

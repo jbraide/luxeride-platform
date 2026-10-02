@@ -43,6 +43,19 @@ production build rather than shipping an empty slot to paid traffic.
 - `/order/confirmation` — reads the last placed order from the order store
 - 404 and error boundaries (`src/app/not-found.tsx`, `src/app/error.tsx`), each with a WhatsApp escape
 
+The route list is not final. Still to come, with the milestone that adds each:
+
+| Route | Added by | Notes |
+|---|---|---|
+| `/shop/[category]` | M3.3 | today the same grid is reached as `/shop?category=<slug>` |
+| `/policies/delivery`, `/policies/returns`, `/policies/privacy`, `/policies/terms` | M4.4 | |
+| `/contact` | M4.5 | |
+| `/order/[reference]` | M6.11 | replaces `/order/confirmation`, which is a `localStorage` copy |
+| `/admin` | M9.3 | six screens, one operator |
+
+`/products/[slug]` has `dynamicParams = false`, so a slug outside the seven in `src/data/products.ts` is
+a real 404 at the router rather than an on-demand render that calls `notFound()` afterwards.
+
 ## What's real vs. placeholder
 
 - **Real**: all routing, cart logic, pricing math (row surcharge, tier-based pricing), phone validation,
@@ -67,6 +80,34 @@ production build rather than shipping an empty slot to paid traffic.
 `node scripts/media.mjs --check` walks `PRODUCTS[].images[]` and `public/products/manifest.json` and
 fails if any declared path has no file in `public/`. It is wired into `npm run build` and `npm run verify`.
 
+`npm run media` is the transform half: it reads `footage/photos/<product-slug>-<angle>.jpg` and
+`footage/video/<product-slug>.mp4`, writes `public/products/<slug>/<angle>.jpg` (auto-oriented from
+EXIF, resized inside 1600, JPEG q82 progressive, plus a 16 px blurred `blurDataURL`), extracts a
+`poster.jpg` per clip, and rewrites `public/products/manifest.json`. Set `LUXERIDE_FOOTAGE_DIR` to read
+footage from somewhere other than `Luxeride/footage/`. It **refuses to run** without a `photos/`
+directory rather than writing an empty manifest, and it never emits a `video` entry — the raw clips are
+74–208 MB and attaching one as a `<source>` would hand a visitor a 200 MB download.
+
+### `next.config.ts` — the three knobs, and why each is left alone
+
+- **`images.formats`** stays at its default `['image/webp']`. AVIF is roughly 50% slower to encode for
+  about 20% smaller files, and the framework's own guidance is to prefer WebP. A commented-out
+  `['image/avif', 'image/webp']` sits in the config; measure before enabling it.
+- **`images.qualities`** defaults to `[75]`. Passing a `quality` prop that is not in that list is
+  **silently coerced to the nearest allowed value** rather than erroring, so a non-default `quality`
+  needs the list widened *first*. Nothing in this app passes one today.
+- **`Cache-Control`** is set for `/products/:slug/:file+` only — product photography. Note the pattern:
+  `storefront-catalog` §14.6 specifies `/products/:path*`, which was measured to also match the PDP
+  itself and put a one-year `s-maxage` on the HTML. The Next headers guide defines `*` as zero-or-more,
+  so even `:file*` still swallows `/products/<slug>` and `+` is required.
+
+### Moving media off `public/`
+
+`MEDIA_BASE_URL` in `src/lib/media.ts` is the whole seam. To move to Supabase Storage or Vercel Blob:
+set that constant to the bucket origin, add an `images.remotePatterns` entry for it in
+`next.config.ts`, and copy the manifest paths across unchanged. No component holds a path literal —
+they all go through `mediaUrl()` — so nothing else changes.
+
 ## Next phases (not built yet, per the architecture plan)
 
 1. Move `src/data/*.ts` into a real Postgres DB (Supabase + Prisma).
@@ -87,3 +128,14 @@ fails if any declared path has no file in `public/`. It is wired into `npm run b
   written; it is true now, and `npm run verify` is what keeps it honest.
 - `npm run build` must exit 0 and write `.next/BUILD_ID`. If `.next/BUILD_ID` is absent, the build never
   succeeded — a green-looking `next build` that produced no `BUILD_ID` is not a build.
+- **No ISR interval is configured, deliberately.** Every catalogue route is a compile-time constant read
+  from `src/data/*.ts`, so there is nothing to revalidate: `/`, `/shop` and the seven PDPs are static or
+  SSG, and `/fit-finder` is dynamic only because it reads `?product=`. `export const revalidate` belongs
+  to whichever spec first introduces a real data read — `commerce-backend` when `/order/[reference]`
+  lands, and `fitment-engine` when `checkFit()` reads the database in M9. Adding it before then would
+  only hide a stale-catalogue bug that cannot exist yet.
+- **The product photography file must be named to a contract, not dropped in.** `scripts/media.mjs`
+  reads `footage/photos/<product-slug>-<angle>.jpg`, where `<product-slug>` is one of the seven slugs in
+  `src/data/products.ts` and `<angle>` becomes the image's `alt` text (`driver` → "driver-side view").
+  A file that does not match is rejected by name rather than skipped, because a silently skipped photo
+  is a product that renders a placeholder and nobody notices.
