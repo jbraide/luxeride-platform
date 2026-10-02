@@ -412,6 +412,16 @@ at all. `CarModelFlag.car` declared a relation with no opposite field on `Car`, 
 failed with **P1012** — which the new `postinstall` script would have turned into a failing
 `npm install` on every fresh clone. Fixed by adding `Car.flag CarModelFlag?`.
 
+**One published claim now depends on the price table, and nothing guards it.** §7.2's rule is to publish
+only what is on record, so the Full Bundle's FAQ says it "is priced below the Double Layer Mats and the
+Seat Covers added together, at both the regular and premium tier". That was checked against every
+combination rather than asserted: regular/2-row 120,000 vs 110,000; regular/3-row 148,000 vs 135,000;
+premium/2-row 147,000 vs 135,000; premium/3-row 175,000 vs 160,000 — the bundle is cheaper in all four.
+It is prose in `src/data/products.ts`, so **a future price edit can silently falsify it.** A
+`prices:check` in the `verify` chain would make that structurally impossible, in the same shape as
+§12.4's `seo-check.mjs`; it is not added here because it is not an M1 item, and the claim sits two lines
+from the prices it depends on in the same file.
+
 **One latent claim is deliberately left standing, and M2 owns it.** `src/components/FitFinder.tsx:261`
 still renders `100% precision-molded {product} in stock for your {year} {brand} {model}` beside a
 `FIT ✓` badge, for any of the 4,671 car/year combinations in `src/data/cars.ts`, with no fitment data
