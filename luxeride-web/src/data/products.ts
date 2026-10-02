@@ -35,6 +35,21 @@ export interface Product {
    * the same claim in its catalogue-level form.
    */
   availability: string;
+  /**
+   * Authored meta description, 120–160 characters (storefront-catalog §10.8).
+   *
+   * Authored rather than composed, because composing one from `note` +
+   * `materials` + `availability` was measured across all seven products and
+   * lands between 122 and 176 characters — three over the ceiling — while
+   * dropping the availability sentence lands between 74 and 128, most under the
+   * floor. `scripts/seo-check.mjs` asserts the band mechanically, so an edit
+   * that breaks it fails the build instead of shipping.
+   *
+   * Every sentence here is a claim that is on record elsewhere in this file or
+   * in `src/data/locations.ts`. None asserts stock, a lead time, a material
+   * grade or a fitment for a car the fitment table does not cover.
+   */
+  seoDescription: string;
 }
 
 export interface Category {
@@ -87,6 +102,8 @@ export const PRODUCTS: Product[] = [
       },
     ],
     availability: "Made to order for your exact car.",
+    seoDescription:
+      "Laser-measured TPE floor mats cut to your exact car, covering every footwell in the rows you choose. Drop-in, no tools, priced per car.",
   },
   {
     slug: "double-layer-mats",
@@ -110,6 +127,8 @@ export const PRODUCTS: Product[] = [
       },
     ],
     availability: "Made to order for your exact car.",
+    seoDescription:
+      "Double layer car mats with a waterproof base layer under the top mat, laser-measured to your exact car. Both layers drop straight into place.",
   },
   {
     slug: "seat-covers",
@@ -128,6 +147,8 @@ export const PRODUCTS: Product[] = [
     care: "Wipe clean with a damp cloth.",
     faq: [],
     availability: "Made to order for your exact car.",
+    seoDescription:
+      "Full-set custom seat covers made for your exact car, fitted over the existing seats. We confirm your row layout with you before dispatch.",
   },
   {
     slug: "full-bundle",
@@ -151,6 +172,8 @@ export const PRODUCTS: Product[] = [
       },
     ],
     availability: "Made to order for your exact car.",
+    seoDescription:
+      "Double layer mats and full-set seat covers together, priced below buying the two separately. Made to order for your exact car and row layout.",
   },
   {
     slug: "cargo-liner",
@@ -168,6 +191,8 @@ export const PRODUCTS: Product[] = [
     care: "Shake out and wipe clean with a damp cloth.",
     faq: [],
     availability: "Made to order for your exact car.",
+    seoDescription:
+      "A laser-measured boot liner made for your exact car, laying flat on the boot floor to take the knocks that luggage and loads bring.",
   },
   {
     slug: "mud-flaps",
@@ -185,6 +210,8 @@ export const PRODUCTS: Product[] = [
     care: "Rinse with water.",
     faq: [],
     availability: "Made to order for your exact car.",
+    seoDescription:
+      "A set of four mud flaps, two front and two rear, fitted at the existing mounting points of your car. No drilling into the bodywork.",
   },
   {
     slug: "sun-shade",
@@ -202,6 +229,8 @@ export const PRODUCTS: Product[] = [
     care: "Wipe clean with a damp cloth.",
     faq: [],
     availability: "Made to order for your exact car.",
+    seoDescription:
+      "Folding sun shades for the front and rear windscreens, keeping the sun and its UV off your dashboard and seats on a parked car in Nigeria.",
   },
 ];
 

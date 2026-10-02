@@ -1,4 +1,20 @@
+import type { Metadata } from "next";
 import CartView from "./CartView";
+import { pageMetadata } from "@/lib/seo";
+
+/**
+ * `index: false` — a cart is a private, per-visitor document. Letting it be
+ * indexed would put a transactional page in search results competing with
+ * `/shop` for the same queries, which is a self-inflicted loss.
+ */
+export const metadata: Metadata = {
+  ...pageMetadata({
+    title: "Your Cart",
+    description: "Review the items in your LuxeRide cart before checking out.",
+    path: "/cart",
+  }),
+  robots: { index: false, follow: true },
+};
 
 /**
  * Server Component wrapper.

@@ -7,6 +7,7 @@ import { LinkButton } from "@/components/Button";
 import { PRODUCTS, getCategoryBySlug, getProductBySlug } from "@/data/products";
 import { formatDeliverySummary, formatPriceFrom } from "@/lib/availability";
 import { resolveMedia } from "@/lib/media-manifest";
+import { pageMetadata } from "@/lib/seo";
 
 /**
  * The catalogue is a compile-time constant, so the seven pages are generated at
@@ -22,29 +23,17 @@ export function generateStaticParams() {
 }
 
 /**
- * Part of `storefront-catalog` §10.8 — the half that needs no deployment fact.
+ * `storefront-catalog` §10.8 — complete.
  *
  * Before this, all seven product pages emitted the identical root title, so
  * seven distinct products competed for one query as one page.
  *
- * **Deliberately incomplete, and the reason is measured, not assumed.**
- *
- * §10.8 asks for `pageMetadata()` — a self-referencing canonical, a 120–160
- * character description and an `og:image`. All three are M3.1's `src/lib/seo.tsx`,
- * which needs `metadataBase` and therefore `NEXT_PUBLIC_SITE_URL`; §3.1's own
- * compile-time gate is exactly right about the split, because a title and a
- * description are **compile-time facts** while a canonical and an `og:image` are
- * **deployment facts**. D-05 is undecided, so the deployment half cannot be
- * written. Next merges metadata per field, so leaving `description` unset here
- * inherits the root layout's rather than emitting an empty one.
- *
- * The description is not a case of "not got round to it": composing one from
- * `note` + `materials` + `AVAILABILITY_COPY` was measured across all seven
- * products and lands between 122 and 176 characters — three of the seven over
- * §10.8's ceiling — while dropping the availability sentence lands between 74
- * and 128 — most under its floor. Fitting the band needs authored per-product
- * copy, which belongs in M3.1 alongside the other twelve routes' metadata rather
- * than invented here for seven pages.
+ * The description is **authored per product** (`seoDescription` in
+ * `src/data/products.ts`), not composed. Composing one from `note` +
+ * `materials` + `availability` was measured across all seven and lands between
+ * 122 and 176 characters — three of the seven over §10.8's 160 ceiling — while
+ * dropping the availability sentence lands between 74 and 128, most under its
+ * floor. `scripts/seo-check.mjs` now holds the band mechanically.
  */
 export async function generateMetadata({
   params,
@@ -60,7 +49,12 @@ export async function generateMetadata({
   // product and its category are the same words.
   const suffix = category && category.name !== product.name ? ` — ${category.name}` : "";
 
-  return { title: `${product.name}${suffix}` };
+  return pageMetadata({
+    title: `${product.name}${suffix}`,
+    description: product.seoDescription,
+    path: `/products/${product.slug}`,
+    image: `/products/${product.slug}/opengraph-image`,
+  });
 }
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {

@@ -1,4 +1,19 @@
+import type { Metadata } from "next";
 import CheckoutView from "./CheckoutView";
+import { pageMetadata } from "@/lib/seo";
+
+/**
+ * `index: false` — same reasoning as `/cart`. This page also asks for a phone
+ * number and a delivery address, so it should never appear in a result page.
+ */
+export const metadata: Metadata = {
+  ...pageMetadata({
+    title: "Checkout",
+    description: "Confirm your delivery details and order your LuxeRide accessories.",
+    path: "/checkout",
+  }),
+  robots: { index: false, follow: true },
+};
 
 /**
  * Server Component wrapper.

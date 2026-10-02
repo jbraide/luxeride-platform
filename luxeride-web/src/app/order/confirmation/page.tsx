@@ -1,4 +1,27 @@
+import type { Metadata } from "next";
 import ConfirmationView from "./ConfirmationView";
+
+/**
+ * No `pageMetadata()` here, and that is deliberate.
+ *
+ * This page renders entirely from `localStorage` on the client, so the server
+ * has no order to describe. `commerce-backend` §7.1 replaces it with a Server
+ * Component reading a real order, and honest metadata arrives then.
+ *
+ * `description: null` is explicit rather than omitted, and that distinction was
+ * found by checking the rendered HTML rather than by reading this file. Next
+ * merges metadata per field, so an omitted `description` INHERITS the root
+ * layout's — which described laser-measured mats and seat covers to a crawler
+ * that would never see an order on this page. An empty STRING does not work:
+ * Next treats "" as absent and inherits anyway, which was measured, not assumed.
+ * `null` is the documented way to drop an inherited field outright.
+ * `noindex, nofollow` stops it being indexed regardless.
+ */
+export const metadata: Metadata = {
+  title: "Order Confirmation",
+  description: null,
+  robots: { index: false, follow: false },
+};
 
 /**
  * Server Component wrapper.

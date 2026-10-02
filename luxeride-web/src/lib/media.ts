@@ -14,6 +14,8 @@
  * `ProductPlaceholder`.
  */
 
+import { MEDIA_BASE_URL } from "@/lib/site";
+
 export interface MediaEntry {
   /** Path relative to `MEDIA_BASE_URL`, e.g. `products/double-layer-mats/driver.jpg`. */
   path: string;
@@ -34,16 +36,12 @@ export interface ProductMedia {
 export type MediaManifest = Record<string, ProductMedia>;
 
 /**
- * The storage seam. Empty today, so every path resolves against `public/`.
- * Moving to object storage means setting this constant and adding the bucket to
- * `images.remotePatterns` — no component holds a path literal.
- *
- * NOTE: `storefront-catalog` §3.1 puts this in `src/lib/site.ts`. That file does
- * not exist yet (it is M3.1, and it throws at module load without
- * `NEXT_PUBLIC_SITE_URL`, which would break the M1 build). When §3.1 lands it
- * must re-export this constant rather than declare a second one.
+ * The storage seam, re-exported from `src/lib/site.ts` — the single declaration,
+ * per storefront-catalog §3.1. Empty today, so every path resolves against
+ * `public/`. Moving to object storage means setting that constant and adding the
+ * bucket to `images.remotePatterns` — no component holds a path literal.
  */
-export const MEDIA_BASE_URL = process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? "";
+export { MEDIA_BASE_URL };
 
 /** Absolute URL for a manifest entry, tolerating a trailing slash on the base. */
 export function mediaUrl(entry: MediaEntry): string {

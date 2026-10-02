@@ -1,6 +1,15 @@
+import type { Metadata } from "next";
 import FitFinder from "@/components/FitFinder";
 import { PRODUCTS } from "@/data/products";
 import { resolveAllMedia } from "@/lib/media-manifest";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = pageMetadata({
+  title: "Find Your Perfect Fit",
+  description:
+    "Tell us your car and we will check which custom-fit accessories we actually make for it. No guesswork, and we tell you plainly when a fit is not covered.",
+  path: "/fit-finder",
+});
 
 export default async function FitFinderPage({
   searchParams,

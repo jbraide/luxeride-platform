@@ -1,8 +1,21 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import CategoryTile from "@/components/CategoryTile";
 import ProductCard from "@/components/ProductCard";
 import { LinkButton } from "@/components/Button";
 import { CATEGORIES, PRODUCTS } from "@/data/products";
+import { pageMetadata } from "@/lib/seo";
+
+// The root layout's `title.default` already reads as a homepage title, so this
+// route supplies only the description and the self-referencing canonical. The
+// canonical matters: without it this page inherits nothing and `/` competes
+// with every other route for its own URL.
+export const metadata: Metadata = pageMetadata({
+  title: "LuxeRide Nigeria — Custom-Fit Car Accessories",
+  description:
+    "Laser-measured TPE floor mats, seat covers, cargo liners, mud flaps and sun shades, made to order for your exact car. Pay on delivery nationwide.",
+  path: "/",
+});
 
 export default function HomePage() {
   const featured = PRODUCTS.slice(0, 4);

@@ -1,6 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
 import { CATEGORIES, PRODUCTS } from "@/data/products";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = pageMetadata({
+  title: "Shop Car Accessories",
+  description:
+    "Browse laser-measured floor mats, seat covers, cargo liners, mud flaps and sun shades, each made to order for your exact car in Nigeria.",
+  path: "/shop",
+});
 
 export default async function ShopPage({
   searchParams,
