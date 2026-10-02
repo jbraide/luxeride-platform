@@ -2,12 +2,33 @@
 
 ## Status
 
-**IN PROGRESS — E partial, M0 near-complete, M1 near-complete.** Last updated 2026-10-02.
+**BLOCKED — E partial, M0 done but for the push, M1 done but for three owner-gated halves.** Last
+updated 2026-10-02. **Every remaining item needs an input only the owner can supply**; they are listed
+under *What is blocking* below, and the same five have been outstanding since the work started.
+
+**Legend.** `[x]` done and verified by a command run in the session that marked it — the check is named
+on the line. `[~]` genuinely half-done, with the missing half and its blocker named on the line.
+`[ ]` not started.
 
 **Landed.** The production build is fixed and the platform is under version control for the first
 time: `npm run build` exits 0 and writes `.next/BUILD_ID`; `npx tsc --noEmit` reports 0 errors;
 `npx eslint .` reports 0 errors and 0 warnings; `npm run verify` chains all of it plus `media:check`
-and exits 0. Commits on `main`: `7f28f72` (M0), `e1c1d8c` (M1), `e07638b` (M1.10).
+and exits 0. Commits on `main` begin at `7f28f72` (M0); `git log --oneline` has the list.
+
+**The module specs have been marked too**, so each one now reflects what was built rather than saying
+"NOT STARTED": `commerce-backend` §1, `storefront-catalog` (54 done, 4 partial), `cart-checkout`
+§10.1–10.3, and `payments-paystack` §2–3. `00-RELEASE-READINESS-AUDIT.md` carries a status line on
+each of B1–B4 and an updated spec index.
+
+**What is blocking, precisely.** Nothing below is difficulty; each is an input.
+
+| Needs | Blocks |
+|---|---|
+| **D-05** — the production domain | M0.5, and M1.9's canonical/`og:image`/description half. `metadataBase` needs `NEXT_PUBLIC_SITE_URL`, and a placeholder would ship canonical URLs pointing at a domain nobody owns. **This is the first blocker for all of M3.** |
+| **The photo/clip → product mapping** | M1.10's actual run. `Luxeride/footage/` holds `20260801_*.jpg`/`.mp4`; the pipeline is built and verified against that real footage, but only the owner knows which clip shows which product, and alt text built from a guessed angle token would be a caption nobody verified. |
+| **A shell where Chrome can open a socket** | M1.12's last assertion. This sandbox refuses Chrome `socket()`, so it has no network and every navigation lands on `chrome-error://chromewebdata/`. `npm run check:hydration` exists for it and exits 2 rather than passing when it cannot load a page. |
+| **A private git remote** | M0.1's push. The repository and the first commit exist; nothing has been pushed, so there is still no off-machine copy. |
+| **`sudo`** | E3, and therefore E4, E5 and all of M6. `sudo` cannot run as root here (`no new privileges`), so PostgreSQL 16 is still not installed. |
 
 M1's storefront work is in: no `SafeImage` import anywhere, no empty image slot on any surface (every
 product renders `ProductPlaceholder`), the three storage-backed screens no longer render store contents
@@ -15,22 +36,16 @@ during the first paint, a real mobile menu, a 404 and an error boundary, honest 
 price band instead of one number, and prepay **hidden** rather than misdescribed. The browser-side half
 of the hydration assertion is unverified — see M1.12.
 
-**Known gaps, all recorded in the boxes below.**
+**M1's exit gate, assertion by assertion** — five of six verified:
 
-- **M0.1** — the repository exists and the first commit landed, but it has **not been pushed**: no
-  remote exists yet.
-- **D-05** is still undecided, so **M0.5** is open and **M1.9** shipped only its gallery half; the
-  PDP `generateMetadata` needs `NEXT_PUBLIC_SITE_URL` and `metadataBase`.
-- **M1.10** — the pipeline is built and verified against a fixture, but has **not been run over the
-  real footage**: the three JPEGs and eight MP4s in `Luxeride/footage/` are named
-  `20260801_114841.jpg` and so on, which does not match the `<product-slug>-<angle>.jpg` contract, and
-  only the owner can say which clip shows which product.
-- **M1.12** — the build, `media:check`, the no-`SafeImage` grep and the server-rendered HTML are all
-  verified, and the console half is now one command (`npm run check:hydration`). It has not been run to
-  a passing state, because this sandbox denies Chrome a socket, so it has no network and no browser
-  check of any kind is possible here. The 360 px-viewport half is still a human step.
-- **E3–E5** are owner-run: `sudo` cannot run as root in this sandbox (`no new privileges`). PostgreSQL
-  is still not installed.
+| Assertion | State |
+|---|---|
+| `npm run build` exits 0 | **PASS** |
+| `node scripts/media.mjs --check` exits 0 | **PASS** |
+| no `SafeImage` import remains under `src/` | **PASS** |
+| no hydration warning on `/cart`, `/checkout`, `/order/confirmation` | **UNVERIFIED HERE** — needs a shell where Chrome can open a socket; `npm run check:hydration` |
+| no card, strip or PDP gallery renders an empty grey box at 360 px | **PASS** structurally — zero `<img>` elements are emitted, placeholder per container, counts one-for-one. Must be re-run once a manifest exists |
+| every route reachable from the mobile menu | **PASS** — menu, `/shop` → 7 PDPs, cart → checkout → confirmation |
 
 **A defect found and fixed during M0.2, not in any audit:** `prisma/schema.prisma` did not validate —
 `CarModelFlag.car` had no opposite relation field on `Car`, so `prisma generate` failed with **P1012**.

@@ -2,10 +2,27 @@
 
 ## Status
 
-**NOT STARTED — 5 done, 96 remaining** (counting every checkbox, parent headings included). The 4
-checked sub-tasks under section 1, plus that heading, are the only payment-relevant facts verified by
-reading code in this session; they describe today's behaviour, not a built feature. There is no
-Paystack dependency, no key, no route, no webhook and no server-side order record.
+**PARTIAL — sections 2 and 3 done; the payment itself does not exist.** 10 done, 1 partial, 90 remaining (101 checkbox items).
+
+**Section 2 is closed** — it was resolved to `commerce-backend` §1.1–1.5 (M0.2 in the master plan) and
+the build now passes: `npm run build` exits 0 with `.next/BUILD_ID`, `npx tsc --noEmit` reports 0 errors.
+Section 2.3, adding `server-only`, is **not** done and belongs with M7.1.
+
+**Section 3 — honest prepay copy — is done, with one deliberate deviation.** The prepay option no longer
+says anything implying an online or automatic payment, and the discount is stated as applying once the
+transfer is *received*. But `_CONTEXT.md` and `cart-checkout` OQ 1 are right that there is no bank name
+and no account number anywhere in `src/`, so **the option is hidden rather than relabelled**:
+`src/lib/payment-options.ts` exports `PREPAY_AVAILABLE = false` and the checkout renders the button only
+behind it. Offering a customer an unpayable option at the highest-intent screen is worse than not
+offering one. Task 3.3's server-provided flag keyed on `PAYSTACK_SECRET_KEY` replaces that constant when
+M7 lands, and at that point the option should reappear already saying the right thing.
+
+Task 3.5 is partial: the confirmation screen now says the page is a browser-side copy and that WhatsApp
+is the record that counts until a server stores the order, but it still leads with "Order sent — check
+WhatsApp", because there is still no status for it to report.
+
+Nothing else in this spec is started. **D-09** (Paystack account, test key, business-verification lead
+time) is still unanswered, and it is a multi-day external lead time — see M5.11.
 
 Blockers outside this spec: the production build fails
 (`prisma/seed.ts` cannot resolve `./data/products`, `_CONTEXT.md` §3), and no Paystack account or key
@@ -28,23 +45,23 @@ exists. Task 0.1 is therefore first and is not optional.
     - _Requirements: 4.7, 6.10, 12.8_
 
 - [ ] 2. Unblock the build *(must precede everything)*
-  - [ ] 2.1 Fix `prisma/seed.ts`'s unresolvable `./data/products` import so `npm run build` completes, otherwise no payment code can be deployed _(P0)_
+  - [x] 2.1 Fix `prisma/seed.ts`'s unresolvable `./data/products` import so `npm run build` completes, otherwise no payment code can be deployed _(P0)_
     - _Requirements: 13.4_
-  - [ ] 2.2 Confirm `npx tsc --noEmit` is clean afterwards _(P0)_
+  - [x] 2.2 Confirm `npx tsc --noEmit` is clean afterwards _(P0)_
     - _Requirements: 13.4_
   - [ ] 2.3 Add `server-only` to `package.json` dependencies so the server pricing and Paystack modules can be guarded _(P0)_
     - _Requirements: 10.2_
 
 - [ ] 3. Honest prepay copy — the only shippable P0 here
-  - [ ] 3.1 Rewrite the prepay option in `src/app/checkout/page.tsx:153-162` so it says "pay by bank transfer, account details sent afterwards" and does not imply an online or automatic payment _(P0)_
+  - [x] 3.1 Rewrite the prepay option — done, but **moved** so it says "pay by bank transfer, account details sent afterwards" and does not imply an online or automatic payment _(P0)_
     - _Requirements: 1.1, 1.2_
-  - [ ] 3.2 Move the discount and free-shipping explanation into `src/app/checkout/page.tsx` as conditional text — "applies once your transfer is received" _(P0)_
+  - [x] 3.2 Move the discount and free-shipping explanation into `src/app/checkout/page.tsx` as conditional text — "applies once your transfer is received" _(P0)_
     - _Requirements: 1.2_
   - [ ] 3.3 Gate the online-payment option on a server-provided flag in `src/app/checkout/page.tsx` so it renders only when `PAYSTACK_SECRET_KEY` is set, and label it as a test payment when the key is a `sk_test_` key _(P0)_
     - _Requirements: 1.3, 1.4, 11.5_
-  - [ ] 3.4 Restate the POD line in `src/app/checkout/page.tsx:149-150` so it is clear the rider collects on arrival _(P0)_
+  - [x] 3.4 Restate the POD line in `src/app/checkout/page.tsx:149-150` so it is clear the rider collects on arrival _(P0)_
     - _Requirements: 1.5_
-  - [ ] 3.5 Stop `src/app/order/confirmation/page.tsx:30` showing "Order sent — check WhatsApp" as a settled outcome while no server record exists; add the order ref and a provisional-status note _(P0)_
+  - [~] 3.5 Stop `src/app/order/confirmation/page.tsx:30` showing "Order sent — check WhatsApp" as a settled outcome while no server record exists; add the order ref and a provisional-status note _(P0)_
     - _Requirements: 1.6, 6.10, 12.8_
 
 - [ ] 4. Server-side pricing *(the anti-tamper core)*

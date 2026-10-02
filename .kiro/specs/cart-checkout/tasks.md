@@ -2,11 +2,27 @@
 
 ## Status
 
-NOT STARTED — 12 done, 71 remaining.
+**PARTIAL — three build items done (10.1–10.3); the rest are untouched.** 14 done, 82 remaining (96 checkbox items).
 
-Everything under group 1 is a **verified audit finding**, not work: those items already exist in the
-repo and the `- [x]` marks mean "I read this file and confirmed it". All 71 build items are `- [ ]`.
-No source file has been modified — this spec writes nothing outside `.kiro/specs/cart-checkout/`.
+**10.3 is closed**, and with it defect **D1**: the `useHasMounted()` guard moved out of `Header.tsx` into
+`src/lib/use-has-mounted.ts` and is now applied to all three storage-backed screens. Those three were
+re-split into Server Component pages wrapping `CartView.tsx`, `CheckoutView.tsx` and
+`ConfirmationView.tsx` first — the split is `storefront-catalog` §3.6, and it is a precondition for
+their `metadata` exports in §3.7.
+
+The verification is the interesting part: the three routes' **server** HTML now contains
+`Loading your saved cart…` rather than `Your cart is empty`, which is the mismatch itself, gone — the
+server can no longer disagree with a client whose store hydrates synchronously. What is *not* verified
+is the browser console, because this environment refuses Chrome a socket; `npm run check:hydration`
+exists for that and exits 2 rather than passing when it cannot load a page.
+
+**10.1 and 10.2 are also done**, out of order, via `storefront-catalog` §4.1–4.3 (M1.6): `src/app/error.tsx`
+as a Client Component using the Next 16 `{ error, retry }` props, and `src/app/not-found.tsx`. The
+remaining item worth naming is **10.5** — on a failed order call the cart and draft must survive — which
+needs an order endpoint that does not exist yet.
+
+Nothing else in this spec is started, and everything from group 2 onward is blocked on
+`commerce-backend` (an order store there is still blocked on E3).
 
 ## Before any ad spend
 
@@ -122,7 +138,7 @@ clear the cart before the handoff is confirmed), and **7.1 + 7.3** (three-branch
   - _Requirements: 12.1, 12.3, 12.4_
   - [ ] 10.1 Create `src/app/error.tsx` as a Client Component using the Next 16 `{ error, retry }` props (not `reset`), offering retry, a route back to the fit finder, and a WhatsApp contact action. _(P0)_ — _Requirements: 12.1_
   - [ ] 10.2 Create `src/app/not-found.tsx` as a Server Component offering the cart and the fit finder instead of a bare 404. _(P0)_ — _Requirements: 12.2_
-  - [ ] 10.3 Extract the `useHasMounted()` guard from `src/components/Header.tsx` into a shared hook and apply it to `src/app/cart/page.tsx`, `src/app/checkout/page.tsx` and `src/app/order/confirmation/page.tsx`, fixing D1 across all three. _(P0)_ — _Requirements: 12.3_
+  - [x] 10.3 Extract the `useHasMounted()` guard from `src/components/Header.tsx` into a shared hook and apply it to `src/app/cart/page.tsx`, `src/app/checkout/page.tsx` and `src/app/order/confirmation/page.tsx`, fixing D1 across all three. _(P0)_ — _Requirements: 12.3_ **(verified: `src/lib/use-has-mounted.ts` now holds the hook and `src/components/Header.tsx` imports it. The three pages were first re-split into Server Component wrappers plus `CartView.tsx` / `CheckoutView.tsx` / `ConfirmationView.tsx`, and each view renders `src/components/StorageSkeleton.tsx` until mounted. `curl` of all three now returns `Loading your saved cart…` / `Loading your order…` in the **server** HTML where it previously returned `Your cart is empty` / `No recent order found` — that divergence was D1. The browser-console half is not verified; see `../storefront-catalog/tasks.md` §15 and `luxeride-web/scripts/hydration-check.mjs`.)**
   - [ ] 10.4 Add the `localStorage` try/catch guard and the explanatory fallback state around the cart and confirmation screens, covering private mode and storage-disabled browsers. _(P1)_ — _Requirements: 12.3_
   - [ ] 10.5 On a failed order endpoint call, keep the cart, keep the draft, and offer both **Try again** and the manual WhatsApp fallback with the locally built message in `src/app/checkout/page.tsx`. _(P0)_ — _Requirements: 4.6, 12.4_
 

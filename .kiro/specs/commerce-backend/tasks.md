@@ -2,13 +2,27 @@
 
 ## Status
 
-**NOT STARTED** — 6 done, 57 remaining. The 6 done items are verified groundwork (section 0); no implementation has been written yet.
+**PARTIAL — section 1 done; everything from section 2 onward untouched.** 13 done, 66 remaining (79 checkbox items).
+
+Section 1, **the P0 launch blocker**, is complete and verified: `npm run build` exits 0 and writes
+`.next/BUILD_ID`, `npx tsc --noEmit` reports 0 errors, `npx eslint .` reports 0 errors and 0 warnings.
+That is blocker **B1**, and it is closed. The full note is in `../master-build-plan/tasks.md` M0.2.
+
+**A defect this spec did not list, found and fixed while doing task 1.5.** `prisma/schema.prisma` did not
+validate at all — `CarModelFlag.car` declared a relation with no opposite field on `Car`, so
+`prisma generate` failed with **P1012**. Adding `postinstall` without fixing that would have turned every
+fresh `npm install` into a failure. Repaired by adding `Car.flag CarModelFlag?`; task 2.5 rewrites the
+schema anyway, so this is a repair rather than a design decision.
+
+Everything from section 2 onward is **still blocked on E3**: PostgreSQL is not installed on this machine
+and `sudo` cannot run as root in the agent sandbox, so task 2.1 is the owner's step to run. Tasks
+4.1–4.4, 5.1 and 6.1 need no database but are not started either.
 
 ## Before any ad spend
 
 Short version: **do not buy traffic until section 1 is green.** The app cannot be deployed today, and a deployed app would take orders it cannot record.
 
-- [ ] `npm run build` exits 0 and `.next/BUILD_ID` exists → task 1
+- [x] `npm run build` exits 0 and `.next/BUILD_ID` exists → task 1. **(verified 2026-10-02: exits 0, `.next/BUILD_ID` written, `tsc --noEmit` 0 errors, `eslint .` 0 errors 0 warnings)**
 - [ ] A real `DATABASE_URL` is set and `prisma migrate status` reports up to date → task 2
 - [ ] `npm run db:seed` runs twice with no error and no duplicates → task 3
 - [ ] Placing one real order writes an `Order` + `OrderItem` rows, and the confirmation page survives a hard refresh → tasks 6, 7
@@ -33,15 +47,15 @@ If money moves before all five are green, orders land only in a customer's `loca
     - _Requirements: 5.11, 10.4_
 
 - [ ] 1. Fix the P0 launch blocker — `npm run build` must exit 0
-  - [ ] 1.1 Add `"allowImportingTsExtensions": true` to `compilerOptions` in `luxeride-web/tsconfig.json`. It is safe here because `noEmit: true` is already set and Next compiles with SWC, not `tsc`; without it, `tsc` rejects every explicit `.ts` specifier with `TS5097`, which is what forces the next task's file shape. _(P0)_
+  - [x] 1.1 Add `"allowImportingTsExtensions": true` to `compilerOptions` in `luxeride-web/tsconfig.json`. It is safe here because `noEmit: true` is already set and Next compiles with SWC, not `tsc`; without it, `tsc` rejects every explicit `.ts` specifier with `TS5097`, which is what forces the next task's file shape. _(P0)_
     - _Requirements: 1.2, 2.6_
-  - [ ] 1.2 Delete `luxeride-web/prisma/seed.ts` and create `luxeride-web/prisma/seed.mts` in its place. `.mts` is required, not cosmetic: `package.json` has no `"type": "module"`, so a `.ts` entry point makes Node reparse it as ESM and emit a `MODULE_TYPELESS_PACKAGE_JSON` warning on every run. `tsconfig.json` already includes `"**/*.mts"`, so the replacement stays inside the build's type-check. The file's own header comment (line 2, `// Not directly importable; using static seed below`) records that the old import was abandoned rather than fixed. _(P0)_
+  - [x] 1.2 Delete `luxeride-web/prisma/seed.ts` and create `luxeride-web/prisma/seed.mts` in its place. `.mts` is required, not cosmetic: `package.json` has no `"type": "module"`, so a `.ts` entry point makes Node reparse it as ESM and emit a `MODULE_TYPELESS_PACKAGE_JSON` warning on every run. `tsconfig.json` already includes `"**/*.mts"`, so the replacement stays inside the build's type-check. The file's own header comment (line 2, `// Not directly importable; using static seed below`) records that the old import was abandoned rather than fixed. _(P0)_
     - _Requirements: 1.4, 1.5, 2.3_
-  - [ ] 1.3 In `luxeride-web/prisma/seed.mts`, import the data with explicit extensions — `../src/data/products.ts`, `../src/data/cars.ts`, `../src/data/locations.ts`. Do **not** import `@/lib/pricing`, `@/data/*` or anything else through the tsconfig `@/*` alias, and do **not** import `src/lib/pricing.ts`: Node's type stripping does not implement tsconfig path resolution and that import was measured to throw `Cannot find package '@/data'`. Price columns are copied raw, so the seed needs no pricing function. _(P0)_
+  - [x] 1.3 In `luxeride-web/prisma/seed.mts`, import the data with explicit extensions — `../src/data/products.ts`, `../src/data/cars.ts`, `../src/data/locations.ts`. Do **not** import `@/lib/pricing`, `@/data/*` or anything else through the tsconfig `@/*` alias, and do **not** import `src/lib/pricing.ts`: Node's type stripping does not implement tsconfig path resolution and that import was measured to throw `Cannot find package '@/data'`. Price columns are copied raw, so the seed needs no pricing function. _(P0)_
     - _Requirements: 2.3, 2.6, 4.1_
-  - [ ] 1.4 Rewrite the `"db:seed"` script in `luxeride-web/package.json` as `"db:seed": "node prisma/seed.mts"`, deleting the `npx ts-node … || node --loader ts-node/esm` fallback chain entirely. Add `"prisma": { "seed": "node prisma/seed.mts" }` so `prisma db seed` and `prisma migrate reset` both use it — Prisma 6.19.3 resolves that key from `package.json` via `loadConfigFromPackageJson` (verified by reading the `Wy()` resolver in `node_modules/prisma/build/index.js`). _(P0)_
+  - [x] 1.4 Rewrite the `"db:seed"` script in `luxeride-web/package.json` as `"db:seed": "node prisma/seed.mts"`, deleting the `npx ts-node … || node --loader ts-node/esm` fallback chain entirely. Add `"prisma": { "seed": "node prisma/seed.mts" }` so `prisma db seed` and `prisma migrate reset` both use it — Prisma 6.19.3 resolves that key from `package.json` via `loadConfigFromPackageJson` (verified by reading the `Wy()` resolver in `node_modules/prisma/build/index.js`). _(P0)_
     - _Requirements: 2.3, 3.2_
-  - [ ] 1.5 Add a `"postinstall": "prisma generate"` script to `luxeride-web/package.json` and run it once by hand, so a fresh `npm install` never leaves the un-generated stub in place. Verify with `npm run build` (exit 0, `.next/BUILD_ID` written), `npx tsc --noEmit` (0 errors) and `npx eslint .` (0 errors, 0 warnings — the two current unused-import warnings in the old `seed.ts` must be gone with it). _(P0)_
+  - [x] 1.5 Add a `"postinstall": "prisma generate"` script to `luxeride-web/package.json` and run it once by hand, so a fresh `npm install` never leaves the un-generated stub in place. Verify with `npm run build` (exit 0, `.next/BUILD_ID` written), `npx tsc --noEmit` (0 errors) and `npx eslint .` (0 errors, 0 warnings — the two current unused-import warnings in the old `seed.ts` must be gone with it). _(P0)_
     - _Requirements: 1.1, 1.2, 1.3, 3.2_
 
 - [ ] 2. Provision the database and establish a migration history

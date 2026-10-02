@@ -1,5 +1,11 @@
 # LuxeRide — Release-Readiness Audit
 
+> **STATUS AS OF 2026-10-02, AFTER THE M0/M1 RUN: B1, B3 and B4 are CLOSED. B2 is OPEN and is M2's
+> first task.** The sections below are the audit as written and are preserved that way on purpose, so
+> that the record of what was wrong is not quietly rewritten — read the per-blocker lines added under
+> the table in section 2 for which are still live. Current state lives in
+> [`master-build-plan/tasks.md`](master-build-plan/tasks.md).
+
 **Date:** 2 October 2026
 **Scope audited:** `platform/` — the two strategy docs, the validated HTML prototype, and the
 `luxeride-web` Next.js application, plus the raw media assets in `Luxeride/footage/`.
@@ -61,14 +67,24 @@ not a reason not to advertise — it is a short list of things to fix first, and
 | # | Blocker | Evidence | Effort |
 |---|---|---|---|
 | **B1** | **Production build fails.** `prisma/seed.ts(2,34): error TS2307: Cannot find module './data/products'`. tsconfig's `include` is `**/*.ts`, so Next type-checks `prisma/**` and aborts. With that one import neutralised, the app builds cleanly — 16 pages, all routes. | `npm run build` (twice, second run with the file set aside); no `.next/BUILD_ID` | Minutes |
+| | **CLOSED 2026-10-02** — `commerce-backend` §1.1–1.5, master plan M0.2. `npm run build` exits 0 and writes `.next/BUILD_ID`; `npx tsc --noEmit` 0 errors; `npx eslint .` 0 errors, 0 warnings. One further defect surfaced while doing it: `prisma/schema.prisma` did not validate at all — `CarModelFlag.car` had no opposite relation field on `Car`, so `prisma generate` failed with **P1012**, which the new `postinstall` would have turned into a failing `npm install` on every fresh clone. | |
 | **B2** | **The FIT ✓ is fabricated — and it is asserted for 4,671 car/year combinations.** 173 selectable models × 27 model years (2000–2026) all return *"We Found Your Fit! 100% precision-molded … in stock for your …"*, decided by one `available` boolean per brand or model. The selected year is captured, displayed, and never validated. The number of confirmed layouts backing all of it is **zero**. | `src/components/FitFinder.tsx:51-97`; `src/data/cars.ts` (`available` flags, brand-level `tier`); counts computed by parsing `cars.ts` | P0 is a **static Confirmed-only fitment table** — the fitment spec's own advice — not the full engine |
+| | **STILL OPEN — this is M2's first task, and the single most damaging false claim in the app.** `FitFinder.tsx:261` still renders `100% precision-molded … in stock for your {year} {brand} {model}` beside the `FIT ✓` badge today. Nothing about M1's completion makes that sentence true; M1's own gate does not cover it. | |
 | **B3** | **5 of 7 products have no working image.** `public/products/` contains only 6 files, all watermarked SVGs for Single and Double Layer Mats. The `seat-covers.*`, `bundle.*`, `cargo-liner.*`, `mud-flaps.*`, `sun-shade.*` families referenced in `src/data/products.ts` do not exist, and `SafeImage` hides the failed slot — so those PDPs show an **empty image strip** and those cards an **empty grey box**. 21 image paths referenced, 6 present, 15 missing. | `src/data/products.ts:56-106` vs `ls public/products/` | Hours; raw photos already exist in `Luxeride/footage/` |
+| | **CLOSED 2026-10-02, for the no-void half** — `storefront-catalog` §8.1–8.9, master plan M1.3–M1.5. `SafeImage` is deleted, every product renders `ProductPlaceholder`, and the fifteen `images[]` paths that named files never produced are gone from `src/data/products.ts`. Measured on the rendered HTML: **zero `<img>` elements** on `/`, `/shop` or any PDP, with the placeholder count matching the card count one-for-one. | |
+| | **NOT closed: the photography itself.** `scripts/media.mjs` is built and verified against the real footage — EXIF orientation applied and stripped, outputs deterministic across runs — but `Luxeride/footage/` holds `20260801_*.jpg`/`.mp4` names and only the owner knows which clip shows which product. Until that mapping exists there is no manifest, so every product shows a branded placeholder panel instead of a photograph. Honest and deliberate; not finished. | |
 | **B4** | **No git repository.** `platform/` and `luxeride-web/` are untracked, and there is no `.git` anywhere up the tree. No history, no rollback, no safe way to change pricing or publish code the week you start spending. | `find` for `.git` | Minutes |
+| | **CLOSED 2026-10-02, except the push** — master plan M0.1. `git init -b main` at `platform/`, a root `.gitignore` covering `node_modules`, `.next`, `.env.local` and the out-of-tree backup directory, and a first commit (`7f28f72`). **Still outstanding: no remote exists, so nothing has been pushed** — there is no off-machine copy and no `git revert` for anything committed since. | |
 
 B1 and B4 are trivial and should be done before anything else. B2 and B3 are the real minimum. Note
 that B2's fix is a data problem, not an engineering one: it needs the owner to say which cars are
 genuinely Confirmed, and how many layouts that is — which the fitment spec already names as your
 launch metric.
+
+**Updated 2026-10-02:** B1, B4 and the no-void half of B3 are done. **B2 is untouched and is now the
+only blocker of the four** — which makes M2 the next milestone, and it is a data problem owned by the
+owner, exactly as the paragraph above says. B3's photography half is built but never run, for want of
+the same kind of owner input.
 
 ### 2.1 Additional verified defects
 
@@ -248,14 +264,14 @@ critical path to the first ad is **M0 → M1 → M2 → M3 → M4 → M5**, none
 
 | Spec | Purpose | State | Done / remaining |
 |---|---|---|---|
-| [`master-build-plan/`](master-build-plan/tasks.md) | **Source of truth for sequencing.** Milestones M0–M10, exit gates, ladder reconciliation, decision queue | Not started | 2 / 136 |
+| [`master-build-plan/`](master-build-plan/tasks.md) | **Source of truth for sequencing.** Milestones M0–M10, exit gates, ladder reconciliation, decision queue | **In progress — M0 done but for the push; M1 done but for three owner-gated halves** | 15 / 138 (+6 partial) |
 | [`admin-console/`](admin-console/tasks.md) | How the owner runs the business: shell, auth, dashboard, orders, WhatsApp queue, demand log, catalogue, media, audit viewer | Not started | 7 / 63 |
-| [`storefront-catalog/`](storefront-catalog/tasks.md) | Catalogue, categories, PDPs, navigation, search, imagery, SEO foundation | Partial | 12 / 104 |
+| [`storefront-catalog/`](storefront-catalog/tasks.md) | Catalogue, categories, PDPs, navigation, search, imagery, SEO foundation | **Partial — imagery, mobile nav and honest product data are built** | 54 / 116 (+4 partial) |
 | [`fit-finder/`](fit-finder/tasks.md) | The configurator funnel, honest fit result, refusal paths | Partial — the fit claim must change | 18 / 68 |
 | [`ad-landing-and-tracking/`](ad-landing-and-tracking/tasks.md) | Campaign landing pages, event taxonomy, pixels, UTM attribution, ordered pre-spend gate | Not started — **your most urgent need** | 9 / 106 |
-| [`cart-checkout/`](cart-checkout/tasks.md) | Cart and checkout conversion, order integrity, failure recovery | Partial | 12 / 71 |
-| [`commerce-backend/`](commerce-backend/tasks.md) | Database, migrations, seeding, server actions, order persistence, model reconciliation | Not started — **B1 lives here** | 6 / 57 |
-| [`payments-paystack/`](payments-paystack/tasks.md) | Real prepay: initialize, verify, webhook, status transitions | Not started | 5 / 96 |
+| [`cart-checkout/`](cart-checkout/tasks.md) | Cart and checkout conversion, order integrity, failure recovery | **Partial — defect D1 (the hydration mismatch) is closed** | 14 / 96 |
+| [`commerce-backend/`](commerce-backend/tasks.md) | Database, migrations, seeding, server actions, order persistence, model reconciliation | **Section 1 done — B1 is closed; the rest is blocked on E3** | 13 / 79 |
+| [`payments-paystack/`](payments-paystack/tasks.md) | Real prepay: initialize, verify, webhook, status transitions | **Sections 2–3 done; the payment does not exist** | 10 / 101 |
 | [`whatsapp-engine/`](whatsapp-engine/tasks.md) | Cloud API, Confirm/Cancel templates, webhook, 12-hour follow-up, ref codes | Not started | 6 / 104 |
 | [`fitment-engine/`](fitment-engine/tasks.md) | Layouts, vehicles, mappings, variants, exclusions, evidence gate, fitment admin screens, `/fit-check`, demand log | Not started — **B2 lives here** | 7 / 105 |
 | [`trust-and-policies/`](trust-and-policies/tasks.md) | Policies, contact, FAQ, social proof, refusal copy — plus 7 pre-ad-spend gates | Not started | 6 / 59 (+7 gates) |
@@ -291,12 +307,21 @@ the locked decisions. Keep it — it is the shortest accurate description of thi
 
 **Before spending a naira (days, not weeks)**
 
-1. Fix `prisma/seed.ts` so the build passes (B1). Minutes.
-2. `git init`, commit, and push somewhere private (B4). Minutes.
-3. Fix the hydration mismatch on `/cart`, `/checkout` and `/order/confirmation` (D1) — reuse the
-   `useHasMounted` pattern already in `Header.tsx`. Minutes.
-4. Process the existing photos into `public/products/` so no page renders an empty grey box (B3).
-5. Replace the fabricated fit with a **static Confirmed-only fitment table** — the fitment spec's own
+1. ~~Fix `prisma/seed.ts` so the build passes (B1).~~ **DONE 2026-10-02** — `commerce-backend` §1.1–1.5.
+2. ~~`git init`, commit, and push somewhere private (B4).~~ **DONE except the push** — the repository
+   exists and the first commit landed; **no remote exists yet**, so this item is half closed.
+3. ~~Fix the hydration mismatch on `/cart`, `/checkout` and `/order/confirmation` (D1)~~ **DONE
+   2026-10-02** — `cart-checkout` §10.3. The three screens' *server* HTML no longer contradicts the
+   client. The browser-console confirmation needs a shell where Chrome can open a socket; see
+   `luxeride-web/README.md` → `npm run check:hydration`.
+4. ~~Process the existing photos into `public/products/` so no page renders an empty grey box (B3).~~
+   **HALF DONE** — no page can render an empty box any more (every product renders a branded
+   placeholder, and zero `<img>` elements are emitted), and the pipeline is built and verified against
+   the real footage. **The photographs themselves are still not processed**, because the footage files
+   are named `20260801_*.jpg` and only the owner knows which clip shows which product. Same kind of
+   input as item 5, and it can be supplied in the same sitting.
+5. **NEXT — and now the only launch blocker left.** Replace the fabricated fit with a **static
+   Confirmed-only fitment table** — the fitment spec's own
    P0 advice. Even 15–25 confirmed layouts, hardcoded, makes the "FIT ✓" true. Then write down that
    number: it is your launch metric.
 6. Write honest NOT STOCKED and UNKNOWN copy, and capture every refusal. The demand log is the only
