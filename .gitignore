@@ -1,0 +1,32 @@
+# ─── LuxeRide platform ────────────────────────────────────────────────────────
+# The repository root is `platform/`. `luxeride-web/` is the Next.js app.
+
+# Dependencies and build output
+luxeride-web/node_modules/
+luxeride-web/.next/
+luxeride-web/out/
+luxeride-web/build/
+
+# Secrets. `.env` holds only the commented placeholder and IS committed on
+# purpose, so the shape of the required variables is documented. The real
+# values live in `.env.local`, which is never committed.
+luxeride-web/.env.local
+luxeride-web/.env.*.local
+luxeride-web/.env.production
+luxeride-web/.env.development
+luxeride-web/.env.test
+*.pem
+
+# TypeScript
+luxeride-web/*.tsbuildinfo
+
+# Backups. The nightly `pg_dump` from the E-track is written to
+# `~/luxeride-backups/`, which is outside this tree and therefore out of git's
+# reach by construction. The entry below only catches a copy dropped in-tree.
+luxeride-backups/
+**/luxeride-backups/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp

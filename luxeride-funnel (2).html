@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LuxeRide — Fit Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0A0A0A;
+    --panel:#141210;
+    --panel-2:#1C1916;
+    --gold:#D4AF37;
+    --gold-dim:#8C7853;
+    --white:#FFFFFF;
+    --line:rgba(212,175,55,0.22);
+    --muted:rgba(255,255,255,0.55);
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--white);
+    font-family:'Inter',sans-serif;
+    display:flex;
+    justify-content:center;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+  .phone{
+    width:100%;
+    max-width:430px;
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse at top, rgba(212,175,55,0.10), transparent 55%),
+      var(--ink);
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    border-left:1px solid rgba(255,255,255,0.06);
+    border-right:1px solid rgba(255,255,255,0.06);
+  }
+
+  /* ---- reticle corner brackets, the signature motif ---- */
+  .reticle{position:relative; display:inline-block;}
+  .reticle::before,.reticle::after,
+  .reticle b::before,.reticle b::after{
+    content:"";
+    position:absolute;
+    width:16px; height:16px;
+    border:2px solid var(--gold);
+    opacity:0.85;
+  }
+  .reticle::before{top:-10px;left:-10px;border-right:none;border-bottom:none;}
+  .reticle::after{top:-10px;right:-10px;border-left:none;border-bottom:none;}
+  .reticle b{position:absolute; inset:0;}
+  .reticle b::before{bottom:-10px;left:-10px;border-right:none;border-top:none;}
+  .reticle b::after{bottom:-10px;right:-10px;border-left:none;border-top:none;}
+
+  /* ---- progress bar ---- */
+  .progress-wrap{padding:18px 22px 0 22px;}
+  .progress-track{height:3px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--gold); width:0%; transition:width .35s ease;}
+  .step-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px; letter-spacing:0.06em;
+    color:var(--gold-dim);
+    margin-top:8px;
+    text-transform:uppercase;
+  }
+
+  .view{
+    flex:1;
+    padding:28px 22px 32px 22px;
+    display:none;
+    flex-direction:column;
+    justify-content:center;
+    animation:fadein .28s ease;
+  }
+  .view.active{display:flex;}
+  @keyframes fadein{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  /* ---- landing ---- */
+  .badges{display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 26px 0;}
+  .badge{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px; letter-spacing:0.03em;
+    color:var(--gold);
+    border:1px solid var(--line);
+    padding:5px 10px;
+    border-radius:100px;
+  }
+  .hero-icon-wrap{
+    display:flex; justify-content:center; margin:8px 0 30px 0;
+  }
+  .hero-icon{
+    width:88px;height:88px;
+  }
+  h1.display{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:32px;
+    line-height:1.12;
+    letter-spacing:0.01em;
+    margin:0 0 14px 0;
+  }
+  h1.display em{color:var(--gold); font-style:normal;}
+  p.sub{
+    color:var(--muted);
+    font-size:15px;
+    line-height:1.55;
+    margin:0 0 4px 0;
+  }
+
+  .btn{
+    display:flex; align-items:center; justify-content:center;
+    width:100%;
+    padding:16px 20px;
+    border-radius:10px;
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:15px;
+    border:none;
+    cursor:pointer;
+    text-decoration:none;
+    transition:transform .12s ease, filter .12s ease;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn:focus-visible{outline:2px solid var(--gold); outline-offset:3px;}
+  .btn-primary{background:var(--gold); color:var(--ink);}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-outline{background:transparent; color:var(--white); border:1px solid rgba(255,255,255,0.25); margin-top:10px;}
+  .btn-outline:hover{border-color:var(--gold); color:var(--gold);}
+  .btn-ghost{background:transparent; color:var(--muted); font-size:13px; padding:10px;}
+
+  /* ---- question steps ---- */
+  h2.q{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:23px;
+    margin:0 0 4px 0;
+  }
+  p.q-hint{color:var(--muted); font-size:13.5px; margin:0 0 22px 0;}
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .grid.single{grid-template-columns:1fr;}
+  .chip{
+    border:1px solid rgba(255,255,255,0.14);
+    background:var(--panel);
+    color:var(--white);
+    padding:16px 14px;
+    border-radius:10px;
+    font-size:14.5px;
+    font-weight:500;
+    text-align:left;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .chip small{
+    display:block;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    color:var(--gold-dim);
+    margin-top:4px;
+    font-weight:400;
+  }
+  .chip:hover{border-color:var(--gold);}
+  .chip.selected{border-color:var(--gold); background:var(--panel-2); box-shadow:0 0 0 1px var(--gold) inset;}
+  .chip:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+
+  select, input[type=text]{
+    width:100%;
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,0.14);
+    color:var(--white);
+    padding:15px 14px;
+    border-radius:10px;
+    font-size:15px;
+    font-family:'Inter',sans-serif;
+    margin-bottom:10px;
+  }
+  select:focus, input:focus{outline:2px solid var(--gold); border-color:var(--gold);}
+
+  .nav-row{display:flex; gap:10px; margin-top:28px;}
+  .nav-row .btn{width:auto; flex:1;}
+  .back-btn{
+    background:transparent; border:1px solid rgba(255,255,255,0.14); color:var(--muted);
+    flex:0 0 auto; width:52px; font-size:18px;
+  }
+
+  /* ---- spec sheet results ---- */
+  .spec-card{
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    padding:22px 20px;
+    margin-bottom:18px;
+  }
+  .spec-top{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    border-bottom:1px dashed rgba(255,255,255,0.14);
+    padding-bottom:14px; margin-bottom:14px;
+  }
+  .spec-top .car{
+    font-family:'Oswald',sans-serif; font-size:19px; font-weight:600;
+  }
+  .spec-top .tag{
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--gold-dim);
+    margin-top:4px;
+  }
+  .fit-ok{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px; color:var(--gold); border:1px solid var(--line);
+    padding:4px 8px; border-radius:6px; white-space:nowrap;
+  }
+  .price-row{display:flex; align-items:baseline; gap:8px; margin-bottom:14px;}
+  .price-row .amount{
+    font-family:'JetBrains Mono',monospace; font-size:34px; font-weight:700; color:var(--gold);
+    letter-spacing:-0.01em;
+  }
+  .spec-line{
+    display:flex; justify-content:space-between;
+    font-size:13.5px; color:var(--muted);
+    padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+  }
+  .spec-line:last-child{border-bottom:none;}
+  .spec-line span:last-child{color:var(--white); font-family:'JetBrains Mono',monospace; font-size:12.5px;}
+
+  .urgency{
+    font-size:12px; color:var(--gold-dim); text-align:center; margin:14px 0 0 0;
+    font-family:'JetBrains Mono',monospace;
+  }
+
+  .wa-preview{
+    margin-top:18px;
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:10px;
+    padding:14px;
+    background:rgba(255,255,255,0.03);
+  }
+  .wa-preview .label{font-size:11px; color:var(--muted); margin-bottom:8px; letter-spacing:0.04em; text-transform:uppercase;}
+  .wa-preview .msg{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; line-height:1.6; color:var(--white);
+    white-space:pre-wrap;
+  }
+  .copy-btn{
+    margin-top:10px; background:transparent; border:1px solid rgba(255,255,255,0.18);
+    color:var(--muted); font-size:12px; padding:8px 12px; border-radius:8px; cursor:pointer;
+  }
+  .copy-btn:hover{border-color:var(--gold); color:var(--gold);}
+  .copy-btn.copied{border-color:var(--gold); color:var(--gold);}
+
+  .negotiate-toggle{
+    background:transparent; border:none;
+    color:var(--gold-dim); font-size:13px; font-family:'Inter',sans-serif;
+    text-align:center; width:100%; padding:14px 0 4px 0; cursor:pointer;
+  }
+  .negotiate-toggle:hover{color:var(--gold);}
+  .negotiate-box{
+    display:none;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px;
+    margin-top:6px;
+    background:rgba(212,175,55,0.04);
+  }
+  .negotiate-box.open{display:block;}
+  .negotiate-label{
+    display:block; font-size:11px; color:var(--muted);
+    letter-spacing:0.04em; text-transform:uppercase; margin-bottom:8px;
+  }
+  .negotiate-box input{margin-bottom:10px;}
+
+  .results-label{
+    font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.06em;
+    color:var(--gold-dim); text-transform:uppercase; margin:16px 0 10px 0;
+  }
+  .product-chip{ display:flex; align-items:center; gap:12px; }
+  .chip-img{ width:56px; height:56px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+  .chip-title{ display:block; font-weight:600; }
+  .guarantee-badge{
+    font-size:12.5px; color:var(--gold);
+    background:rgba(212,175,55,0.08);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 14px;
+    text-align:center;
+    margin-bottom:16px;
+  }
+
+  .gallery{
+    display:flex; gap:8px; overflow-x:auto;
+    margin-bottom:18px; padding-bottom:4px;
+    scroll-snap-type:x mandatory;
+  }
+  .gallery img{
+    width:140px; height:105px; object-fit:cover; border-radius:10px;
+    flex-shrink:0; scroll-snap-align:start;
+    border:1px solid var(--line);
+  }
+  .gallery::-webkit-scrollbar{height:4px;}
+  .gallery::-webkit-scrollbar-thumb{background:var(--gold-dim); border-radius:2px;}
+
+  .spill-badges{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;}
+  .spill-badge{
+    font-family:'JetBrains Mono',monospace; font-size:11px;
+    color:var(--white); background:var(--panel);
+    border:1px solid rgba(255,255,255,0.12);
+    padding:6px 10px; border-radius:100px;
+  }
+
+  .sticky-cta{
+    position:sticky; bottom:14px;
+    margin-top:22px;
+    z-index:5;
+  }
+  .sticky-cta .btn{ box-shadow:0 12px 30px -8px rgba(0,0,0,0.7); }
+
+  textarea{
+    width:100%;
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,0.14);
+    color:var(--white);
+    padding:14px;
+    border-radius:10px;
+    font-size:15px;
+    font-family:'Inter',sans-serif;
+    margin-bottom:4px;
+    resize:vertical;
+  }
+  textarea:focus{outline:2px solid var(--gold); border-color:var(--gold);}
+
+  .field-error{
+    display:none;
+    color:#FF6B35;
+    font-size:11.5px;
+    margin:2px 0 12px 0;
+  }
+  .field-error.show{display:block;}
+
+  .pay-options{display:flex; flex-direction:column; gap:8px; margin-bottom:18px;}
+  .pay-chip{
+    border:1px solid rgba(255,255,255,0.14);
+    background:var(--panel);
+    color:var(--white);
+    padding:14px;
+    border-radius:10px;
+    text-align:left;
+    cursor:pointer;
+  }
+  .pay-chip.selected{border-color:var(--gold); background:var(--panel-2); box-shadow:0 0 0 1px var(--gold) inset;}
+  .pay-chip small{display:block; color:var(--muted); font-size:12px; margin-top:3px;}
+  .save-tag{
+    font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--gold);
+    border:1px solid var(--line); border-radius:100px; padding:2px 7px; margin-left:6px;
+  }
+
+  .checkout-total{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-top:1px dashed rgba(255,255,255,0.14);
+    padding-top:14px; margin-bottom:16px;
+  }
+  .checkout-total span:last-child{
+    font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:var(--gold);
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- progress bar (hidden on landing + results) -->
+  <div class="progress-wrap" id="progressWrap" style="display:none;">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="step-label" id="stepLabel">STEP 1 / 5</div>
+  </div>
+
+  <!-- ================= LANDING ================= -->
+  <section class="view active" id="view-landing">
+    <div class="hero-icon-wrap">
+      <span class="reticle">
+        <b></b>
+        <svg class="hero-icon" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15 62 L22 40 Q26 32 36 32 L64 32 Q74 32 78 40 L85 62" stroke="#D4AF37" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="10" y="62" width="80" height="16" rx="4" stroke="#FFFFFF" stroke-width="2.5"/>
+          <circle cx="28" cy="82" r="7" stroke="#FFFFFF" stroke-width="2.5"/>
+          <circle cx="72" cy="82" r="7" stroke="#FFFFFF" stroke-width="2.5"/>
+          <path d="M30 45 H70" stroke="#8C7853" stroke-width="1.5" stroke-dasharray="3 3"/>
+        </svg>
+      </span>
+    </div>
+    <h1 class="display" id="landingHeadline">Custom-Fit TPE Mats for <em>Your Exact Car</em></h1>
+    <p class="sub" id="landingSub">Laser-measured to your model. Fully waterproof. Pay on delivery, nationwide.</p>
+    <div class="badges">
+      <span class="badge">LASER-MEASURED</span>
+      <span class="badge">100% WATERPROOF</span>
+      <span class="badge">PAY ON DELIVERY</span>
+    </div>
+    <button class="btn btn-primary" onclick="goStep(1)" style="margin-top:28px;">Find My Perfect Fit</button>
+  </section>
+
+  <!-- ================= STEP 1: CAR (search) ================= -->
+  <section class="view" id="view-car">
+    <h2 class="q">What do you drive?</h2>
+    <p class="q-hint">Search by brand or model — we'll do the rest</p>
+    <input type="text" id="carSearch" placeholder="e.g. Camry, or Lexus RX" autocomplete="off" oninput="renderCarResults(this.value)">
+    <p class="results-label" id="carResultsLabel"></p>
+    <div class="grid single" id="carResults"></div>
+    <button class="negotiate-toggle" id="notFoundLink" style="display:none;">Can't find your car? Ask us on WhatsApp →</button>
+    <div class="nav-row">
+      <button class="back-btn btn" onclick="goStep(0)">←</button>
+    </div>
+  </section>
+
+  <!-- ================= STEP 3: YEAR ================= -->
+  <section class="view" id="view-year">
+    <h2 class="q">Model year?</h2>
+    <p class="q-hint">Fit varies by generation, so this locks it in precisely</p>
+    <select id="yearSelect"></select>
+    <div class="nav-row">
+      <button class="back-btn btn" onclick="goStep(1)">←</button>
+      <button class="btn btn-primary" onclick="confirmYear()">Continue</button>
+    </div>
+  </section>
+
+  <!-- ================= STEP 4: PRODUCT ================= -->
+  <section class="view" id="view-product">
+    <h2 class="q">Choose your product</h2>
+    <p class="q-hint">Every item is laser-measured to your exact car</p>
+    <div class="grid single" id="productGrid"></div>
+    <div class="nav-row">
+      <button class="back-btn btn" onclick="goStep(2)">←</button>
+    </div>
+  </section>
+
+  <!-- ================= STEP 4b: ROW CONFIGURATION ================= -->
+  <section class="view" id="view-row">
+    <h2 class="q">2 rows or 3 rows?</h2>
+    <p class="q-hint">Based on your car's seating — this sets the exact price</p>
+    <div class="grid single" id="rowGrid"></div>
+    <div class="nav-row">
+      <button class="back-btn btn" onclick="rowBack()">←</button>
+    </div>
+  </section>
+
+  <!-- ================= STEP 5: LOCATION ================= -->
+  <section class="view" id="view-location">
+    <h2 class="q">Where should we deliver?</h2>
+    <p class="q-hint">Delivery windows differ slightly by zone</p>
+    <div class="grid single" id="locationGrid"></div>
+    <div class="nav-row">
+      <button class="back-btn btn" onclick="locationBack()">←</button>
+    </div>
+  </section>
+
+  <!-- ================= COMING SOON (unavailable brand/model) ================= -->
+  <section class="view" id="view-comingsoon">
+    <h2 class="q">Not in stock — yet</h2>
+    <p class="q-hint">We don't have a laser-scanned fit for <strong id="comingSoonWhat">this one</strong> in stock right now, but we're adding new fits regularly.</p>
+
+    <div class="negotiate-box open" style="margin-top:4px;">
+      <label class="negotiate-label" for="comingSoonPhone">Want a text the moment it's ready? (optional)</label>
+      <input type="text" inputmode="tel" id="comingSoonPhone" placeholder="e.g. 0704 962 1694">
+      <button class="btn btn-primary" onclick="notifyMe()">Notify Me on WhatsApp</button>
+    </div>
+
+    <button class="btn btn-outline" onclick="goStep(1)">Browse Other Cars</button>
+    <button class="btn btn-ghost" onclick="restart()">Start over</button>
+  </section>
+
+  <!-- ================= RESULTS (Dynamic PDP) ================= -->
+  <section class="view" id="view-results">
+    <h2 class="q" id="resultsHeadline">We Found Your Fit!</h2>
+    <p class="q-hint" id="resultsSub">Confirmed by our configurator, verified on WhatsApp before dispatch</p>
+
+    <div class="gallery" id="gallery"></div>
+
+    <div class="spec-card">
+      <div class="spec-top">
+        <div>
+          <div class="car" id="specCar">—</div>
+          <div class="tag" id="specTag">—</div>
+        </div>
+        <div class="fit-ok">FIT ✓</div>
+      </div>
+      <div class="price-row">
+        <span class="amount" id="specPrice">₦0</span>
+      </div>
+      <div class="spec-line" id="specRowLine"><span>Configuration</span><span id="specRow">—</span></div>
+      <div class="spec-line"><span>Delivery zone</span><span id="specLocation">—</span></div>
+      <div class="spec-line"><span>Estimated arrival</span><span id="specEta">—</span></div>
+      <div class="spec-line"><span>Payment</span><span>Choose at checkout</span></div>
+      <div class="urgency">PRICE LOCKED FOR 48 HOURS FROM CONFIRMATION</div>
+    </div>
+
+    <div class="guarantee-badge">🛡️ 100% Perfect Fit Guarantee — doesn't fit? We swap it free.</div>
+
+    <div class="spill-badges">
+      <span class="spill-badge">💧 Waterproof</span>
+      <span class="spill-badge">🚫 Mud-Resistant</span>
+      <span class="spill-badge">☕ Wipes Clean in Seconds</span>
+    </div>
+
+    <button class="btn btn-outline" id="photosButton">Request Live Photos First</button>
+
+    <button class="negotiate-toggle" id="negotiateToggle" onclick="toggleNegotiate()">Want to negotiate instead? →</button>
+    <div class="negotiate-box" id="negotiateBox">
+      <label class="negotiate-label" for="offerInput">Your offer (₦)</label>
+      <input type="text" inputmode="numeric" id="offerInput" placeholder="e.g. 55000">
+      <button class="btn btn-primary" id="offerButton" onclick="sendOffer()">Send My Offer on WhatsApp</button>
+    </div>
+
+    <button class="btn btn-ghost" onclick="restart()">Start over</button>
+
+    <div class="sticky-cta">
+      <button class="btn btn-primary" onclick="goStep(7)">Continue to Checkout →</button>
+    </div>
+  </section>
+
+  <!-- ================= CHECKOUT ================= -->
+  <section class="view" id="view-checkout">
+    <h2 class="q">Almost done</h2>
+    <p class="q-hint">We'll send this straight to WhatsApp for dispatch verification</p>
+
+    <label class="negotiate-label" for="ckName">Full name</label>
+    <input type="text" id="ckName" placeholder="e.g. Chidinma Okafor" oninput="updateCheckoutPreview()">
+
+    <label class="negotiate-label" for="ckPhone">WhatsApp number</label>
+    <input type="text" inputmode="tel" id="ckPhone" placeholder="e.g. 0704 962 1694" oninput="updateCheckoutPreview()">
+    <p class="field-error" id="ckPhoneError">Enter a valid Nigerian number (070/080/081/090/091 or +234)</p>
+
+    <label class="negotiate-label" for="ckAddress">Delivery address</label>
+    <textarea id="ckAddress" rows="2" placeholder="Street, estate/landmark, nearest bus stop" oninput="updateCheckoutPreview()"></textarea>
+
+    <label class="negotiate-label">Payment method</label>
+    <div class="pay-options">
+      <button class="pay-chip selected" id="payPod" onclick="setPayment('pod')">
+        <span class="chip-title">Pay on Delivery</span>
+        <small>Cash or transfer to the rider on arrival</small>
+      </button>
+      <button class="pay-chip" id="payPrepay" onclick="setPayment('prepay')">
+        <span class="chip-title">Prepay by Transfer <span class="save-tag">Save ₦2,000</span></span>
+        <small>Free shipping — account details sent on WhatsApp</small>
+      </button>
+    </div>
+
+    <div class="checkout-total">
+      <span>Total due</span>
+      <span id="checkoutTotal">₦0</span>
+    </div>
+
+    <button class="btn btn-primary" onclick="submitCheckout()">Confirm My Order on WhatsApp</button>
+    <button class="btn btn-ghost" onclick="goStep(6)">← Back to your fit</button>
+
+    <div class="wa-preview">
+      <div class="label">Pre-filled WhatsApp message</div>
+      <div class="msg" id="waMsgPreview">Fill in your details above to preview</div>
+      <button class="copy-btn" id="copyBtn" onclick="copyWaMessage()">Copy message</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* =========================================================================
+   CONFIG — edit this block to plug in your real numbers, no need to
+   touch anything below it.
+   ========================================================================= */
+const CONFIG = {
+  // Your WhatsApp Business number, digits only, country code first, no + or spaces.
+  WHATSAPP_NUMBER: "2347049621694",
+
+  YEAR_RANGE: { from: 2000, to: 2026 },
+
+  // "tier" drives price: regular vs premium.
+  // "available: false" on a BRAND routes anyone who picks it straight to the
+  // "Coming Soon" screen instead of continuing the quiz.
+  // A model can also be flagged individually, e.g. {name:"MDX", available:false},
+  // while the rest of that brand stays open.
+  BRANDS: {
+    "Toyota":   { tier: "regular", available: true, models: ["Camry","Corolla","Corolla Cross","Avalon","Yaris","Venza","RAV4","Highlander","4Runner","Sequoia","Land Cruiser","Land Cruiser Prado","Hilux","Sienna","Hiace","Rush","Fortuner","Avensis","Matrix","Prius","C-HR"] },
+    "Lexus":    { tier: "premium", available: true, models: ["RX 350","RX 330","ES 350","ES 300","IS 250","IS 350","GX 460","GX 470","LX 570","NX 300","GS 350","LS 460"] },
+    "Honda":    { tier: "regular", available: true, models: ["Accord","Civic","CR-V","Pilot","Odyssey","HR-V","Passport","City"] },
+    "Acura":    { tier: "premium", available: true, models: ["TL","TLX",{name:"MDX", available:false},"RDX","ILX","TSX"] },
+    "Nissan":   { tier: "regular", available: true, models: ["Altima","Maxima","Sentra","Murano","Pathfinder","Xterra","Rogue","Armada","Patrol","Frontier","Quest"] },
+    "Infiniti": { tier: "premium", available: true, models: ["QX56","QX60","QX70","G37","M35","FX35"] },
+    "Mazda":    { tier: "regular", available: true, models: ["Mazda 3","Mazda 6","CX-5","CX-9"] },
+    "Mitsubishi": { tier: "regular", available: true, models: ["Montero/Pajero","Outlander","Lancer","L200/Strada","ASX"] },
+    "Suzuki":   { tier: "regular", available: true, models: ["Grand Vitara","Vitara","Jimny","Swift"] },
+    "Hyundai":  { tier: "regular", available: true, models: ["Elantra","Sonata","Accent","Tucson","Santa Fe","Veloster","i10","i20","Creta","Palisade","Venue","Kona"] },
+    "Kia":      { tier: "regular", available: true, models: ["Rio","Cerato","Optima/K5","Sportage","Sorento","Soul","Picanto","Seltos","Cadenza","Sedona"] },
+    "Mercedes-Benz": { tier: "premium", available: true, models: ["C-Class","E-Class","S-Class","GLE","GLC","GLS","G-Class","CLA","CLS","A-Class"] },
+    "BMW":      { tier: "premium", available: true, models: ["1 Series","3 Series","4 Series","5 Series","7 Series","X1","X3","X5","X6"] },
+    "Volkswagen": { tier: "regular", available: true, models: ["Golf","Passat","Jetta","Tiguan","Touareg","Beetle"] },
+    "Audi":     { tier: "premium", available: true, models: ["A4","A6","Q5","Q7"] },
+    "Ford":     { tier: "regular", available: true, models: ["Focus","Fusion","Escape","Explorer","Edge","Expedition","F-150","Ranger","Everest","EcoSport","Mustang"] },
+    "Chevrolet": { tier: "regular", available: true, models: ["Malibu","Cruze","Camaro","Tahoe","Suburban","Traverse","Equinox"] },
+    "Jeep":     { tier: "regular", available: true, models: ["Grand Cherokee","Cherokee","Wrangler","Compass","Patriot"] },
+    "Land Rover": { tier: "premium", available: true, models: ["Range Rover","Range Rover Sport","Range Rover Evoque","Discovery","Discovery Sport","Defender","Freelander"] },
+    "Peugeot":  { tier: "regular", available: true, models: ["504","505","406","407","408","508","3008","5008","2008"] },
+    "Renault":  { tier: "regular", available: true, models: ["Duster","Logan","Koleos"] },
+    "Volvo":    { tier: "premium", available: true, models: ["XC60","XC90","S60","S80"] },
+    "GAC":      { tier: "regular", available: false, models: ["GS3","GS4","GS8","Emkoo","M8"] },
+    "Changan":  { tier: "regular", available: false, models: ["Alsvin","UNI-T","UNI-K","CS35 Plus","CS55 Plus","CS75 Plus"] },
+    "Chery":    { tier: "regular", available: false, models: ["Tiggo 4","Tiggo 7","Tiggo 8","Tiggo 9","Omoda 5"] },
+    "Geely":    { tier: "regular", available: false, models: ["Coolray","Emgrand","Okavango"] },
+    "MG":       { tier: "regular", available: false, models: ["ZS","MG5","HS","MG3"] },
+    "Haval":    { tier: "regular", available: false, models: ["H6","Jolion","H9"] },
+    "JAC":      { tier: "regular", available: false, models: ["S3","T8","JS4"] },
+    "Jetour":   { tier: "regular", available: false, models: ["T2","Dashing","X70","X90"] },
+    "BYD":      { tier: "regular", available: false, models: ["Atto 3","Dolphin","Seagull","Seal"] },
+    "Foton":    { tier: "regular", available: false, models: ["Tunland"] },
+    "Other":    { tier: "regular", available: true, models: ["Enter model on WhatsApp"] }
+  },
+
+  // rowApplicable products charge a flat surcharge for 3-row cars (bigger
+  // SUVs/vans need more material) — set on the Row Configuration step.
+  // Cargo Liner / Mud Flaps / Sun Shade are one-size-per-car, so no row question.
+  PRODUCTS: {
+    "Single Layer Mats":    { rowApplicable: true,  regular: 45000,  premium: 58000,  threeRowSurcharge: 10000, note: "Top layer only" },
+    "Double Layer Mats":    { rowApplicable: true,  regular: 68000,  premium: 82000,  threeRowSurcharge: 12000, note: "Top + waterproof base layer" },
+    "Seat Covers":          { rowApplicable: true,  regular: 52000,  premium: 65000,  threeRowSurcharge: 16000, note: "Full-set custom seat covers" },
+    "Full Bundle":          { rowApplicable: true,  regular: 110000, premium: 135000, threeRowSurcharge: 25000, note: "Double layer mats + seat covers" },
+    "Cargo Liner":          { rowApplicable: false, regular: 35000,  premium: 45000,  note: "Trunk/boot protection, laser-measured" },
+    "Mud Flaps (Set of 4)": { rowApplicable: false, regular: 18000,  premium: 24000,  note: "Splash guards, front & rear, no drilling" },
+    "Sun Shade Set":        { rowApplicable: false, regular: 15000,  premium: 20000,  note: "Front & rear windscreen UV shades" }
+  },
+
+  LOCATIONS: {
+    "Lagos Mainland & Island":  { eta: "24–48 hours", fee: 9000 },
+    "Abuja Central & Outskirts": { eta: "3–5 days", fee: 6000 },
+    "PH, Owerri, Calabar, Warri & Benin": { eta: "3–5 days", fee: 12000 },
+    "Other State":              { eta: "5–7 days", fee: 12000 }
+  },
+
+  // Photo gallery per product — up to 3 shots each (main / texture-detail /
+  // in-car fit). First image doubles as the thumbnail on the "choose your
+  // protection" step; all of them show as a swipeable strip on the results
+  // page. Missing files just quietly disappear from the gallery — nothing breaks.
+  //
+  // Single Layer and Double Layer point at on-brand PLACEHOLDER graphics
+  // (clearly watermarked) so you can see the gallery actually working today.
+  // Swap them for real photos whenever — keep the same filenames and just
+  // overwrite the files in assets/products/, and you never have to touch this code.
+  PRODUCT_IMAGES: {
+    "Single Layer Mats":    ["assets/products/single-layer.svg", "assets/products/single-layer-texture.svg", "assets/products/single-layer-fit.svg"],
+    "Double Layer Mats":    ["assets/products/double-layer.svg", "assets/products/double-layer-texture.svg", "assets/products/double-layer-fit.svg"],
+    "Seat Covers":          ["assets/products/seat-covers.jpg", "assets/products/seat-covers-detail.jpg", "assets/products/seat-covers-fit.jpg"],
+    "Full Bundle":          ["assets/products/bundle.jpg", "assets/products/bundle-detail.jpg", "assets/products/bundle-fit.jpg"],
+    "Cargo Liner":          ["assets/products/cargo-liner.jpg", "assets/products/cargo-liner-detail.jpg", "assets/products/cargo-liner-fit.jpg"],
+    "Mud Flaps (Set of 4)": ["assets/products/mud-flaps.jpg", "assets/products/mud-flaps-detail.jpg", "assets/products/mud-flaps-fit.jpg"],
+    "Sun Shade Set":        ["assets/products/sun-shade.jpg", "assets/products/sun-shade-detail.jpg", "assets/products/sun-shade-fit.jpg"]
+  },
+
+  // Campaign landing pages. Point an Instagram ad's link at
+  // yoursite.com/?product=mats and visitors land on copy specific to that
+  // product AND skip the "choose your protection" step entirely — it's
+  // pre-locked. Add one entry per ad you run; the slug is whatever you put
+  // after ?product= in the link.
+  PRODUCT_LANDING: {
+    "mats": {
+      product: "Double Layer Mats",
+      headline: "Custom-Fit Mats for <em>Your Exact Car</em>",
+      sub: "Laser-measured to your model. Fully waterproof. Pay on delivery."
+    },
+    "single-layer": {
+      product: "Single Layer Mats",
+      headline: "Custom-Fit Mats for <em>Your Exact Car</em>",
+      sub: "Laser-measured top-layer protection. Pay on delivery."
+    },
+    "seat-covers": {
+      product: "Seat Covers",
+      headline: "Custom-Fit Seat Covers for <em>Your Exact Car</em>",
+      sub: "Tailored to your seats. Premium finish. Pay on delivery."
+    },
+    "bundle": {
+      product: "Full Bundle",
+      headline: "The Full Interior Upgrade for <em>Your Exact Car</em>",
+      sub: "Double layer mats + seat covers, laser-measured. Pay on delivery."
+    }
+  }
+};
+/* ========================================================================= */
+
+const STEP_NAMES = ["landing","car","year","product","row","location","results","checkout"];
+const ALL_VIEWS = STEP_NAMES.concat(["comingsoon"]);
+const state = { brand:null, model:null, year:null, product:null, rows:null, location:null };
+const comingSoonState = { brand:null, model:null };
+
+function rowApplicable(productName){
+  const cfg = CONFIG.PRODUCTS[productName];
+  return !!(cfg && cfg.rowApplicable);
+}
+
+function fmtNaira(n){ return "₦" + n.toLocaleString("en-NG"); }
+function isAvailable(item){ return typeof item === "string" ? true : item.available !== false; }
+function nameOf(item){ return typeof item === "string" ? item : item.name; }
+
+// Flat brand+model index for the search step
+const FLAT_CARS = [];
+Object.entries(CONFIG.BRANDS).forEach(([brand, data]) => {
+  if(brand === "Other") return;
+  data.models.forEach(item => {
+    FLAT_CARS.push({ brand, model: nameOf(item), available: data.available !== false && isAvailable(item) });
+  });
+});
+const POPULAR_CARS = [
+  ["Toyota","Camry"], ["Toyota","Corolla"], ["Toyota","Highlander"], ["Toyota","RAV4"],
+  ["Toyota","Hilux"], ["Lexus","RX 350"], ["Honda","Accord"], ["Mercedes-Benz","C-Class"]
+];
+
+// ?product= locking — set by a campaign link, read once on load.
+let lockedProduct = null;
+(function applyProductLanding(){
+  const params = new URLSearchParams(window.location.search);
+  const landing = CONFIG.PRODUCT_LANDING[params.get("product")];
+  if(!landing) return;
+  lockedProduct = landing.product;
+  document.getElementById("landingHeadline").innerHTML = landing.headline;
+  document.getElementById("landingSub").textContent = landing.sub;
+})();
+
+function updateProgress(viewName){
+  const progressWrap = document.getElementById("progressWrap");
+  const known = lockedProduct || state.product;
+  let order;
+  if(lockedProduct){
+    order = rowApplicable(lockedProduct) ? ["car","year","row","location"] : ["car","year","location"];
+  } else if(known){
+    order = rowApplicable(known) ? ["car","year","product","row","location"] : ["car","year","product","location"];
+  } else {
+    order = ["car","year","product","row","location"]; // best guess before product is chosen
+  }
+  const pos = order.indexOf(viewName);
+  if(pos === -1){ progressWrap.style.display = "none"; return; }
+  progressWrap.style.display = "block";
+  document.getElementById("progressFill").style.width = ((pos+1)/order.length*100) + "%";
+  document.getElementById("stepLabel").textContent = "STEP " + (pos+1) + " / " + order.length;
+}
+
+function goStep(i){
+  ALL_VIEWS.forEach(name => document.getElementById("view-"+name).classList.remove("active"));
+  const viewName = STEP_NAMES[i];
+  document.getElementById("view-"+viewName).classList.add("active");
+  updateProgress(viewName);
+
+  if(viewName === "car"){ document.getElementById("carSearch").value = ""; renderCarResults(""); }
+  if(viewName === "year") renderYearSelect();
+  if(viewName === "product") renderProductGrid();
+  if(viewName === "row") renderRow();
+  if(viewName === "location") renderLocationGrid();
+  if(viewName === "results") renderResults();
+  if(viewName === "checkout") renderCheckout();
+}
+
+function locationBack(){
+  const product = lockedProduct || state.product;
+  if(rowApplicable(product)) return goStep(4); // row
+  return goStep(lockedProduct ? 2 : 3); // year (locked, no row) or product
+}
+function rowBack(){ goStep(lockedProduct ? 2 : 3); }
+
+function renderCarResults(query){
+  const list = document.getElementById("carResults");
+  const notFound = document.getElementById("notFoundLink");
+  list.innerHTML = "";
+  const q = query.trim().toLowerCase();
+
+  let matches;
+  if(q === ""){
+    matches = POPULAR_CARS.map(([b,m]) => FLAT_CARS.find(c => c.brand===b && c.model===m)).filter(Boolean);
+    document.getElementById("carResultsLabel").textContent = "POPULAR RIGHT NOW";
+  } else {
+    matches = FLAT_CARS.filter(c => (c.brand + " " + c.model).toLowerCase().includes(q))
+                        .sort((a,b) => b.available - a.available)
+                        .slice(0, 8);
+    document.getElementById("carResultsLabel").textContent = matches.length ? "MATCHES" : "";
+  }
+
+  matches.forEach(c => {
+    const el = document.createElement("button");
+    el.className = "chip";
+    el.innerHTML = c.brand + " " + c.model + (!c.available ? "<small>Coming soon</small>" : "");
+    el.onclick = () => {
+      if(!c.available){ showComingSoon(c.brand, c.model); return; }
+      state.brand = c.brand; state.model = c.model;
+      goStep(2);
+    };
+    list.appendChild(el);
+  });
+
+  if(q !== "" && matches.length === 0){
+    notFound.style.display = "block";
+    notFound.onclick = () => {
+      const msg = `Hi! I couldn't find my exact car ("${query.trim()}") in your configurator. Can you help me check the fit?`;
+      window.open("https://wa.me/" + CONFIG.WHATSAPP_NUMBER + "?text=" + encodeURIComponent(msg), "_blank");
+    };
+  } else {
+    notFound.style.display = "none";
+  }
+}
+
+function showComingSoon(brand, model){
+  ALL_VIEWS.forEach(name => document.getElementById("view-"+name).classList.remove("active"));
+  document.getElementById("progressWrap").style.display = "none";
+  document.getElementById("view-comingsoon").classList.add("active");
+  comingSoonState.brand = brand;
+  comingSoonState.model = model;
+  document.getElementById("comingSoonWhat").textContent = model ? `${brand} ${model}` : brand;
+  document.getElementById("comingSoonPhone").value = "";
+}
+
+function notifyMe(){
+  const phone = document.getElementById("comingSoonPhone").value.trim();
+  const what = comingSoonState.model ? `${comingSoonState.brand} ${comingSoonState.model}` : comingSoonState.brand;
+  let message = `Hi! I'd like to know when products for ${what} become available.`;
+  if(phone) message += `\nMy number: ${phone}`;
+  message += `\nPlease notify me. Thanks!`;
+  const waUrl = "https://wa.me/" + CONFIG.WHATSAPP_NUMBER + "?text=" + encodeURIComponent(message);
+  window.open(waUrl, "_blank");
+}
+
+function renderYearSelect(){
+  const sel = document.getElementById("yearSelect");
+  sel.innerHTML = "";
+  for(let y = CONFIG.YEAR_RANGE.to; y >= CONFIG.YEAR_RANGE.from; y--){
+    const opt = document.createElement("option");
+    opt.value = y; opt.textContent = y;
+    sel.appendChild(opt);
+  }
+  if(state.year) sel.value = state.year;
+}
+function confirmYear(){
+  state.year = document.getElementById("yearSelect").value;
+  if(lockedProduct){
+    state.product = lockedProduct;
+    goStep(rowApplicable(lockedProduct) ? 4 : 5);
+  } else {
+    goStep(3); // product
+  }
+}
+
+function renderProductGrid(){
+  const grid = document.getElementById("productGrid");
+  grid.innerHTML = "";
+  const tier = CONFIG.BRANDS[state.brand].tier;
+  Object.entries(CONFIG.PRODUCTS).forEach(([name, data]) => {
+    const el = document.createElement("button");
+    el.className = "chip product-chip";
+    const img = (CONFIG.PRODUCT_IMAGES[name] || [])[0];
+    const priceNote = data.rowApplicable
+      ? `${data.note} · ${fmtNaira(data[tier])} (2-row) / ${fmtNaira(data[tier] + data.threeRowSurcharge)} (3-row)`
+      : `${data.note} · ${fmtNaira(data[tier])}`;
+    el.innerHTML =
+      (img ? `<img src="${img}" alt="" class="chip-img" onerror="this.remove()">` : "") +
+      `<span><span class="chip-title">${name}</span><small>${priceNote}</small></span>`;
+    el.onclick = () => { state.product = name; goStep(rowApplicable(name) ? 4 : 5); };
+    grid.appendChild(el);
+  });
+}
+
+function renderRow(){
+  const grid = document.getElementById("rowGrid");
+  grid.innerHTML = "";
+  [
+    ["2", "2 Rows", "Sedans, coupes & compact SUVs — e.g. Camry, RX 350"],
+    ["3", "3 Rows", "Larger SUVs & vans — e.g. Highlander, GX 460, Santa Fe"]
+  ].forEach(([value, label, hint]) => {
+    const el = document.createElement("button");
+    el.className = "chip";
+    el.innerHTML = `<span class="chip-title">${label}</span><small>${hint}</small>`;
+    el.onclick = () => { state.rows = value; goStep(5); };
+    grid.appendChild(el);
+  });
+}
+
+function renderLocationGrid(){
+  const grid = document.getElementById("locationGrid");
+  grid.innerHTML = "";
+  Object.entries(CONFIG.LOCATIONS).forEach(([name, data]) => {
+    const el = document.createElement("button");
+    el.className = "chip";
+    const feeText = data.fee ? "+" + fmtNaira(data.fee) + " delivery" : "Free delivery";
+    el.innerHTML = name + "<small>" + data.eta + " · " + feeText + "</small>";
+    el.onclick = () => { state.location = name; goStep(6); };
+    grid.appendChild(el);
+  });
+}
+
+function productBase(){
+  const tier = CONFIG.BRANDS[state.brand].tier;
+  const cfg = CONFIG.PRODUCTS[state.product];
+  let base = cfg[tier];
+  if(cfg.rowApplicable && state.rows === "3") base += cfg.threeRowSurcharge;
+  return base;
+}
+
+function computePrice(){
+  return productBase() + CONFIG.LOCATIONS[state.location].fee;
+}
+
+function renderResults(){
+  document.getElementById("specCar").textContent = `${state.brand} ${state.model}`;
+  document.getElementById("specTag").textContent = `${state.year} · ${state.product}`;
+  document.getElementById("specPrice").textContent = fmtNaira(computePrice());
+
+  const rowLineEl = document.getElementById("specRowLine");
+  if(rowApplicable(state.product)){
+    rowLineEl.style.display = "flex";
+    document.getElementById("specRow").textContent = state.rows + " Rows";
+  } else {
+    rowLineEl.style.display = "none";
+  }
+
+  document.getElementById("specLocation").textContent = state.location;
+  document.getElementById("specEta").textContent = CONFIG.LOCATIONS[state.location].eta;
+
+  document.getElementById("resultsSub").textContent =
+    `100% precision-molded ${state.product} in stock for your ${state.year} ${state.brand} ${state.model}`;
+
+  const gallery = document.getElementById("gallery");
+  gallery.innerHTML = "";
+  (CONFIG.PRODUCT_IMAGES[state.product] || []).forEach(src => {
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = "";
+    img.onerror = () => img.remove();
+    gallery.appendChild(img);
+  });
+
+  const photosMessage = `Hi! Before I order the ${state.brand} ${state.model} ${state.year} | ${state.product}, could you send live photos of the fit for my model first? Thanks!`;
+  const photosUrl = "https://wa.me/" + CONFIG.WHATSAPP_NUMBER + "?text=" + encodeURIComponent(photosMessage);
+  document.getElementById("photosButton").onclick = () => window.open(photosUrl, "_blank");
+
+  document.getElementById("negotiateBox").classList.remove("open");
+  document.getElementById("negotiateToggle").textContent = "Want to negotiate instead? →";
+  document.getElementById("offerInput").value = "";
+}
+
+const checkoutState = { payment: "pod" };
+
+function setPayment(method){
+  checkoutState.payment = method;
+  document.getElementById("payPod").classList.toggle("selected", method === "pod");
+  document.getElementById("payPrepay").classList.toggle("selected", method === "prepay");
+  updateCheckoutPreview();
+}
+
+function validateNGPhone(raw){
+  const digits = raw.replace(/\D/g, "");
+  let local;
+  if(digits.startsWith("234") && digits.length === 13) local = digits.slice(3);
+  else if(digits.startsWith("0") && digits.length === 11) local = digits.slice(1);
+  else return false;
+  return ["70","80","81","90","91"].includes(local.slice(0,2));
+}
+
+function computeCheckoutTotal(){
+  if(checkoutState.payment === "prepay") return Math.max(productBase() - 2000, 0);
+  return productBase() + CONFIG.LOCATIONS[state.location].fee;
+}
+
+function buildCheckoutMessage(preview){
+  const name = document.getElementById("ckName").value.trim() || (preview ? "[Your Name]" : "");
+  const phone = document.getElementById("ckPhone").value.trim() || (preview ? "[Your Number]" : "");
+  const address = document.getElementById("ckAddress").value.trim() || (preview ? "[Your Address]" : "");
+  const total = fmtNaira(computeCheckoutTotal());
+  const paymentLine = checkoutState.payment === "prepay"
+    ? `Prepay by Transfer — ${total} (free shipping, save ₦2,000)`
+    : `Pay on Delivery — ${total} (incl. ${fmtNaira(CONFIG.LOCATIONS[state.location].fee)} delivery)`;
+  const rowLine = rowApplicable(state.product) ? ` (${state.rows}-Row)` : "";
+  return `Hi! I'm ${name} 🚗\n\nI'd like to order from LuxeRide Nigeria:\n📦 Product: ${state.product}\n🚘 Car: ${state.year} ${state.brand} ${state.model}${rowLine}\n📍 Delivery: ${address}, ${state.location}\n📱 Number: ${phone}\n💵 Payment: ${paymentLine}\n\nPlease confirm my order. Thanks!`;
+}
+
+function updateCheckoutPreview(){
+  document.getElementById("checkoutTotal").textContent = fmtNaira(computeCheckoutTotal());
+  document.getElementById("waMsgPreview").textContent = buildCheckoutMessage(true);
+}
+
+function renderCheckout(){
+  document.getElementById("ckName").value = "";
+  document.getElementById("ckPhone").value = "";
+  document.getElementById("ckAddress").value = "";
+  document.getElementById("ckPhoneError").classList.remove("show");
+  checkoutState.payment = "pod";
+  document.getElementById("payPod").classList.add("selected");
+  document.getElementById("payPrepay").classList.remove("selected");
+  updateCheckoutPreview();
+}
+
+function submitCheckout(){
+  const name = document.getElementById("ckName").value.trim();
+  const phone = document.getElementById("ckPhone").value.trim();
+  const address = document.getElementById("ckAddress").value.trim();
+  const errorEl = document.getElementById("ckPhoneError");
+
+  if(!validateNGPhone(phone)){
+    errorEl.classList.add("show");
+    document.getElementById("ckPhone").focus();
+    return;
+  }
+  errorEl.classList.remove("show");
+  if(!name){ document.getElementById("ckName").focus(); return; }
+  if(!address){ document.getElementById("ckAddress").focus(); return; }
+
+  const message = buildCheckoutMessage(false);
+  const waUrl = "https://wa.me/" + CONFIG.WHATSAPP_NUMBER + "?text=" + encodeURIComponent(message);
+  window.open(waUrl, "_blank");
+}
+
+function toggleNegotiate(){
+  const box = document.getElementById("negotiateBox");
+  const toggle = document.getElementById("negotiateToggle");
+  const opening = !box.classList.contains("open");
+  box.classList.toggle("open");
+  toggle.textContent = opening ? "Hide offer field" : "Want to negotiate instead? →";
+  if(opening) document.getElementById("offerInput").focus();
+}
+
+function sendOffer(){
+  const raw = document.getElementById("offerInput").value.replace(/[^\d]/g, "");
+  if(!raw){ document.getElementById("offerInput").focus(); return; }
+  const offer = parseInt(raw, 10);
+  const listed = computePrice();
+  const message = `Hi! I'm interested in:\n${state.brand} ${state.model} ${state.year} | ${state.product} | ${state.location}\nListed price: ${fmtNaira(listed)}\nMy offer: ${fmtNaira(offer)}\nCan we work something out? Thanks!`;
+  const waUrl = "https://wa.me/" + CONFIG.WHATSAPP_NUMBER + "?text=" + encodeURIComponent(message);
+  window.open(waUrl, "_blank");
+}
+
+function copyWaMessage(){
+  const text = document.getElementById("waMsgPreview").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "Copied ✓";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = "Copy message"; btn.classList.remove("copied"); }, 1800);
+  });
+}
+
+function restart(){
+  state.brand = null; state.model = null; state.year = null; state.product = null; state.rows = null; state.location = null;
+  goStep(0);
+}
+</script>
+</body>
+</html>

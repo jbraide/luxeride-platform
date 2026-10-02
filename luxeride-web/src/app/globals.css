@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #0a0a0a;
+  --panel: #141210;
+  --panel-2: #1c1916;
+  --gold: #d4af37;
+  --gold-dim: #8c7853;
+  --line: rgba(212, 175, 55, 0.22);
+  --muted: rgba(255, 255, 255, 0.55);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-gold: var(--gold);
+  --color-gold-dim: var(--gold-dim);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --font-display: var(--font-oswald);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
+}
+
+body {
+  background: var(--ink);
+  color: #ffffff;
+}
+
+::-webkit-scrollbar {
+  height: 4px;
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gold-dim);
+  border-radius: 2px;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}

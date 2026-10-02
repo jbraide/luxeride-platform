@@ -1,0 +1,32 @@
+<svg viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1C1916"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="360" fill="url(#bg3)"/>
+  <g stroke="#D4AF37" stroke-width="2.5" opacity="0.8">
+    <path d="M28 20 H50 M28 20 V42" fill="none"/>
+    <path d="M452 20 H430 M452 20 V42" fill="none"/>
+    <path d="M28 340 H50 M28 340 V318" fill="none"/>
+    <path d="M452 340 H430 M452 340 V318" fill="none"/>
+  </g>
+
+  <!-- raised-edge cross-section detail -->
+  <path d="M110 220 L370 220 L370 235 L340 235 L340 250 L140 250 L140 235 L110 235 Z"
+        fill="none" stroke="#D4AF37" stroke-width="3" stroke-linejoin="round"/>
+  <g stroke="#8C7853" stroke-width="1.2">
+    <path d="M150 235 V245 M175 235 V245 M200 235 V245 M225 235 V245 M250 235 V245 M275 235 V245 M300 235 V245 M325 235 V245" stroke-dasharray="2 3"/>
+  </g>
+  <path d="M110 220 Q95 180 130 165" fill="none" stroke="#8C7853" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="90" y="160" fill="#8C7853" font-family="monospace" font-size="10">RAISED LIP EDGE</text>
+
+  <text x="240" y="290" text-anchor="middle" fill="#FFFFFF" font-family="'Oswald',sans-serif" font-size="20" font-weight="600" letter-spacing="1">TEXTURE &amp; EDGE DETAIL</text>
+  <text x="240" y="310" text-anchor="middle" fill="#8C7853" font-family="monospace" font-size="11" letter-spacing="1">SPILL-CONTAINMENT LIP</text>
+
+  <g>
+    <rect x="-40" y="28" width="220" height="26" fill="#FF6B35" transform="rotate(-32 70 40)"/>
+    <text x="70" y="46" text-anchor="middle" fill="#0A0A0A" font-family="monospace" font-size="13" font-weight="700" letter-spacing="1" transform="rotate(-32 70 40)">PLACEHOLDER</text>
+  </g>
+</svg>

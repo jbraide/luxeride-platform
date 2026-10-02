@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String
+  slug      String     @unique
+  products  Product[]
+  createdAt DateTime   @default(now())
+}
+
+model Product {
+  id                 String       @id @default(uuid())
+  categoryId         String
+  name               String
+  slug               String       @unique
+  note               String?
+  tier               String       // "regular" | "premium"
+  rowApplicable      Boolean      @default(false)
+  basePrice          Int
+  threeRowSurcharge  Int?         // null when not row-applicable
+  images             String[]     // paths under /public
+  category           Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems         OrderItem[]
+  createdAt          DateTime     @default(now())
+
+  @@index([categoryId])
+}
+
+model Car {
+  id         String    @id @default(uuid())
+  brand      String
+  model      String
+  tier       String    // "regular" | "premium"
+  available  Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  orderItems OrderItem[]
+  // Opposite side of CarModelFlag.car. Without it `prisma generate` fails with
+  // P1012 ("missing an opposite relation field on the model Car"), which would
+  // break the `postinstall` script and every fresh `npm install`.
+  flag       CarModelFlag?
+
+  @@index([brand, model])
+}
+
+model CarModelFlag {
+  id         String   @id @default(uuid())
+  carId      String   @unique
+  available  Boolean  @default(true)
+  car        Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+}
+
+model Location {
+  id         String    @id @default(uuid())
+  name       String    @unique
+  fee        Int
+  etaText    String    // e.g. "24–48 hours"
+  createdAt  DateTime  @default(now())
+  orders     Order[]
+}
+
+model Order {
+  id              String       @id @default(uuid())
+  customerName    String
+  phone           String
+  address         String
+  locationId      String
+  location        Location     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  paymentMethod   String       // "pod" | "prepay"
+  status          String       @default("pending")
+  createdAt       DateTime     @default(now())
+  items           OrderItem[]
+
+  @@index([locationId])
+  @@index([status])
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  productId String
+  carId     String?
+  rows      String?  // "2" | "3" | null
+  unitPrice Int
+  qty       Int      @default(1)
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  car       Car?     @relation(fields: [carId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([carId])
+}

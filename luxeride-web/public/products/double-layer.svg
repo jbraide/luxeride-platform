@@ -1,0 +1,37 @@
+<svg viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1C1916"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="360" fill="url(#bg2)"/>
+
+  <g stroke="#D4AF37" stroke-width="2.5" opacity="0.8">
+    <path d="M28 20 H50 M28 20 V42" fill="none"/>
+    <path d="M452 20 H430 M452 20 V42" fill="none"/>
+    <path d="M28 340 H50 M28 340 V318" fill="none"/>
+    <path d="M452 340 H430 M452 340 V318" fill="none"/>
+  </g>
+
+  <!-- base layer (offset behind) -->
+  <path d="M182 148 L322 148 L352 268 Q352 280 340 280 L164 280 Q152 280 152 268 Z"
+        fill="none" stroke="#8C7853" stroke-width="2.5" stroke-linejoin="round" opacity="0.55"/>
+  <!-- top layer -->
+  <path d="M158 118 L298 118 L328 238 Q328 250 316 250 L140 250 Q128 250 128 238 Z"
+        fill="none" stroke="#D4AF37" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M174 138 L282 138 L304 228 L152 228 Z"
+        fill="none" stroke="#8C7853" stroke-width="1.5" stroke-dasharray="4 4"/>
+
+  <path d="M330 150 L346 165" stroke="#8C7853" stroke-width="1.5" marker-end="none"/>
+  <text x="352" y="170" fill="#8C7853" font-family="monospace" font-size="10" letter-spacing="0.5">BASE</text>
+  <text x="240" y="192" text-anchor="middle" fill="#8C7853" font-family="monospace" font-size="11" letter-spacing="1">2 LAYERS</text>
+
+  <text x="240" y="300" text-anchor="middle" fill="#FFFFFF" font-family="'Oswald',sans-serif" font-size="22" font-weight="600" letter-spacing="1">DOUBLE LAYER TPE</text>
+  <text x="240" y="320" text-anchor="middle" fill="#8C7853" font-family="monospace" font-size="11" letter-spacing="1">TOP LAYER + WATERPROOF BASE</text>
+
+  <g>
+    <rect x="-40" y="28" width="220" height="26" fill="#FF6B35" transform="rotate(-32 70 40)"/>
+    <text x="70" y="46" text-anchor="middle" fill="#0A0A0A" font-family="monospace" font-size="13" font-weight="700" letter-spacing="1" transform="rotate(-32 70 40)">PLACEHOLDER</text>
+  </g>
+</svg>

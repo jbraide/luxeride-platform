@@ -1,0 +1,34 @@
+<svg viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg6" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1C1916"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="360" fill="url(#bg6)"/>
+  <g stroke="#D4AF37" stroke-width="2.5" opacity="0.8">
+    <path d="M28 20 H50 M28 20 V42" fill="none"/>
+    <path d="M452 20 H430 M452 20 V42" fill="none"/>
+    <path d="M28 340 H50 M28 340 V318" fill="none"/>
+    <path d="M452 340 H430 M452 340 V318" fill="none"/>
+  </g>
+
+  <path d="M100 100 Q100 250 150 290 L330 290 Q380 250 380 100"
+        fill="none" stroke="#8C7853" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M148 158 L332 158 L358 267 Q358 280 344 280 L136 280 Q122 280 122 267 Z"
+        fill="none" stroke="#8C7853" stroke-width="2.5" opacity="0.5"/>
+  <path d="M150 160 L330 160 L355 265 Q355 278 342 278 L138 278 Q125 278 125 265 Z"
+        fill="none" stroke="#D4AF37" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="150" cy="120" r="16" fill="none" stroke="#8C7853" stroke-width="1.5"/>
+  <text x="150" y="124" text-anchor="middle" fill="#8C7853" font-family="monospace" font-size="9">GAS</text>
+  <circle cx="330" cy="120" r="16" fill="none" stroke="#8C7853" stroke-width="1.5"/>
+  <text x="330" y="124" text-anchor="middle" fill="#8C7853" font-family="monospace" font-size="9">BRAKE</text>
+
+  <text x="240" y="300" text-anchor="middle" fill="#FFFFFF" font-family="'Oswald',sans-serif" font-size="20" font-weight="600" letter-spacing="1">IN-CAR FIT</text>
+  <text x="240" y="320" text-anchor="middle" fill="#8C7853" font-family="monospace" font-size="11" letter-spacing="1">FACTORY-CONTOUR MATCH</text>
+
+  <g>
+    <rect x="-40" y="28" width="220" height="26" fill="#FF6B35" transform="rotate(-32 70 40)"/>
+    <text x="70" y="46" text-anchor="middle" fill="#0A0A0A" font-family="monospace" font-size="13" font-weight="700" letter-spacing="1" transform="rotate(-32 70 40)">PLACEHOLDER</text>
+  </g>
+</svg>
