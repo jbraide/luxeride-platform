@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import ProductImage from "@/components/ProductImage";
 import ProductPlaceholder from "@/components/ProductPlaceholder";
 import Link from "next/link";
@@ -13,8 +13,15 @@ import { Chip } from "@/components/Chip";
 import { Button } from "@/components/Button";
 import { useCartStore } from "@/store/cart";
 import { whatsappLink, comingSoonMessage, notFoundMessage } from "@/lib/whatsapp";
+import type { FitCheckResponse } from "@/lib/fitment-contract";
 
-type Step = "car" | "year" | "product" | "row" | "results" | "comingsoon";
+/**
+ * `results` is now reachable ONLY on a server-confirmed FITTED. Both refusal
+ * states render through `comingsoon`, which is the renderer the spec names for
+ * them. The fabricated card that used to appear for all 4,671 car/year
+ * combinations in `src/data/cars.ts` is gone.
+ */
+type Step = "car" | "year" | "product" | "row" | "checking" | "results" | "comingsoon";
 
 const YEAR_FROM = 2000;
 const YEAR_TO = 2026;
@@ -42,6 +49,8 @@ export default function FitFinder({
   const [product, setProduct] = useState<Product | null>(lockedProduct ?? null);
   const [rows, setRows] = useState<"2" | "3" | null>(null);
   const [comingSoon, setComingSoon] = useState<{ brand: string; model: string | null } | null>(null);
+  const [fit, setFit] = useState<FitCheckResponse | null>(null);
+  const [fitError, setFitError] = useState<string | null>(null);
   const [comingSoonPhone, setComingSoonPhone] = useState("");
   const [negotiateOpen, setNegotiateOpen] = useState(false);
   const [offer, setOffer] = useState("");
@@ -75,7 +84,8 @@ export default function FitFinder({
   function confirmYear() {
     if (lockedProduct) {
       setProduct(lockedProduct);
-      setStep(lockedProduct.rowApplicable ? "row" : "results");
+      if (lockedProduct.rowApplicable) setStep("row");
+      else void runFitCheck(lockedProduct);
     } else {
       setStep("product");
     }
@@ -83,13 +93,83 @@ export default function FitFinder({
 
   function pickProduct(p: Product) {
     setProduct(p);
-    setStep(p.rowApplicable ? "row" : "results");
+    if (p.rowApplicable) setStep("row");
+    else void runFitCheck(p);
   }
 
   function pickRow(v: "2" | "3") {
     setRows(v);
-    setStep("results");
+    void runFitCheck(product);
   }
+
+  /**
+   * The real lookup. Everything below this point depends on what it returns —
+   * there is no local shortcut to the old `results` card.
+   *
+   * A network failure, a non-2xx, or an unparseable body all land on the
+   * refusal path. The asymmetry is deliberate: we would rather tell someone we
+   * could not check than show them a fit we did not verify.
+   */
+  const runFitCheck = useCallback(
+    async (forProduct: Product | null) => {
+      if (!brand || !model) return;
+      setFitError(null);
+      setFit(null);
+      setStep("checking");
+
+      let payload: FitCheckResponse;
+      try {
+        const res = await fetch("/api/fit-check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            make: brand,
+            model,
+            year: Number(year),
+            ...(forProduct ? { productSlug: forProduct.slug } : {}),
+          }),
+        });
+        payload = (await res.json()) as FitCheckResponse;
+      } catch {
+        setFitError(
+          "We could not reach the fit checker. Please try again, or ask us on WhatsApp.",
+        );
+        setComingSoon({ brand, model });
+        setStep("comingsoon");
+        return;
+      }
+
+    setFit(payload);
+
+    if (payload.state === "FITTED") {
+      setStep("results");
+      return;
+    }
+
+    // A refusal is demand. Locked decision 2 makes capturing it a launch
+    // requirement, so it happens here rather than being left to a database
+    // that does not exist yet.
+    void fetch("/api/demand", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        make: brand,
+        model,
+        year: Number(year),
+        outcome: payload.state,
+        reason: payload.reason ?? "",
+        phone: comingSoonPhone || undefined,
+      }),
+    }).catch(() => {
+      // Never block the refusal on the log write; the visitor still gets their
+      // WhatsApp link either way.
+    });
+
+    setComingSoon({ brand, model });
+    setStep("comingsoon");
+    },
+    [brand, model, year, comingSoonPhone],
+  );
 
   const tier: Tier = brand ? BRANDS[brand].tier : "regular";
   const unitPrice = product ? productBase(product, tier, rows) : 0;
@@ -119,6 +199,8 @@ export default function FitFinder({
     setProduct(lockedProduct ?? null);
     setRows(null);
     setComingSoon(null);
+    setFit(null);
+    setFitError(null);
     setAdded(false);
     setNegotiateOpen(false);
     setOffer("");
@@ -254,11 +336,20 @@ export default function FitFinder({
         </div>
       )}
 
-      {step === "results" && product && brand && model && (
+      {step === "checking" && (
+        <div className="py-10 text-center" aria-live="polite">
+          <h2 className="font-display text-2xl font-semibold">Checking your fit…</h2>
+          <p className="mt-2 text-sm text-muted">
+            We are checking whether we have a confirmed fit for the {year} {brand} {model}.
+          </p>
+        </div>
+      )}
+
+      {step === "results" && product && brand && model && fit?.state === "FITTED" && (
         <div>
           <h2 className="font-display text-2xl font-semibold">We Found Your Fit!</h2>
           <p className="mt-1 text-sm text-muted">
-            100% precision-molded {product.name} in stock for your {year} {brand} {model}
+            We have a confirmed fit for your {year} {brand} {model}. Lead time: {fit.leadTime}.
           </p>
 
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -288,7 +379,9 @@ export default function FitFinder({
                   {year} · {product.name}
                 </p>
               </div>
-              <span className="rounded-md border border-line px-2 py-1 font-mono text-[11px] text-gold">FIT ✓</span>
+              <span className="rounded-md border border-line px-2 py-1 font-mono text-[11px] text-gold">
+                CONFIRMED FIT
+              </span>
             </div>
             <p className="mt-3 font-mono text-3xl font-bold text-gold">{fmtNaira(unitPrice)}</p>
             {product.rowApplicable && (
@@ -373,11 +466,24 @@ export default function FitFinder({
 
       {step === "comingsoon" && comingSoon && (
         <div>
-          <h2 className="font-display text-2xl font-semibold">Not in stock — yet</h2>
+          <h2 className="font-display text-2xl font-semibold">
+            {fitError ? "We could not check that" : "No confirmed fit yet"}
+          </h2>
           <p className="mt-1 text-sm text-muted">
-            We don&apos;t have a laser-scanned fit for{" "}
-            <strong>{comingSoon.model ? `${comingSoon.brand} ${comingSoon.model}` : comingSoon.brand}</strong> in
-            stock right now, but we&apos;re adding new fits regularly.
+            {fitError ? (
+              fitError
+            ) : (
+              <>
+                We don&apos;t have a confirmed fit for{" "}
+                <strong>
+                  {comingSoon.model
+                    ? `${comingSoon.brand} ${comingSoon.model}`
+                    : comingSoon.brand}
+                </strong>
+                .{" "}
+                {fit?.reason ?? "We are adding new fits as we measure them."}
+              </>
+            )}
           </p>
           <div className="mt-4 rounded-xl border border-line bg-gold/5 p-4">
             <label className="mb-2 block text-[11px] uppercase tracking-wide text-muted">
