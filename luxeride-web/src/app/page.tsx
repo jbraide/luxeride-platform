@@ -5,6 +5,7 @@ import ProductCard from "@/components/ProductCard";
 import { LinkButton } from "@/components/Button";
 import { CATEGORIES, PRODUCTS } from "@/data/products";
 import { pageMetadata } from "@/lib/seo";
+import { resolveAllMedia } from "@/lib/media-manifest";
 
 // The root layout's `title.default` already reads as a homepage title, so this
 // route supplies only the description and the self-referencing canonical. The
@@ -19,6 +20,9 @@ export const metadata: Metadata = pageMetadata({
 
 export default function HomePage() {
   const featured = PRODUCTS.slice(0, 4);
+  // Resolved here, on the server, and passed down: `ProductCard` cannot read the
+  // media manifest itself without dragging `node:fs` into the component graph.
+  const mediaBySlug = resolveAllMedia(featured.map((p) => p.slug));
 
   return (
     <div>
@@ -73,7 +77,7 @@ export default function HomePage() {
             // phone; preloading the full four-wide desktop row would make a
             // phone fetch two images it never shows. `preload`, never `priority`
             // — Next 16 deprecated the latter.
-            <ProductCard key={p.slug} product={p} preload={i < 2} />
+            <ProductCard key={p.slug} product={p} media={mediaBySlug[p.slug] ?? null} preload={i < 2} />
           ))}
         </div>
       </section>

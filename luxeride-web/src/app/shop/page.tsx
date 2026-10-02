@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import ProductCard from "@/components/ProductCard";
+import CatalogExplorer from "@/components/CatalogExplorer";
+import { resolveAllMedia } from "@/lib/media-manifest";
 import { CATEGORIES, PRODUCTS } from "@/data/products";
 import { pageMetadata } from "@/lib/seo";
 
@@ -45,13 +46,7 @@ export default function ShopPage() {
         ))}
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {products.map((p, i) => (
-          // §14.4: first row only. Two is the first row at `grid-cols-2`, the
-          // narrowest layout, and the one above the fold on a phone.
-          <ProductCard key={p.slug} product={p} preload={i < 2} />
-        ))}
-      </div>
+      <CatalogExplorer products={products} mediaBySlug={resolveAllMedia(products.map((p) => p.slug))} />
     </div>
   );
 }

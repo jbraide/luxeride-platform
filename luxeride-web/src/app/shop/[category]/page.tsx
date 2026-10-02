@@ -3,10 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import JsonLd from "@/components/JsonLd";
-import ProductCard from "@/components/ProductCard";
+import CatalogExplorer from "@/components/CatalogExplorer";
 import { LinkButton } from "@/components/Button";
 import { CATEGORIES, getCategoryBySlug, PRODUCTS } from "@/data/products";
 import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import { resolveAllMedia } from "@/lib/media-manifest";
 
 /**
  * A category is a real route, not a query filter.
@@ -81,13 +82,7 @@ export default async function CategoryPage({
         </div>
       ) : (
         <>
-          {/* §14.4: the first row only. Two is the first row at `grid-cols-2`,
-              the narrowest layout, and the one above the fold on a phone. */}
-          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {products.map((product, index) => (
-              <ProductCard key={product.slug} product={product} preload={index < 2} />
-            ))}
-          </div>
+          <CatalogExplorer products={products} mediaBySlug={resolveAllMedia(products.map((p) => p.slug))} />
 
           <div className="mt-10 flex flex-wrap gap-2">
             {CATEGORIES.filter((c) => c.slug !== category.slug).map((c) => (
