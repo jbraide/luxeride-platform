@@ -24,7 +24,27 @@ npm run verify
 ```
 
 It chains `tsc --noEmit`, `eslint .`, `media:check` and `next build`, and exits non-zero on the first
-failure. `npm run build` on its own also runs `media:check` first, so a missing product image fails the
+failure.
+
+One gate cannot be reached that way, because it is about the browser rather than the build: the console
+must be free of hydration warnings on `/cart`, `/checkout` and `/order/confirmation`. That one has its
+own command, so it is not a human staring at DevTools:
+
+```bash
+npm run check:hydration                      # against http://localhost:3000
+npm run check:hydration -- http://localhost:3001
+```
+
+It drives the installed Chrome over CDP with no new dependency, seeds `localStorage` with a cart and a
+placed order so the three screens render the hydrated path, and exits non-zero if any route logs an error
+or a warning. It uses a throwaway profile with extensions disabled, because this machine has an extension
+that stamps `cz-shortcut-listen` onto `<body>` and React reports that as a hydration mismatch — a real
+browser would show it forever and it is not a defect in this code. `CHROME_BIN` overrides the binary.
+
+**It needs a shell where Chrome can open a socket.** In a sandbox that denies `socket()`, every
+navigation lands on `chrome-error://chromewebdata/`; the script detects that and exits **2** with an
+explicit "environment failure, not a passing check" message rather than reporting a clean run. Always
+read the `probe` block: `href` must be the route you asked for and `textLen` must be non-trivial. `npm run build` on its own also runs `media:check` first, so a missing product image fails the
 production build rather than shipping an empty slot to paid traffic.
 
 > **No database is required to run or build the app.** Nothing under `src/` imports `@prisma/client`

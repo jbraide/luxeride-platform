@@ -10,6 +10,7 @@
     "media:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/media.mjs --check",
     "media": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/media.mjs",
     "verify": "tsc --noEmit && eslint . && npm run media:check && next build",
+    "check:hydration": "node scripts/hydration-check.mjs",
     "postinstall": "prisma generate",
     "db:seed": "node prisma/seed.mts"
   },
