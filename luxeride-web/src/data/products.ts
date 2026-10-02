@@ -89,7 +89,7 @@ export const PRODUCTS: Product[] = [
     premium: 58000,
     threeRowSurcharge: 10000,
     note: "Top layer only",
-    images: ["/products/single-layer.svg", "/products/single-layer-texture.svg", "/products/single-layer-fit.svg"],
+    images: [], // resolved from public/products/manifest.json — see src/lib/media-manifest.ts
     materials: "Laser-measured TPE mats.",
     inBox: ["A mat for every footwell in the rows you selected"],
     coverage: "Every footwell in the rows you selected.",
@@ -114,7 +114,7 @@ export const PRODUCTS: Product[] = [
     premium: 82000,
     threeRowSurcharge: 12000,
     note: "Top + waterproof base layer",
-    images: ["/products/double-layer.svg", "/products/double-layer-texture.svg", "/products/double-layer-fit.svg"],
+    images: [], // resolved from public/products/manifest.json — see src/lib/media-manifest.ts
     materials: "Two layers: a top mat over a waterproof base layer.",
     inBox: ["A top layer and a waterproof base layer for every footwell in the rows you selected"],
     coverage: "Every footwell in the rows you selected.",
