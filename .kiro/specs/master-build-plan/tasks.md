@@ -28,8 +28,11 @@ on the line. `[~]` genuinely half-done, with the missing half and its blocker na
 **M2 is NOT complete, and its exit gate fails on two assertions rather than one.** Both were found by
 running the thing rather than reading it:
 
-1. **`liveLayoutCount()` returns 0**, and the gate requires `>= 1`. The table ships empty; 2.11 is the
-   fix and it is D-03-gated.
+1. **`liveLayoutCount()` returns 0**, and the gate requires `>= 1`. **All 212 cars are now loaded as
+   `inferred` rows** — a complete reviewable list, four variants each, priced from the catalogue at each
+   brand's tier — so the fix is now one entry per car in `src/data/fitment-review.ts` rather than
+   authoring a table. But nothing is Confirmed, so the number is still 0, and only the owner can move
+   it: one car, one `confirmationNote` in their own words, one evidence source.
 2. **"every refusal produces a demand-log line" fails.** `POST /api/fit-check` for a known-shaped car
    returns `NOT_STOCKED` and writes **nothing**; the line appears only when the *client* separately
    POSTs to `/api/demand`. `fitment-engine` §5.5 forbids exactly that arrangement — *"from

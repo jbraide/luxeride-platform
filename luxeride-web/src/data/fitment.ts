@@ -1,4 +1,10 @@
 import { PRODUCTS } from "@/data/products";
+import {
+  CATALOGUE_LAYOUTS,
+  CATALOGUE_MAPPINGS,
+  CATALOGUE_VEHICLES,
+} from "@/data/fitment-catalogue";
+import { CONFIRMED, EXCLUSIONS as REVIEWED_EXCLUSIONS } from "@/data/fitment-review";
 
 /**
  * The fitment table — the single source of truth for "do we actually make this
@@ -69,7 +75,13 @@ export interface Layout {
   customerName: string;
   /** Singular by locked decision 4: a cross-brand layout is two layouts. */
   makeId: string;
-  bodyType: "sedan" | "suv" | "wagon" | "hatch" | "van" | "pickup";
+  /**
+   * `"unknown"` exists because `cars.ts` carries no body type and guessing one
+   * for 212 vehicles would be an assertion with nothing behind it. It is a
+   * legitimate value for an inferred row and must be replaced before a row is
+   * Confirmed — a body type is part of what a floor pan claim means.
+   */
+  bodyType: "sedan" | "suv" | "wagon" | "hatch" | "van" | "pickup" | "unknown";
   driveSide: "lhd" | "rhd" | "unknown";
   kind: "footwell" | "boot";
   status: LayoutStatus;
@@ -135,10 +147,77 @@ export type LiveLayout = Layout & {
 
 // ── The tables ───────────────────────────────────────────────────────────────
 
-export const LAYOUTS: Layout[] = [];
-export const VEHICLES: Vehicle[] = [];
-export const MAPPINGS: Mapping[] = [];
-export const EXCLUSIONS: Exclusion[] = [];
+// ── The tables ───────────────────────────────────────────────────────────────
+//
+// The baseline is DERIVED — one inferred row per car in the catalogue, so the
+// owner has a full list to review and activate (`fitment-catalogue.ts`). Nothing
+// derived is Confirmed, so none of it can reach a customer.
+//
+// `fitment-review.ts` carries the only hand-written rows: the cars whose floor
+// pan somebody has actually confirmed, and the cars we know we cannot fit.
+
+/**
+ * Turn a review entry into a Confirmed Layout, or throw naming the row.
+ *
+ * Throwing rather than skipping is deliberate: a typo in a `vehicleId` that
+ * silently did nothing would leave the owner believing a car was live when it
+ * was not, which is the exact class of bug this engine exists to prevent.
+ */
+function applyReview(review: (typeof CONFIRMED)[number]): Layout {
+  const baseline = CATALOGUE_LAYOUTS.find((l) => l.layoutId === `layout-${review.vehicleId}`);
+  if (!baseline) {
+    throw new Error(
+      `fitment: review entry "${review.vehicleId}" does not match any vehicle in the catalogue. ` +
+        `Run \`npm run fitment:report\` to list valid ids.`,
+    );
+  }
+
+  // Required on the review entry, not defaulted. A Confirmed layout that kept the
+  // preloaded 2000–2026 would be claiming a 27-year floor pan on the strength of
+  // one fitting, which is the fabrication this engine exists to stop.
+  const { yearFrom, yearTo } = review;
+
+  return {
+    ...baseline,
+    internalCode: review.internalCode,
+    customerName: review.customerName ?? `${baseline.customerName} ${yearFrom}–${yearTo}`,
+    status: "confirmed",
+    evidence: review.evidence,
+    confirmationNote: review.confirmationNote,
+    confirmedOn: review.confirmedOn,
+    leadTime: review.leadTime,
+    bodyType: review.bodyType ?? baseline.bodyType,
+    driveSide: review.driveSide ?? baseline.driveSide,
+    images: review.images ?? baseline.images,
+    variants: baseline.variants.map((variant) => ({
+      ...variant,
+      priceFrom: review.prices?.[variant.productSlug] ?? variant.priceFrom,
+    })),
+  };
+}
+
+const REVIEWED_LAYOUTS: Layout[] = CONFIRMED.map(applyReview);
+const REVIEWED_VEHICLE_IDS: ReadonlySet<string> = new Set(CONFIRMED.map((r) => r.vehicleId));
+
+export const VEHICLES: Vehicle[] = CATALOGUE_VEHICLES;
+
+export const LAYOUTS: Layout[] = [
+  // Reviewed rows replace their inferred baseline rather than sitting beside it,
+  // so there is exactly one row per vehicle and no chance of two layouts
+  // answering for the same car.
+  ...CATALOGUE_LAYOUTS.filter(
+    (l) => !REVIEWED_VEHICLE_IDS.has(l.layoutId.replace(/^layout-/, "")),
+  ),
+  ...REVIEWED_LAYOUTS,
+];
+
+export const MAPPINGS: Mapping[] = CATALOGUE_MAPPINGS.map((mapping) =>
+  REVIEWED_VEHICLE_IDS.has(mapping.vehicleId)
+    ? { ...mapping, confidence: "confirmed" as const, evidenceNote: "Owner-confirmed: see the layout confirmationNote." }
+    : mapping,
+);
+
+export const EXCLUSIONS: Exclusion[] = REVIEWED_EXCLUSIONS;
 
 /** `TC-2009-2013` — ticker, first year, last year. */
 export const INTERNAL_CODE_PATTERN = /^[A-Z0-9]{2,3}-\d{4}-\d{4}$/;

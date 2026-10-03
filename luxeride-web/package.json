@@ -15,7 +15,8 @@
     "postinstall": "prisma generate",
     "db:seed": "node prisma/seed.mts",
     "db:backup": "bash scripts/db-backup.sh",
-    "db:check": "node scripts/db-check.mjs"
+    "db:check": "node scripts/db-check.mjs",
+    "fitment:report": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/fitment-report.mjs"
   },
   "prisma": {
     "seed": "node prisma/seed.mts"

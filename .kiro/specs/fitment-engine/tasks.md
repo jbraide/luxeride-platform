@@ -2,8 +2,8 @@
 
 ## Status
 
-**PARTIAL — Phase 0 is built; the fitment table is empty and one Phase 0 task is violated.** Last
-updated 2026-10-03, after the M2 run.
+**PARTIAL — Phase 0 is built, the whole catalogue is loaded, and nothing is Confirmed.** Last
+updated 2026-10-03, after the M2 run and the catalogue preload.
 
 **What exists and works.** `src/data/fitment.ts` with the six entities, the Confirmed gate
 (`assertLiveLayouts`), `LIVE_LAYOUT_IDS` as the only thing `checkFit` reads, the discriminated-union
@@ -11,11 +11,20 @@ updated 2026-10-03, after the M2 run.
 `src/app/api/fit-check/route.ts` as a Route Handler with `src/lib/fitment-contract.ts`; the Fit Finder
 rewritten so `results` is reachable **only** on a server-confirmed `FITTED`; and the demand log.
 
-**The fitment table ships empty, so the site now refuses every car.** That is the intended interim, not
-a regression: the alternative was answering *"100% precision-molded … in stock for your car"* for all
-4,671 car/year combinations with nothing behind any of them. **`liveLayoutCount()` is 0**, so M2's exit
-gate assertion `liveLayoutCount() >= 1` **fails** until task 2.11 is done. Turning refusals into sales
-is now data entry — 2.11 and 2.12 — not code.
+**All 212 cars are loaded and none is Confirmed, so the site refuses every car — correctly.** The
+refusal is not a gap: the alternative was answering *"100% precision-molded … in stock for your car"*
+for all 4,671 car/year combinations with nothing behind any of them. **`liveLayoutCount()` is still 0**,
+so M2's gate assertion `>= 1` still fails, and 2.11 is why. Turning refusals into sales is now one entry
+per car in `src/data/fitment-review.ts` — data entry, not code.
+
+**The preload deserves precision, because "212 layouts loaded" could be misread as 212 claims.**
+`src/data/fitment-catalogue.ts` derives one `Vehicle`, one inferred `Layout` and one inferred `Mapping`
+per car from `cars.ts`, with four variants priced from `products.ts` at each brand's tier. Inferred rows
+are invisible to `/fit-check` by locked decision 2, so none of it can reach a customer. What it buys: a
+reviewable list, a per-car activation path, and three distinct refusals where there used to be one —
+unknown car, known car outside the covered years, and known car whose floor pan nobody has confirmed.
+`npm run fitment:report` prints coverage, per-make counts and the 13 `internalCode` collisions; `--ids`
+lists what to paste into the review file.
 
 **One task is violated rather than merely unfinished: 5.5.** The demand write is client-triggered, which
 this spec forbids in as many words. Verified against a live server. With 5.6 (`demandLogged` absent)
@@ -58,9 +67,9 @@ lost to the next reboot. Moved to `~/.local/state/luxeride/demand.ndjson`.
   - [x] 2.7 Implement `checkFit` so `FITTED` additionally requires `confidence === "confirmed"` on the Mapping and a `priceFrom` on every offered variant; otherwise it degrades to `NOT STOCKED` rather than offering a fallback catalogue price _(P0 — source-doc Phase 0)_ **(verified: `checkFit` filters mappings on `confidence === "confirmed"` and variants on a finite positive `priceFrom`, and degrades rather than promoting.)**
   - [x] 2.8 Implement `checkFit` so an `Exclusion` match short-circuits to `UNKNOWN`/`NOT STOCKED` before any Layout is considered _(P0 — source-doc Phase 0)_ **(verified: the `EXCLUSIONS.find(...)` runs before any Layout lookup inside `checkFit`, so an exclusion short-circuits. The table is empty — see 2.12.)**
   - [x] 2.9 Export `liveLayoutCount()` and `confirmedCustomerNames()` — single-call launch metric and the list `ad-landing-and-tracking` aligns creative to _(P0 — source-doc Phase 0)_ **(verified: both exported. `liveLayoutCount()` returns `LIVE_LAYOUT_IDS.size`, which is **0** today because the table is empty — that is M2's exit gate not yet met, and 2.11 is why.)**
-  - [~] 2.10 Enter the make-ticker table derived from `BRANDS` (`Toyota`→`TC`, `Mercedes-Benz`→`MB`, `BMW`→`BMW`, …) and the `internalCode` format check against `^[A-Z0-9]{2,3}-\d{4}-\d{4}$` _(P0 — source-doc Phase 0)_ **PARTIAL.** `INTERNAL_CODE_PATTERN = /^[A-Z0-9]{2,3}-\d{4}-\d{4}$/` is exported and enforced. **The make-ticker table is absent** — `grep -cE 'MAKE_TICKER|TICKER'` returns 0, so `Toyota→TC`, `Mercedes-Benz→MB`, `BMW→BMW` and the rest were never entered. Nothing consumes it yet, so it is owed with 2.11 rather than before it.
-  - [ ] 2.11 Enter the first Confirmed Layouts: 15–25 rows, one floor pan each, each with `evidence`, a `confirmationNote` in the owner's own words, `confirmedOn`, `leadTime`, a `priceFrom` per variant and the `makeId` required by locked decision 4 _(P0 — source-doc Phase 0)_
-  - [~] 2.12 Enter the first `Exclusions` rows for known non-fits (hybrid battery, 3rd row, 7-seat vs 5-seat, body variants), each with a written `reason` _(P0 — source-doc Phase 0)_ **PARTIAL.** `EXCLUSIONS` exists and `checkFit` honours it, but the table is empty — no known non-fits have been entered.
+  - [x] 2.10 Enter the make-ticker table derived from `BRANDS` (`Toyota`→`TC`, `Mercedes-Benz`→`MB`, `BMW`→`BMW`, …) and the `internalCode` format check against `^[A-Z0-9]{2,3}-\d{4}-\d{4}$` _(P0 — source-doc Phase 0)_ **PARTIAL.** `INTERNAL_CODE_PATTERN = /^[A-Z0-9]{2,3}-\d{4}-\d{4}$/` is exported and enforced. **The make-ticker table is absent** — `grep -cE 'MAKE_TICKER|TICKER'` returns 0, so `Toyota→TC`, `Mercedes-Benz→MB`, `BMW→BMW` and the rest were never entered. Nothing consumes it yet, so it is owed with 2.11 rather than before it. **DONE for the format and the ticker; the `internalCode` values are generated, not chosen.** `INTERNAL_CODE_PATTERN` is enforced, and `tickerFor(model, make)` in `src/data/fitment-catalogue.ts` derives a 2–3 character ticker as first-character-plus-last-two, which separates the cases a naive initialism collapses (`Camry`→`CRY`, `Corolla`→`CLA`, where a three-letter prefix gives both `COR`). It is **not guaranteed unique** and does not need to be: `internalCode` is only validated on Confirmed rows, so two drafts may share one. `npm run fitment:report` lists the 13 colliding pairs up front, and `assertLiveLayouts` names the row if the second of a pair is ever confirmed. **Still open:** the ticker is derived rather than owner-chosen, so any code the owner already uses in WhatsApp or on SKUs should replace it.
+  - [~] 2.11 Enter the first Confirmed Layouts: 15–25 rows, one floor pan each, each with `evidence`, a `confirmationNote` in the owner's own words, `confirmedOn`, `leadTime`, a `priceFrom` per variant and the `makeId` required by locked decision 4 _(P0 — source-doc Phase 0)_ **STRUCTURALLY DONE, SUBSTANTIVELY OPEN — and the split is the honest part.** All **212** cars in the catalogue are loaded as reviewable rows: 212 `Vehicle`, 212 `Layout` at `status: "inferred"`, 212 `Mapping` at `confidence: "inferred"`, four variants each priced from the catalogue at the brand's tier. The owner has the complete list to activate, and promoting a row is one entry in `src/data/fitment-review.ts`. **What is not done is the substance: nothing is Confirmed, so `liveLayoutCount()` is still 0** and M2's gate assertion `>= 1` still fails. That is correct rather than broken — 212 inferred rows assert nothing, and the customer is refused with `We do not have a confirmed fit for the Toyota Camry 2015 yet` — a *better* refusal than the old *we have not measured a floor pan*, because it distinguishes a car we know from one we do not. Only the owner can close this: one car, one `confirmationNote` in their own words, one evidence source.
+  - [~] 2.12 Enter the first `Exclusions` rows for known non-fits (hybrid battery, 3rd row, 7-seat vs 5-seat, body variants), each with a written `reason` _(P0 — source-doc Phase 0)_ **PARTIAL.** `EXCLUSIONS` exists and `checkFit` honours it, but the table is empty — no known non-fits have been entered. **STRUCTURALLY DONE, SUBSTANTIVELY OPEN.** `EXCLUSIONS` now comes from `src/data/fitment-review.ts` and `checkFit` short-circuits on it before any layout — verified by the branch order. The table is empty: no known non-fits have been entered, and only the owner knows them.
   - _Requirements: 1.1, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.6, 7.2, 7.4, 7.5, 8.1, 8.2, 8.3, 8.4, 8.8, 8.9, 15.1, 15.7, 16.1, 16.2, 16.3, 16.6, 17.1, 19.8_
 
 - [x] 3. Phase 0 — `POST /api/fit-check`, the contract that must not change
