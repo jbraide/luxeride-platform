@@ -22,6 +22,7 @@ import {
 import type { FitCheckResponse, FitVariantOffer } from "@/lib/fitment-contract";
 import { track } from "@/lib/analytics";
 import { fittedCopy, guarantee, refusals } from "@/lib/copy";
+import type { RefusalCopy } from "@/lib/copy";
 import type { ResolvedLanding } from "@/data/landing";
 
 /**
@@ -102,6 +103,13 @@ export default function FitFinder({
   }, [query]);
 
   function pickCar(b: string, m: string, available: boolean) {
+    // A previous check's outcome is dropped before anything else happens here.
+    // The refusal screen keys its COPY off `fit`/`fitError`, so a leftover from
+    // an earlier attempt would label this refusal with the last outcome — which
+    // is how a "we could not check that" ends up sitting on top of an honest
+    // "no confirmed fit yet" (and the reverse).
+    setFit(null);
+    setFitError(null);
     if (!available) {
       // A car we cannot sell is a refusal, and refusals are this product's
       // only sourcing signal — so it is measured here, not inferred later.
@@ -238,25 +246,13 @@ export default function FitFinder({
       state: payload.state === "NOT_STOCKED" ? "NOT STOCKED" : payload.state,
     });
 
-    // A refusal is demand. Locked decision 2 makes capturing it a launch
-    // requirement, so it happens here rather than being left to a database
-    // that does not exist yet.
-    void fetch("/api/demand", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        make: brand,
-        model,
-        year: Number(year),
-        outcome: payload.state,
-        reason: payload.reason ?? "",
-        phone: comingSoonPhone || undefined,
-      }),
-    }).catch(() => {
-      // Never block the refusal on the log write; the visitor still gets their
-      // WhatsApp link either way.
-    });
-
+    // A refusal is demand, and it was ALREADY written by `/api/fit-check`
+    // before this response arrived (fitment-engine §5.5). This client used to
+    // POST the same refusal to `/api/demand` as well, which doubled every line
+    // in a log whose only job is to rank refusals by volume and decide what to
+    // source next — so it is gone, and nothing replaces it. The one demand write
+    // that stays in this file is the locked-product miss above: the server
+    // answered FITTED there, so it has no refusal to log.
     setComingSoon({ brand, model });
     setStep("comingsoon");
     },
@@ -281,6 +277,26 @@ export default function FitFinder({
   const tier: Tier = brand ? BRANDS[brand].tier : "regular";
   const unitPrice = product ? productBase(product, tier, rows) : 0;
   const resultMedia = product ? (mediaBySlug[product.slug] ?? null) : null;
+
+  /**
+   * Which copy-register entry the refusal screen shows, keyed by the OUTCOME
+   * rather than by whether the last call happened to throw.
+   *
+   * The register is the single source for refusal copy (`trust-and-policies`
+   * §2.1), and its two keys are the two wire states, so it is read by state:
+   * a server `UNKNOWN` gets the `UNKNOWN` sentence, and everything else — a
+   * server `NOT_STOCKED` and the static `available: false` short-circuit, which
+   * are the same shape of answer — gets `NOT STOCKED`. Collapsing `UNKNOWN` into
+   * the stock copy is what requirement 3.2 calls a rebranded refusal, and it
+   * was exactly what the hardcoded strings did.
+   *
+   * A network failure has no server state at all, so it takes the `UNKNOWN`
+   * entry for its body and keeps its own headline — "we could not check that" is
+   * more honest than "we could not recognise that car" when the car was matched
+   * fine and only the request failed.
+   */
+  const refusal: RefusalCopy =
+    fitError !== null || fit?.state === "UNKNOWN" ? refusals.UNKNOWN : refusals["NOT STOCKED"];
 
   function handleAddToCart() {
     if (!product || !brand || !model) return;
@@ -607,37 +623,183 @@ export default function FitFinder({
         </div>
       )}
 
-      {step === "comingsoon" && comingSoon && (
+      {/* ── The locked-product miss ──────────────────────────────────────────
+          `fit-finder` §3.6, master plan M3.12. The car IS Confirmed and the
+          product the campaign promised is NOT among the variants the server
+          just returned for it. The screen exists because the alternative is
+          worse than a refusal: quietly putting a different product in front of
+          someone who paid for an advert is the same class of falsehood as a
+          wrong fit claim, and it is the one the visitor cannot detect.
+
+          Nothing on this screen may restate a fit. Every fact it prints — the
+          car, the fit ref, the lead time, each variant and its price — comes
+          from the FITTED payload the server just sent, so the screen cannot
+          drift from the table. */}
+      {step === "lockedmiss" && lockedMiss && product && brand && model && (
         <div>
           <h2 className="font-display text-2xl font-semibold">
-            {fitError ? "We could not check that" : "No confirmed fit yet"}
+            {product.name} is not cut for your {brand} {model}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            {fitError ? (
-              fitError
+            {lockedProduct ? (
+              <>
+                You came here for the {product.name} from our advert, and we do not
+                cut it for this car. Here is what we do cut for it.
+              </>
             ) : (
               <>
-                We don&apos;t have a confirmed fit for{" "}
-                <strong>
-                  {comingSoon.model
-                    ? `${comingSoon.brand} ${comingSoon.model}`
-                    : comingSoon.brand}
-                </strong>
-                .{" "}
-                {fit?.reason ?? "We are adding new fits as we measure them."}
+                We do not cut the {product.name} for this car. Here is what we do cut
+                for it.
               </>
             )}
           </p>
+
+          {/* The confirmed car, shown deliberately BEFORE the alternatives: the
+              miss is about one product, and a visitor who only sees a list of
+              other products could reasonably read it as "nothing fits your car".
+              It is not that — the floor pan is measured and on record. */}
+          <div className="mt-4 rounded-xl border border-line bg-panel-2 p-4">
+            <p className="font-mono text-[11px] uppercase tracking-wide text-gold-dim">
+              What we have confirmed
+            </p>
+            <p className="mt-1 font-display text-lg font-semibold">
+              {fit?.customerName ?? `${brand} ${model}`}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-muted">
+              {year}
+              {fit?.internalCode ? ` · fit ref ${fit.internalCode}` : ""}
+              {fit?.leadTime ? ` · lead time ${fit.leadTime}` : ""}
+            </p>
+          </div>
+
+          <p className="mt-6 font-mono text-[11px] uppercase tracking-wide text-gold-dim">
+            What we do cut for this car
+          </p>
+          <div className="mt-2 space-y-2">
+            {lockedMiss.map((variant) =>
+              variant.stockState === "out_of_stock" ? (
+                // Cut for the car, but not orderable. Requirement 3.5 wants the
+                // reason on the row rather than discovered after the click, and
+                // `Chip` has no `disabled` state — that is `fit-finder` §7.3,
+                // coordinated with `storefront-catalog` — so the row is built
+                // here with Chip's own markup and genuinely disabled.
+                <button
+                  key={variant.productSlug}
+                  type="button"
+                  disabled
+                  className="w-full cursor-not-allowed rounded-xl border border-white/15 bg-panel px-4 py-4 text-left text-sm opacity-60"
+                >
+                  <span className="block font-medium">{variant.productName}</span>
+                  <span className="mt-1 block text-xs text-muted">
+                    Cut for this car, but not available to order right now
+                  </span>
+                </button>
+              ) : (
+                // "From" because `priceFrom` is the floor pan's entry price and a
+                // 3-row configuration adds the product's surcharge on top; the
+                // exact figure is not settled until the row count is.
+                <Chip
+                  key={variant.productSlug}
+                  title={variant.productName}
+                  hint={`From ${variant.priceDisplay}${
+                    variant.stockState === "made_to_order" ? " · made to order" : ""
+                  }`}
+                  onClick={() => selectVariant(variant)}
+                />
+              ),
+            )}
+          </div>
+
+          <a
+            href={whatsappLink(
+              // Written here rather than with `refusalMessage()`, which opens
+              // "there is no confirmed fit for it yet" — FALSE on this screen, the
+              // car is confirmed and the product is what misses. `fit-finder`
+              // §7.6 owes a product-scoped builder; until then this is the only
+              // place a product-miss message is composed.
+              `Hi! I came to your fit finder for the ${product.name} and it says you do not cut it for my ${year} ${brand} ${model}.` +
+                (fit?.internalCode ? `\n🔖 Fit ${fit.internalCode}` : "") +
+                `\nIs that something you could cut for my car? Thanks!`,
+            )}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => {
+              // "coming_soon" is the closest existing CTA taxonomy entry; a
+              // dedicated type belongs to `ad-landing-and-tracking` §6, not here.
+              track("whatsapp_cta_clicked", {
+                ctaType: "coming_soon",
+                location: "fit_locked_miss",
+              });
+            }}
+            className="mt-5 block w-full rounded-xl border border-white/25 px-5 py-3.5 text-center text-sm font-semibold hover:border-gold hover:text-gold"
+          >
+            Ask about the {product.name} on WhatsApp
+          </a>
+
+          <button
+            onClick={() => setStep("car")}
+            className="mt-4 block w-full rounded-xl border border-white/25 px-5 py-3.5 text-center text-sm font-semibold hover:border-gold"
+          >
+            Browse Other Cars
+          </button>
+          <button onClick={restart} className="mt-3 block w-full text-center text-sm text-muted hover:text-white">
+            Start over
+          </button>
+        </div>
+      )}
+
+      {step === "comingsoon" && comingSoon && (
+        <div>
+          <h2 className="font-display text-2xl font-semibold">
+            {fitError ? "We could not check that" : refusal.headline}
+          </h2>
+          {fitError ? (
+            <p className="mt-1 text-sm text-muted">{fitError}</p>
+          ) : (
+            <>
+              {/* The car leads, on its own line. Requirement 3.1 wants the refusal
+                  to name the make and model that was asked for, and the register's
+                  body is written to follow a noun rather than sit inside a
+                  sentence — so the two are stacked instead of spliced together. */}
+              <p className="mt-1 text-sm font-medium text-white">
+                {comingSoon.model
+                  ? `${comingSoon.brand} ${comingSoon.model}`
+                  : comingSoon.brand}
+              </p>
+              <p className="mt-1 text-sm text-muted">{refusal.body}</p>
+              {/* The server's own sentence, unedited. It carries the year the
+                  register cannot, and paraphrasing it is how two screens end up
+                  disagreeing about the same refusal. */}
+              {fit?.reason && <p className="mt-2 text-sm text-muted">{fit.reason}</p>}
+            </>
+          )}
+          {refusal.promise && <p className="mt-2 text-sm text-muted">{refusal.promise}</p>}
           <div className="mt-4 rounded-xl border border-line bg-gold/5 p-4">
-            <label className="mb-2 block text-[11px] uppercase tracking-wide text-muted">
-              Want a text the moment it&apos;s ready? (optional)
-            </label>
-            <input
-              value={comingSoonPhone}
-              onChange={(e) => setComingSoonPhone(e.target.value)}
-              placeholder="e.g. 0704 962 1694"
-              className="mb-3 w-full rounded-xl border border-white/15 bg-panel px-4 py-3 text-sm focus:border-gold focus:outline-none"
-            />
+            {refusal.capture ? (
+              // The register pairs a promise of future availability with its
+              // capture (`trust-and-policies` §2.2), so where the entry has one
+              // the number is asked for before the promise is made visible. This
+              // is still not the validated capture requirement 3.4 asks for —
+              // `validateNGPhone` is unwired here (task 4.4).
+              <>
+                <label className="mb-2 block text-[11px] uppercase tracking-wide text-muted">
+                  {refusal.capture.label}
+                </label>
+                <input
+                  value={comingSoonPhone}
+                  onChange={(e) => setComingSoonPhone(e.target.value)}
+                  placeholder={refusal.capture.placeholder}
+                  className="mb-3 w-full rounded-xl border border-white/15 bg-panel px-4 py-3 text-sm focus:border-gold focus:outline-none"
+                />
+              </>
+            ) : (
+              // `UNKNOWN` promises nothing, so it captures nothing — requirement
+              // 3.3 ties the capture to the promise, not to the refusal. It still
+              // owes a primary action (3.2), and a human on WhatsApp is it.
+              <p className="mb-3 text-xs text-muted">
+                Tell us what you drive and we will check it for you by hand.
+              </p>
+            )}
             <a
               href={whatsappLink(
                 comingSoonMessage(
@@ -659,7 +821,7 @@ export default function FitFinder({
               }}
               className="block w-full rounded-xl bg-gold px-5 py-3.5 text-center text-sm font-semibold text-ink"
             >
-              Notify Me on WhatsApp
+              {refusal.capture ? "Notify Me on WhatsApp" : "Ask us on WhatsApp"}
             </a>
           </div>
           <button

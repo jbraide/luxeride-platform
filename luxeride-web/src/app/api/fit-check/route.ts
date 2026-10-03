@@ -1,4 +1,5 @@
 import { checkFit } from "@/data/fitment";
+import { logRefusal, type DemandOutcome } from "@/lib/demand-log";
 import {
   MAX_BODY_BYTES,
   type FitCheckRequest,
@@ -20,8 +21,20 @@ import { whatsappLink } from "@/lib/whatsapp";
  * this milestone exists to remove.
  */
 
-function respond(body: Omit<FitCheckResponse, "whatsappUrl" | "checkedAt">): Response {
-  const car = `"${body.customerName ?? "your car"}"`;
+function respond(
+  body: Omit<FitCheckResponse, "whatsappUrl" | "checkedAt">,
+  /**
+   * The car the visitor actually typed, e.g. `"Toyota Camry"`.
+   *
+   * Needed because `customerName` only exists on `FITTED`, so every refusal used
+   * to build its WhatsApp link from a fallback and read *I checked the fit for
+   * "your car"* — which contradicts `fitment-engine` §3.4, that a refusal names
+   * the car the visitor typed. Not serialised into the response; it exists only
+   * for this message.
+   */
+  carLabel?: string,
+): Response {
+  const car = `"${carLabel ?? body.customerName ?? "your car"}"`;
 
   const message =
     body.state === "FITTED"
@@ -40,9 +53,48 @@ function respond(body: Omit<FitCheckResponse, "whatsappUrl" | "checkedAt">): Res
   );
 }
 
-/** The universal refusal. Used by every path that cannot prove a fit. */
+/**
+ * The validation refusal, and the one UNKNOWN that must stay out of the demand
+ * log (§5.2, §5.5).
+ *
+ * Everything that reaches this helper failed BEFORE an identifiable car existed
+ * — no make, no model, an unusable year, a body we will not read. That is not a
+ * visitor asking about a car, so it is not demand, and a line here would put
+ * noise into the only dataset this company sources its next cars from.
+ */
 function unknown(validationReason: string): Response {
   return respond({ state: "UNKNOWN", reason: validationReason, validationReason });
+}
+
+/**
+ * A refusal about a car we could name, so it is demand (locked decision 2) and
+ * it is logged HERE, in the handler, before the response goes out (§5.5).
+ *
+ * WHY NOT IN THE CLIENT: `/api/fit-check` is called from places that have no
+ * browser behind them — and the browser is the part that closes the tab, goes
+ * offline or runs an ad blocker. §5.5 forbids exactly the old arrangement:
+ * "from `/api/fit-check`, not from the client, so a closed tab or an ad blocker
+ * cannot lose the refusal". The line only now appears for an API-only refusal.
+ *
+ * `/api/demand` is therefore NOT called here: firing it as well would write the
+ * same refusal twice, and this log is ranked by volume to decide what to source
+ * next, so a duplicate is a false signal rather than a harmless extra row.
+ * `/api/demand` remains the route for refusals this handler never sees — the
+ * locked-product miss in `FitFinder.tsx`, where the car IS confirmed and the
+ * miss is a fact only the client can see.
+ *
+ * `logRefusal` never throws (§5.4), so this cannot turn a refusal into a 500.
+ */
+function refuse(
+  outcome: DemandOutcome,
+  car: { make: string; model: string; year: number },
+  reason: string,
+): Response {
+  logRefusal({ ...car, outcome, reason });
+  // `demandLogged` makes the capture observable from the response (§5.6), which
+  // is the assertion that would have caught §5.5 going undone. The car is passed
+  // through so the refusal names it (§3.4) rather than saying "your car".
+  return respond({ state: outcome, reason, demandLogged: true }, `${car.make} ${car.model}`);
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -97,14 +149,18 @@ export async function POST(request: Request): Promise<Response> {
           variants: result.variants,
         });
       case "NOT_STOCKED":
-        return respond({ state: "NOT_STOCKED", reason: result.reason });
+        return refuse("NOT_STOCKED", { make, model, year }, result.reason);
       default:
-        return respond({ state: "UNKNOWN", reason: result.reason });
+        return refuse("UNKNOWN", { make, model, year }, result.reason);
     }
   } catch (error) {
     // Server-side cause, never sent to the client: a stack trace here would
     // describe the internal table to whoever triggered it.
     console.error("fit-check: lookup threw, resolving to UNKNOWN:", error);
-    return unknown("We could not complete that check.");
+    // Logged, unlike the validation refusals above: the car WAS identified and
+    // the year was valid — the engine failed, not the request. §5.5 covers
+    // "every ... UNKNOWN outcome", and a line naming the car that made the
+    // lookup throw is the defect report this engine's refusals exist to produce.
+    return refuse("UNKNOWN", { make, model, year }, "We could not complete that check.");
   }
 }

@@ -60,7 +60,10 @@ const DEFAULT_LOG =
  * a customer who cannot order is the problem; a missing log line is not.
  *
  * Server-only: `node:fs` is imported at the top level, so this must never be
- * reached from a Client Component. It is called from `src/app/api/demand`.
+ * reached from a Client Component. It is called from `src/app/api/demand` and,
+ * since fitment-engine §5.5, from `src/app/api/fit-check` — the fit-check
+ * handler is the caller that matters, because it is the one no browser can
+ * skip.
  */
 export function logRefusal(entry: Omit<DemandEntry, "at" | "liveLayoutsAtThisTime">): void {
   try {

@@ -351,7 +351,18 @@ The redirect decision pays for itself here: with no public key in the client bun
 ## Testing Strategy
 
 No test framework exists — `package.json` has no test script, no runner, and `_CONTEXT.md` §1 records
-no CI and no git repository. `commerce-backend` should stand one up; until then these are manual,
+no CI and no git repository. `commerce-backend` should stand one up; until then these are manual
+
+> **CORRECTED 2026-10-03 — this project now HAS a git repository.** `git init -b main` at `platform/`
+> happened in master plan M0.1, with a root `.gitignore` covering `node_modules`, `.next`, `.env.local`
+> and the out-of-tree backup directory. Commits are on `main`. What follows was written before that and
+> is preserved so the reasoning is not rewritten — but the specific claims that there is no `git revert`,
+> no branch, no diff and no second recovery path are **no longer true for application code**.
+>
+> **What is still true, and is the reason the backup discipline stands:** there is **no remote**, so
+> every commit is local to this machine. There is still no off-machine copy, no CI, and no history for
+> the *data* — only for the code. A disk failure still loses everything.
+,
 recorded rehearsals.
 
 **Test-mode plan.** The architecture plan §8 asks the owner for "a Paystack test API key when we get

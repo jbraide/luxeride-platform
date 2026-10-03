@@ -1,40 +1,31 @@
+import { mintOrderRef } from "./order-ref";
+
 /**
- * The order reference (`ad-landing-and-tracking` §6.1–6.3).
+ * The client-side order reference — a thin adapter over `src/lib/order-ref.ts`.
  *
- * Format: `LR-` + 8 uppercase hex, derived from `crypto.randomUUID()`. NOT
- * derived from the wall clock and NOT sequential, so consecutive orders cannot
- * be enumerated by incrementing a counter. The order's date is carried
- * separately by `PlacedOrder.placedAt`.
- */
-
-function mint(): string {
-  const uuid =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : // Weaker fallback, matching `src/store/cart.ts`, kept so ids are minted
-        // one way across the app when `randomUUID` is unavailable.
-        `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
-
-  const hex = uuid.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
-  return `LR-${(hex + "00000000").slice(0, 8)}`;
-}
-
-/**
- * Mint against the retained order history, re-rolling up to three times on a
- * collision. A fourth collision appends a counter rather than reusing a ref.
+ * WHY THIS FILE IS NOW AN ADAPTER, NOT AN IMPLEMENTATION
+ *
+ * There were two order-reference implementations with **incompatible formats**:
+ * this one minted `LR-` plus 8 uppercase hex, and `order-ref.ts` mints `LR-` plus
+ * 10 Crockford base32 characters. A reference produced by one was not valid to the
+ * other, and the checkout was using the hex one while the server-side work used
+ * Crockford. Two formats in flight is how a customer ends up unable to be found by
+ * the reference they were given.
+ *
+ * So this delegates. There is one alphabet and one length now, and the shape the
+ * customer reads is the shape the server will mint at M6.8.
+ *
+ * WHY IT STILL EXISTS AT ALL
+ *
+ * The checkout has to put *a* reference in the WhatsApp message today, and until
+ * M6.7/M6.8 builds that message from the server response, the browser is the only
+ * thing minting one. When that lands, this file is deleted and `createOrderRef`'s
+ * single caller switches to the ref the server returned — which is the actual fix,
+ * because a reference the server never saw is not a record of anything.
+ *
+ * It is kept as a separate module rather than inlined so that removal is one
+ * import change, not a search for a function.
  */
 export function createOrderRef(existing: Iterable<string> = []): string {
-  const taken = new Set(existing);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const candidate = mint();
-    if (!taken.has(candidate)) return candidate;
-  }
-
-  let counter = 1;
-  let candidate = `${mint()}-${counter}`;
-  while (taken.has(candidate)) {
-    counter += 1;
-    candidate = `${mint()}-${counter}`;
-  }
-  return candidate;
+  return mintOrderRef(existing);
 }

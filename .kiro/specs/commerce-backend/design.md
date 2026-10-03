@@ -555,6 +555,17 @@ LuxeRide's failures are product features. Each row is a designed state.
 ### The rollback story, stated plainly
 
 **There is no git repository.** `platform/` and `luxeride-web/` are untracked directories with no
+
+> **CORRECTED 2026-10-03 — this project now HAS a git repository.** `git init -b main` at `platform/`
+> happened in master plan M0.1, with a root `.gitignore` covering `node_modules`, `.next`, `.env.local`
+> and the out-of-tree backup directory. Commits are on `main`. What follows was written before that and
+> is preserved so the reasoning is not rewritten — but the specific claims that there is no `git revert`,
+> no branch, no diff and no second recovery path are **no longer true for application code**.
+>
+> **What is still true, and is the reason the backup discipline stands:** there is **no remote**, so
+> every commit is local to this machine. There is still no off-machine copy, no CI, and no history for
+> the *data* — only for the code. A disk failure still loses everything.
+
 `.git` anywhere, per `_CONTEXT.md` §1. This has three consequences that are easy to forget and
 expensive to learn late:
 

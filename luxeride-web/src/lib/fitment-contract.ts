@@ -48,6 +48,21 @@ export interface FitCheckResponse {
   variants?: FitVariantOffer[];
   /** Set when the request itself was unusable (missing field, oversized body). */
   validationReason?: string;
+  /**
+   * `true` when this refusal was written to the demand log by the handler that
+   * produced it (§5.6), so the capture is observable from the response instead
+   * of having to be taken on trust.
+   *
+   * §5.6 requires it on `NOT_STOCKED`; it is on `UNKNOWN` for the same reason
+   * both states are logged — the refusal screen may only claim "we've noted
+   * this" when a line really exists (`fit-finder` §4.6), and it cannot know
+   * that for `UNKNOWN` if the field is absent there.
+   *
+   * Optional rather than required because `FITTED` never logs a refusal and must
+   * not carry the flag; the two cannot be one type without a state-keyed union.
+   * It is never `false`: a failed write is not reported as a successful capture.
+   */
+  demandLogged?: boolean;
   whatsappUrl: string;
   /** ISO timestamp, so the demand log has one without trusting the client. */
   checkedAt: string;

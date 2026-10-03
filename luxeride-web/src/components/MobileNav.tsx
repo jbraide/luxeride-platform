@@ -6,6 +6,19 @@ import { usePathname } from "next/navigation";
 import { CATEGORIES } from "@/data/products";
 
 /**
+ * The routes a visitor needs when something has gone wrong or they want to check
+ * who they are buying from. Defined once here rather than inline, because these
+ * are the pages the M5 spend gate asserts are reachable in one tap on a phone.
+ */
+const HELP_LINKS = [
+  { href: "/contact", label: "Contact us" },
+  { href: "/policies/delivery", label: "Delivery" },
+  { href: "/policies/returns", label: "Returns & guarantee" },
+  { href: "/policies/privacy", label: "Privacy" },
+  { href: "/policies/terms", label: "Terms" },
+] as const;
+
+/**
  * The mobile menu.
  *
  * Before this existed, the `Shop` / `Fit Finder` nav was `hidden … sm:flex` and
@@ -18,9 +31,12 @@ import { CATEGORIES } from "@/data/products";
  * hydration. Everything else (Escape, backdrop, scroll lock, focus return) is
  * progressive enhancement on top of a menu that is already usable.
  *
- * The four policy routes are deliberately absent. `/policies/*` does not exist
- * until M4.4, and a menu entry that 404s is a worse promise than no entry. They
- * are added by M4.7 when the footer and the routes land together.
+ * The policy routes and `/contact` are listed here now that they exist (M4.4 and
+ * M4.5). They were deliberately absent before: a menu entry that 404s is a worse
+ * promise than no entry. Below 640 px this menu is the ONLY navigation, so a route
+ * reachable only from the footer is effectively unreachable — which is what
+ * `/contact` was until this change, and it is the page the M5 spend gate asserts is
+ * one tap away.
  */
 export default function MobileNav() {
   // The open state is *derived* from the pathname rather than synced to it: the
@@ -113,8 +129,6 @@ export default function MobileNav() {
           <ul className="mt-3 space-y-1">
             {CATEGORIES.map((category) => (
               <li key={category.slug}>
-                {/* Category routes (/shop/<slug>) arrive in M3.3; the query form
-                    is what exists today and it resolves to the same grid. */}
                 <Link
                   href={`/shop/${category.slug}`}
                   onClick={close}
@@ -127,12 +141,27 @@ export default function MobileNav() {
           </ul>
 
           <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-gold-dim">Your order</p>
-          <ul className="mt-3 space-y-1 pb-6">
+          <ul className="mt-3 space-y-1">
             <li>
               <Link href="/cart" onClick={close} className="block rounded-lg px-3 py-3 text-base hover:bg-panel-2">
                 Cart
               </Link>
             </li>
+          </ul>
+
+          <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-gold-dim">Help</p>
+          <ul className="mt-3 space-y-1 pb-6">
+            {HELP_LINKS.map((link) => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  onClick={close}
+                  className="block rounded-lg px-3 py-3 text-sm text-white/85 hover:bg-panel-2"
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
           </ul>
         </nav>
       </div>

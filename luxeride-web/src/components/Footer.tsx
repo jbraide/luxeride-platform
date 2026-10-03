@@ -18,6 +18,10 @@ export default function Footer() {
   }))];
 
   const helpLinks = [
+    // `/contact` first: a visitor in the Help column most often wants a person,
+    // not a policy. The same five routes are in the mobile menu, and the M5 spend
+    // gate asserts they are one tap away on a phone.
+    { href: "/contact", label: "Contact us" },
     { href: "/policies/delivery", label: "Delivery" },
     { href: "/policies/returns", label: "Returns & Guarantee" },
     { href: "/policies/privacy", label: "Privacy" },

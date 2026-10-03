@@ -31,6 +31,7 @@ const GUARANTEE_NEEDLE = "100% Perfect Fit Guarantee";
 const PLACEHOLDER_FILES = [
   path.join(SRC, "data", "policies.ts"),
   path.join(SRC, "data", "social.ts"),
+  path.join(SRC, "data", "business.ts"),
 ];
 
 const failures = [];
@@ -47,6 +48,30 @@ function walk(dir) {
 
 const srcFiles = walk(SRC);
 const rel = (file) => path.relative(ROOT, file);
+
+// ── 0: the list above must not go stale ──────────────────────────────────────
+//
+// PLACEHOLDER_FILES is hand-maintained because a blanket scan of `src/` produces
+// false positives: several files legitimately mention the token in a comment while
+// explaining the convention (`components/PolicyPage.tsx` shows it as an example).
+// But a hand-maintained list silently under-reports the moment somebody adds a data
+// module with owner slots in it — which is exactly what happened when
+// `src/data/business.ts` was added and the gate kept reporting the old count.
+//
+// So: any file under `src/data/` that contains the token must be in the list. That
+// is a real check with no false positives, because data modules do not carry
+// explanatory prose about the token — they carry the token as a value.
+
+const listedDataFiles = new Set(PLACEHOLDER_FILES);
+for (const file of srcFiles) {
+  if (!file.includes(`${path.sep}data${path.sep}`)) continue;
+  if (listedDataFiles.has(file)) continue;
+  if (!fs.readFileSync(file, "utf8").includes(OWNER_INPUT_TOKEN)) continue;
+  failures.push(
+    `${rel(file)}: contains an ${OWNER_INPUT_TOKEN} slot but is missing from PLACEHOLDER_FILES in ` +
+      `scripts/check-placeholders.mjs. Add it there so the pre-spend gate can see it.`,
+  );
+}
 
 // ── 1 + 2: owner-input tokens and null social URLs ───────────────────────────
 

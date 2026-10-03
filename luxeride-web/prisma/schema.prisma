@@ -6,7 +6,7 @@
 //
 //   1. init_commerce_model   (this file)  — Category, Product, Location, Make,
 //                                           Vehicle, Order, OrderItem
-//   2. add_layout_refs                    — nullable OrderItem.layoutId /
+//   2. add_layout_refs   (APPLIED)        — nullable OrderItem.layoutId /
 //                                           layoutVariantId + the updatedAt columns
 //   3. add_fitment_tables                 — owned by fitment-engine, then the FK
 //
@@ -72,6 +72,7 @@ model Product {
   orderItems OrderItem[]
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([categoryId])
 }
@@ -191,6 +192,7 @@ model Order {
   whatsappMessage String
 
   createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
   items     OrderItem[]
 
   @@index([status, createdAt])
@@ -225,7 +227,19 @@ model OrderItem {
   qty       Int @default(1)
   lineTotal Int
 
+  /// NULL until the fitment engine records which layout and variant this line
+  /// was sold as. Nullable on purpose: a non-nullable reference here would block
+  /// every order until the fitment tables exist, so the storefront could not
+  /// trade at all in the meantime.
+  ///
+  /// Scalar columns rather than relations at this stage — the `Layout` and
+  /// `LayoutVariant` tables arrive in the next migration, and stage 2 must add no
+  /// foreign key into a table that does not exist. The relations are added there.
+  layoutId        String?
+  layoutVariantId String?
+
   @@index([orderId])
   @@index([productId])
   @@index([vehicleId])
+  @@index([layoutId])
 }

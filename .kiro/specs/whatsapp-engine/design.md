@@ -368,6 +368,17 @@ public value and stays where it is — it is the `wa.me` fallback number.
 ## Testing Strategy
 
 There is no test framework, no CI and no git repository (`_CONTEXT.md` §1). These are manual
+
+> **CORRECTED 2026-10-03 — this project now HAS a git repository.** `git init -b main` at `platform/`
+> happened in master plan M0.1, with a root `.gitignore` covering `node_modules`, `.next`, `.env.local`
+> and the out-of-tree backup directory. Commits are on `main`. What follows was written before that and
+> is preserved so the reasoning is not rewritten — but the specific claims that there is no `git revert`,
+> no branch, no diff and no second recovery path are **no longer true for application code**.
+>
+> **What is still true, and is the reason the backup discipline stands:** there is **no remote**, so
+> every commit is local to this machine. There is still no off-machine copy, no CI, and no history for
+> the *data* — only for the code. A disk failure still loses everything.
+
 rehearsals, and they must be run in order because each depends on the previous.
 
 **Before any code:** submit all four templates and wait for `APPROVED`. Record the actual review time
