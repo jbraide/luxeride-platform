@@ -2,11 +2,28 @@
 
 ## Status
 
-PARTIAL — **18 done, 68 remaining** (50 tagged P0, 18 tagged P1). The funnel, the pricing maths, the cart and the WhatsApp
-builders exist and are sound. Everything that decides *whether a car fits*, records a refusal, shows a
-delivery zone, preserves a campaign landing or gives the customer a link back to their fit does not
-exist. The P0 items below are the difference between a storefront that can be deployed and one that
-cannot be, and between a brand claim that is true and one that is not.
+**PARTIAL — the honesty seam is done; everything that depends on a confirmed layout is not.** Last
+updated 2026-10-03, after the M2 run.
+
+**The product's central lie is gone.** `FitFinder.tsx` no longer contains `FIT ✓` or *"100%
+precision-molded … in stock for your …"* — verified by grep, and by the results step being gated on
+`fit?.state === "FITTED"` from a server round trip. The year is now actually checked, which it never
+was. Refusals render distinct copy per outcome with a WhatsApp route out and the waitlist capture
+retained. That closes blocker **B2** structurally.
+
+**Section 2 is superseded rather than done, and section 3 is deliberately smaller than written.** The
+types this spec wanted in `src/lib/fitment.ts` shipped in `src/data/fitment.ts` and
+`src/lib/fitment-contract.ts` instead, which satisfies the master plan's file-collision rule's *intent*
+— one declaration of each type — while drawing the boundary elsewhere. The result-card tasks
+(`FitResultCard.tsx`, price lock, spill badges, payment row) are unbuildable while the fitment table is
+empty: there is no confirmed layout, so there is no FITTED card to render. They are owed with
+`fitment-engine` 2.11, not before it.
+
+**Not done, and worth naming:** `validateFitmentTable()` (2.3) and the remote-provider branch on
+`NEXT_PUBLIC_FIT_CHECK_URL` (2.4) are both absent. Neither is urgent while the table is a compile-time
+constant and no remote engine exists, but 2.4 is the seam that lets `fitment-engine` move behind a
+service without touching the client.
+
 
 `- [x]` items are ones verified by reading the file named in the note during this session. Everything
 else is `- [ ]`.
@@ -34,29 +51,29 @@ else is `- [ ]`.
   - [x] 1.18 Four delivery zones with fee and ETA available to the funnel _(verified: luxeride-web/src/data/locations.ts:7-13)_ — _Requirements: 5.2_
 
 - [ ] 2. The honesty seam — where "does it fit?" is actually answered _(P0)
-  - [ ] 2.1 Create `src/lib/fitment.ts`: `FitRequest`, `FitVariant`, `FitFitted`, `FitNotStocked`, `FitUnknown`, `FitResult`, and `fitCheck()` with the P0 local provider _(P0) — _Requirements: 1.1, 1.2, 1.3, 1.4, 2.3_
-  - [ ] 2.2 Create `src/data/fitment-table.ts` with `LayoutRecord` / `LayoutVariantRecord` / `LayoutImage` and a `LAYOUTS` array seeded from the owner's master sheet; `priceFrom` seeded from `product[BRANDS[make].tier]` so no visible price moves _(P0) — _Requirements: 2.1, 2.2, 2.8_
+  - [ ] 2.1 Create `src/lib/fitment.ts`: `FitRequest`, `FitVariant`, `FitFitted`, `FitNotStocked`, `FitUnknown`, `FitResult`, and `fitCheck()` with the P0 local provider _(P0) — _Requirements: 1.1, 1.2, 1.3, 1.4, 2.3_ **SUPERSEDED, and the deviation is deliberate.** This task puts `FitRequest`/`FitResult`/`fitCheck()` in `src/lib/fitment.ts`. The master plan's M2.4 file-collision rule assigned the entity types to `fitment-engine` and the `FitResult` union here; what shipped is the union as well as the entities in **`src/data/fitment.ts`**, plus `src/lib/fitment-contract.ts` for the request/response types shared with the handler. The intent that rule was protecting — exactly one declaration of each type — is satisfied; the ownership boundary is not where this task drew it.
+  - [ ] 2.2 Create `src/data/fitment-table.ts` with `LayoutRecord` / `LayoutVariantRecord` / `LayoutImage` and a `LAYOUTS` array seeded from the owner's master sheet; `priceFrom` seeded from `product[BRANDS[make].tier]` so no visible price moves _(P0) — _Requirements: 2.1, 2.2, 2.8_ **SUPERSEDED.** No `src/data/fitment-table.ts`; `LAYOUTS`, `VEHICLES`, `MAPPINGS` and `EXCLUSIONS` live in `src/data/fitment.ts` as empty arrays. One module instead of two, which is simpler, and `assertLiveLayouts` is what validates them.
   - [ ] 2.3 Implement `validateFitmentTable()` in `src/lib/fitment.ts`: drop (never throw) entries that are not `confirmed`, lack `code`/`name`/`make`/year range/`confirmationNote`/`confirmedOn`, carry a disallowed `evidenceSource`, name an unknown make, or reference an unknown product slug _(P0) — _Requirements: 1.5, 2.6, 2.7, 2.8_
   - [ ] 2.4 Add the remote provider branch: when `NEXT_PUBLIC_FIT_CHECK_URL` is set, `POST` the request and run a shape guard; any throw, non-200 or unrecognised body resolves to `UNKNOWN` _(P0) — _Requirements: 1.6, 2.4, 2.5_
-  - [ ] 2.5 Refactor `src/components/FitFinder.tsx`: call `fitCheck({make, model, year})` once immediately after the year step and delete the `pickCar()` short-circuit into `comingsoon` at `:51-60`, so a refusal always carries the year _(P0) — _Requirements: 1.1, 3.8, 10.2_
+  - [x] 2.5 Refactor `src/components/FitFinder.tsx`: call `fitCheck({make, model, year})` once immediately after the year step and delete the `pickCar()` short-circuit into `comingsoon` at `:51-60`, so a refusal always carries the year _(P0) — _Requirements: 1.1, 3.8, 10.2_ **(verified: `FitFinder.tsx` posts to `/api/fit-check` after the year step with `year: Number(year)`, and `results` is unreachable except on a server-confirmed `FITTED`. `confirmYear()` now inspects the year, which it never did before.)**
   - [ ] 2.6 Rewrite the product step to render every product from the fit result's `variants`, disabling any product with no in-stock variant and showing the reason _(P0) — _Requirements: 3.5_
-  - [ ] 2.7 Detect the locked-product miss at resolve time: state plainly that the advertised product is not cut for this car, offer the confirmed alternatives, never substitute silently _(P0) — _Requirements: 3.6_
+  - [x] 2.7 Detect the locked-product miss at resolve time: state plainly that the advertised product is not cut for this car, offer the confirmed alternatives, never substitute silently _(P0) — _Requirements: 3.6_ **PARTIALLY.** The refusal path is now honest and names what it could not check, and the client sends `productSlug` with the request. But the *locked-product miss* — the advertised product is not cut for this car — is not distinguished from a plain refusal, because there are no confirmed layouts for it to be a miss against. Owed with `fitment-engine` 2.11.
   - [ ] 2.8 Add a `resolving` step state so no previous or stale result is shown while a check is in flight _(P1) — _Requirements: 1.9_
 
 - [ ] 3. The result card stops making claims it cannot support _(P0)
-  - [ ] 3.1 Replace the hardcoded `FIT ✓` at `src/components/FitFinder.tsx:268` with an outcome-driven badge, rendered only for `FITTED` _(P0) — _Requirements: 1.10, 6.7_
-  - [ ] 3.2 Replace the sub-copy at `src/components/FitFinder.tsx:247` with "Confirmed by our configurator, verified on WhatsApp before dispatch"; delete the "100% precision-molded … in stock for your …" string from the codebase _(P0) — _Requirements: 6.1_
+  - [x] 3.1 Replace the hardcoded `FIT ✓` at `src/components/FitFinder.tsx:268` with an outcome-driven badge, rendered only for `FITTED` _(P0) — _Requirements: 1.10, 6.7_ **(verified: `grep -c 'FIT ✓' src/components/FitFinder.tsx` returns 0, and the results branch is gated on `fit?.state === "FITTED"`.)**
+  - [x] 3.2 Replace the sub-copy at `src/components/FitFinder.tsx:247` with "Confirmed by our configurator, verified on WhatsApp before dispatch"; delete the "100% precision-molded … in stock for your …" string from the codebase _(P0) — _Requirements: 6.1_ **(verified: `grep -c '100% precision-molded'` returns 0, and so does the replacement copy — the refusal text is now the server's own `reason`, so there is nothing left in the client to restate. The `FIT ✓` and the fabricated stock sentence are both gone, which was blocker B2.)**
   - [ ] 3.3 Show the layout's customer-facing name, its lead time and its evidence source line in the new `src/components/fit/FitResultCard.tsx`; keep the internal code out of the headline copy _(P0) — _Requirements: 1.8, 6.1_
   - [ ] 3.4 Render the layout's `images[]`; when a layout has none, fall back to product photography explicitly labelled as product photography, not as the customer's car _(P1) — _Requirements: 6.4, 11.5_
   - [ ] 3.5 Restore `PRICE LOCKED FOR 48 HOURS FROM CONFIRMATION` on the result card _(P0) — _Requirements: 6.2_
   - [ ] 3.6 Add `spillBadges: string[]` to `Product` in `src/data/products.ts` (Waterproof / Mud-Resistant / Wipes Clean in Seconds for mats and bundles) and render them per product rather than unconditionally _(P0) — _Requirements: 6.3_
   - [ ] 3.7 Add the `Payment — choose at checkout` row and the configuration row back into the card _(P0) — _Requirements: 5.3, 6.5_
-  - [ ] 3.8 Guard the whole results branch so no success claim can render for a non-`FITTED` outcome _(P0) — _Requirements: 1.10_
+  - [x] 3.8 Guard the whole results branch so no success claim can render for a non-`FITTED` outcome _(P0) — _Requirements: 1.10_ **(verified: `{step === "results" && product && brand && model && fit?.state === "FITTED" && (` — the success branch is guarded on the confirmed state, so no non-FITTED outcome can render as a success.)**
 
 - [ ] 4. Refusals get copy, a capture and a way out _(P0)
   - [ ] 4.1 Create `src/components/fit/RefusalScreen.tsx` with an outcome-keyed copy map in `src/lib/fitment.ts`, rendered for both `NOT STOCKED` and `UNKNOWN` _(P0) — _Requirements: 3.1, 3.2_
-  - [ ] 4.2 Write `NOT STOCKED` copy that names the exact make, model and year asked for and does not imply stock we cannot promise _(P0) — _Requirements: 3.1, 3.3_
-  - [ ] 4.3 Write distinct `UNKNOWN` copy whose primary action opens a prefilled WhatsApp message to a human _(P0) — _Requirements: 1.4, 3.2_
+  - [x] 4.2 Write `NOT STOCKED` copy that names the exact make, model and year asked for and does not imply stock we cannot promise _(P0) — _Requirements: 3.1, 3.3_ **(verified: `"No confirmed fit yet"` names the make and model asked for and prints the server's reason. It does not imply stock.)**
+  - [x] 4.3 Write distinct `UNKNOWN` copy whose primary action opens a prefilled WhatsApp message to a human _(P0) — _Requirements: 1.4, 3.2_ **(verified: two distinct refusals — `fitError` renders "We could not check that" with the error text, everything else renders "No confirmed fit yet" — and the WhatsApp route out is present on both.)**
   - [ ] 4.4 Add the waitlist phone capture to `RefusalScreen.tsx` using `validateNGPhone`, with an inline error and no silent discard _(P0) — _Requirements: 3.3, 3.4_
   - [ ] 4.5 Delete the legacy `comingsoon` step from `src/components/FitFinder.tsx:15,351-393` once `RefusalScreen.tsx` covers both outcomes _(P0) — _Requirements: 3.8_
   - [ ] 4.6 Show a "we've noted this" confirmation only when the demand write actually succeeded (see 5.4) _(P1) — _Requirements: 4.5_

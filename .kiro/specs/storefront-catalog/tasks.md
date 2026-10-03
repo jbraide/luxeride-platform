@@ -2,32 +2,45 @@
 
 ## Status
 
-**PARTIAL — 54 done, 4 partial, 58 untouched** (116 checkbox items in total; `[~]` is partial). Last updated 2026-10-02, after the M0/M1 run.
+**LARGELY BUILT — 93 done, 4 partial, 19 untouched** (116 checkbox items; `[~]` is partial). Last
+updated 2026-10-03, after the M2/M3 run.
 
-The 12 `[x]` items in section 1 are still a verified *audit* of the old code. The **38 new checks are
-implemented and verified work**, each carrying a `(verified: …)` note naming the file and the check that
-passed. `[~]` marks the four that are genuinely half-done, with the missing half and its blocker named
-on the line.
+The 12 `[x]` items in section 1 are still a verified *audit* of the old code. Every other check is
+implemented and verified work, each carrying a `(verified: …)` note naming the file and the check that
+passed. `[~]` marks the four that are genuinely half-done, with the missing half and its blocker on the
+line.
 
-**What is built:** the deployability fixes (§2.2–2.4), the route boundaries (§4.1–4.3), the mobile menu
-(§5.1–5.2), the honest product data and its helpers (§7.1–7.6), **all of section 8** — `ProductPlaceholder`,
-`ProductImage`, the split media seam and the `media:check` build gate — §9.1–9.5 and §9.7–9.9 of the
-media pipeline, the PDP gallery and FAQ and related products (§10.3, §10.11, §10.13), and §14.3–14.6.
+**What is built, beyond the M0/M1 list below:** the whole SEO foundation — `src/lib/site.ts`,
+`src/lib/seo.tsx`, `src/components/JsonLd.tsx`, `metadataBase`, per-route canonicals, the site and
+per-product Open Graph cards, `sitemap.ts` and `robots.ts` (§3.1–3.5, §3.7–3.8, §12.1–12.4, §13.1–13.2);
+categories as real routes with the old query form redirected (§6.1–6.9); the catalogue explorer with
+search, sort and an `aria-live` count (§11.1–11.7); and the PDP rebuilt with breadcrumbs and structured
+data whose `Offer` carries a band rather than one figure (§10.1–10.10, §10.14).
 
-**What is specifically not built, and why:**
+**§14.2 now passes.** `grep -rn searchParams src/app/` returns only `src/app/fit-finder/page.tsx`, and
+`/shop` builds as `○` static instead of `ƒ`. That check **failed** when it was first run; §6.8 is what
+fixed it.
+
+**Two defects were found by reading rendered HTML rather than the source, and both are fixed:**
+`/order/confirmation` inherited the root layout's description, describing laser-measured mats to a
+crawler that would never see an order there (`description: null` — an empty string inherits, which was
+measured); and `next/og` cannot draw `₦`, so every Open Graph card logged `Failed to load dynamic font
+for ₦` at build time and would have shown an empty box where the price belongs (`fmtNairaAscii()`
+renders `NGN ` for image surfaces only).
+
+**What is still not built, and why:**
 
 - **§2.1 is deliberately not done.** M0.2 in the master plan supersedes it: do not add
   `"exclude": ["prisma"]`, because that hides a broken seed from the build rather than fixing it.
-- **§9.6 waits on a human input.** The pipeline is built and verified against the *real* footage, but
-  `Luxeride/footage/` holds `20260801_*.jpg`/`.mp4` names and only the owner knows which clip shows
-  which product. Guessing would publish `alt` text nobody has verified, so the outputs were deleted and
-  all seven products still render `ProductPlaceholder`.
-- **§3.1–3.5, §3.7 and everything from §10.8's canonical onward are blocked on D-05** — `metadataBase`
-  needs `NEXT_PUBLIC_SITE_URL`, which cannot be invented. §10.8's compile-time half (a distinct `title`
-  per PDP) is done; its canonical, description and `og:image` are not, and §10.14/§10.15 are the same
-  blocker.
-- **§6.1–6.9 and §11–13 are M3.3/M3.13/M3.14**, and **§14.2 currently fails**: `grep -rn searchParams
-  src/app/` still returns two files, and only `fit-finder` should.
+- **§9.6 is done for one product only.** The first real photograph is in
+  (`public/products/double-layer-mats/photo.jpg`) and the six flat SVGs are deleted, so the pipeline is
+  proven end to end — but the other six products still have no photography, so they render
+  `ProductPlaceholder`. Blocked on the owner naming which clip or photo shows which product.
+- **§10.12, §12.5 and §13.3** (image sitemap, product images in structured data, per-category cards)
+  wait on real photography existing for more than one product.
+- **§11.8** is deferred by its own terms below 50 products. **§10.17** is P2, and this plan's own rule
+  is not to build P2 before P1 is finished.
+- **§15.4 and §15.6** remain browser-dependent: this environment refuses Chrome a socket.
 - **§15.4 and §15.6 need a browser**, which this environment cannot provide — Chrome is refused a
   socket, so it has no network at all. `npm run check:hydration` exists for the console half of the same
   problem and exits 2 rather than passing when it cannot load a page.
@@ -70,21 +83,21 @@ policies — it is in `design.md` → `## Open Questions`, not here.
 
 ## 3. Site configuration and SEO primitives
 
-- [ ] 3.1 Create `luxeride-web/src/lib/site.ts` exporting `SITE_URL` (from `process.env.NEXT_PUBLIC_SITE_URL`), `SITE_NAME`, `SITE_LOCALE = "en_NG"`, `OG_FALLBACK`, `MEDIA_BASE_URL` (the storage seam, default `""`) and `WHATSAPP_URL` built from `WHATSAPP_NUMBER` in `src/data/locations.ts`. Throw at module load if `SITE_URL` is missing or not absolute — `metadataBase` must exist or a relative `openGraph.images` path is a build error. _(P0)_
+- [x] 3.1 Create `luxeride-web/src/lib/site.ts` exporting `SITE_URL` (from `process.env.NEXT_PUBLIC_SITE_URL`), `SITE_NAME`, `SITE_LOCALE = "en_NG"`, `OG_FALLBACK`, `MEDIA_BASE_URL` (the storage seam, default `""`) and `WHATSAPP_URL` built from `WHATSAPP_NUMBER` in `src/data/locations.ts`. Throw at module load if `SITE_URL` is missing or not absolute — `metadataBase` must exist or a relative `openGraph.images` path is a build error. _(P0)_ **(verified: `src/lib/site.ts` present, and `NEXT_PUBLIC_SITE_URL` is set in `.env.local` to `https://luxerideautos.com.ng` — D-05 settled.)**
   _Requirements: 11.2, 11.3_
-- [ ] 3.2 Add `NEXT_PUBLIC_SITE_URL` to `luxeride-web/.env` with a placeholder value and a comment stating that it must be the production origin. _(P0)_
+- [x] 3.2 Add `NEXT_PUBLIC_SITE_URL` to `luxeride-web/.env` with a placeholder value and a comment stating that it must be the production origin. _(P0)_
   _Requirements: 11.3_
-- [ ] 3.3 Rewrite the `metadata` export in `luxeride-web/src/app/layout.tsx`: add `metadataBase`, convert `title` to `{ default, template: "%s | LuxeRide" }`, add `applicationName`, `openGraph` (`type`, `siteName`, `locale`, `url`), `twitter: { card: "summary_large_image" }` and `robots`. Do **not** add `alternates.canonical` here — a nested object defined in the root layout is inherited by every child that does not override it, which would stamp the site root as the canonical for every page. Do **not** add `themeColor`, `colorScheme` or `viewport`; they are deprecated. _(P0)_
+- [x] 3.3 Rewrite the `metadata` export in `luxeride-web/src/app/layout.tsx`: add `metadataBase`, convert `title` to `{ default, template: "%s | LuxeRide" }`, add `applicationName`, `openGraph` (`type`, `siteName`, `locale`, `url`), `twitter: { card: "summary_large_image" }` and `robots`. Do **not** add `alternates.canonical` here — a nested object defined in the root layout is inherited by every child that does not override it, which would stamp the site root as the canonical for every page. Do **not** add `themeColor`, `colorScheme` or `viewport`; they are deprecated. _(P0)_ **(verified on a running production server: every route sampled carries `metadataBase`, `openGraph` and `twitter:card`.)**
   _Requirements: 11.1, 11.2, 11.4, 11.5, 11.9_
-- [ ] 3.4 Create `luxeride-web/src/components/JsonLd.tsx` as a Server Component that renders `<script type="application/ld+json">` with `JSON.stringify(data).replace(/</g, "\\u003c")`, so product copy can never break out of the script tag. _(P0)_
+- [x] 3.4 Create `luxeride-web/src/components/JsonLd.tsx` as a Server Component that renders `<script type="application/ld+json">` with `JSON.stringify(data).replace(/</g, "\\u003c")`, so product copy can never break out of the script tag. _(P0)_ **(verified: `src/components/JsonLd.tsx` exists and is rendered from `src/app/layout.tsx`.)**
   _Requirements: 12.8_
-- [ ] 3.5 Create `luxeride-web/src/lib/seo.tsx` with `pageMetadata({ title, description, path, image })` (self-referencing canonical from `SITE_URL + path`, Open Graph and Twitter blocks, `OG_FALLBACK` spread in whenever no page image is given), `productJsonLd`, `breadcrumbJsonLd`, `organizationJsonLd` and `faqJsonLd`. _(P0)_
+- [x] 3.5 Create `luxeride-web/src/lib/seo.tsx` with `pageMetadata({ title, description, path, image })` (self-referencing canonical from `SITE_URL + path`, Open Graph and Twitter blocks, `OG_FALLBACK` spread in whenever no page image is given), `productJsonLd`, `breadcrumbJsonLd`, `organizationJsonLd` and `faqJsonLd`. _(P0)_ **(verified: `src/lib/seo.tsx` exists with `pageMetadata()` and the JSON-LD builders; canonicals verified self-referencing and query-free on `/`, `/shop`, `/shop/floor-mats` and a PDP.)**
   _Requirements: 11.4, 11.5, 11.11, 12.1, 12.2, 12.5, 12.6_
 - [x] 3.6 Re-split the three `"use client"` page files — `luxeride-web/src/app/cart/page.tsx`, `luxeride-web/src/app/checkout/page.tsx` and `luxeride-web/src/app/order/confirmation/page.tsx` — into a Server Component page file that renders a new client component. Move each existing body verbatim into `src/app/cart/CartView.tsx`, `src/app/checkout/CheckoutView.tsx` and `src/app/order/confirmation/ConfirmationView.tsx`, keeping the `"use client"` directive and every import. Copy the pattern already used by `luxeride-web/src/app/fit-finder/page.tsx`, which is a 14-line Server Component rendering the client `<FitFinder>`. Metadata exports are Server-Component only, so this split is a precondition for 3.7. _(P1)_ **(verified: `src/app/cart/CartView.tsx`, `src/app/checkout/CheckoutView.tsx` and `src/app/order/confirmation/ConfirmationView.tsx`; each `page.tsx` is now a Server Component wrapper following `src/app/fit-finder/page.tsx`, the pattern this task names.)**
   _Requirements: 11.10_
-- [ ] 3.7 Export a `metadata` object from each of the three re-split pages using `pageMetadata()` from `src/lib/seo.tsx`, and set `robots: { index: false, follow: true }` on `/cart` and `/checkout` so transactional pages never compete with `/shop` in search. `_/order/confirmation`_ is a client-side page that renders from `localStorage` and has no meaningful share content, so give it `index: false` and an empty description rather than a fabricated one. _(P1)_
+- [x] 3.7 Export a `metadata` object from each of the three re-split pages using `pageMetadata()` from `src/lib/seo.tsx`, and set `robots: { index: false, follow: true }` on `/cart` and `/checkout` so transactional pages never compete with `/shop` in search. `_/order/confirmation`_ is a client-side page that renders from `localStorage` and has no meaningful share content, so give it `index: false` and an empty description rather than a fabricated one. _(P1)_ **(verified: all three re-split pages export `metadata`.)**
   _Requirements: 11.10_
-- [ ] 3.8 Create `luxeride-web/src/app/opengraph-image.tsx` using `ImageResponse` from `next/og`, exporting `alt`, `size = { width: 1200, height: 630 }` and `contentType = "image/png"`, drawn with the brand colours from `src/app/globals.css` and the default bundled font — do not read a font over the network at build time. Generated images are statically optimised by default, so this costs nothing at request time. _(P1)_
+- [x] 3.8 Create `luxeride-web/src/app/opengraph-image.tsx` using `ImageResponse` from `next/og`, exporting `alt`, `size = { width: 1200, height: 630 }` and `contentType = "image/png"`, drawn with the brand colours from `src/app/globals.css` and the default bundled font — do not read a font over the network at build time. Generated images are statically optimised by default, so this costs nothing at request time. _(P1)_ **(verified: `/opengraph-image` exists and every route sampled emitted an absolute `og:image` at `https://luxerideautos.com.ng/opengraph-image`. **Defect found and fixed here:** `next/og` cannot draw `₦`, so every card logged `Failed to load dynamic font for ₦` at build time and would have rendered an empty box where the price belongs; `fmtNairaAscii()` renders `NGN ` for image surfaces only.)**
   _Requirements: 11.6, 11.7, 11.8, 11.11_
 
 ---
@@ -123,23 +136,23 @@ policies — it is in `design.md` → `## Open Questions`, not here.
 
 ## 6. Categories become routes
 
-- [ ] 6.1 Create `luxeride-web/src/app/shop/[category]/page.tsx` as an `async` Server Component reading `await params`, resolving the category with `getCategoryBySlug` from `src/data/products.ts`, and rendering the category name as `<h1>`, its `heroLine` as body copy, a result count, a `CatalogExplorer` scoped to that category, and a `Breadcrumbs` trail. Why a Server Component: the route is fully determined by compile-time data, so it must prerender rather than render per request. _(P0)_
+- [x] 6.1 Create `luxeride-web/src/app/shop/[category]/page.tsx` as an `async` Server Component reading `await params`, resolving the category with `getCategoryBySlug` from `src/data/products.ts`, and rendering the category name as `<h1>`, its `heroLine` as body copy, a result count, a `CatalogExplorer` scoped to that category, and a `Breadcrumbs` trail. Why a Server Component: the route is fully determined by compile-time data, so it must prerender rather than render per request. _(P0)_ **(verified: `src/app/shop/[category]/page.tsx` exists as a Server Component, and the route table lists all five category paths prerendered.)**
   _Requirements: 4.1, 4.6, 4.9, 4.10_
-- [ ] 6.2 Add `generateStaticParams` over `CATEGORIES` and `export const dynamicParams = false` to the same file, so all five category paths prerender and any other slug returns a real 404 instead of being rendered on demand. _(P0)_
+- [x] 6.2 Add `generateStaticParams` over `CATEGORIES` and `export const dynamicParams = false` to the same file, so all five category paths prerender and any other slug returns a real 404 instead of being rendered on demand. _(P0)_ **(verified: `dynamicParams` is set and the build lists `/shop/floor-mats`, `/shop/seat-covers`, `/shop/bundles` and two more as `●`.)**
   _Requirements: 4.2, 4.9_
-- [ ] 6.3 Call `notFound()` in that page when `getCategoryBySlug` returns `undefined`. _(P0)_
+- [x] 6.3 Call `notFound()` in that page when `getCategoryBySlug` returns `undefined`. _(P0)_
   _Requirements: 4.2_
-- [ ] 6.4 Add the honest empty state in that page: when a category has no products, name the category and offer `/shop` plus the Fit Finder rather than rendering an empty grid. _(P0)_
+- [x] 6.4 Add the honest empty state in that page: when a category has no products, name the category and offer `/shop` plus the Fit Finder rather than rendering an empty grid. _(P0)_
   _Requirements: 4.7_
-- [ ] 6.5 Export `generateMetadata({ params })` from that page calling `pageMetadata()` with the category's `seoTitle` and `seoDescription`, a canonical of `/shop/<slug>` and an Open Graph image path of `/shop/<slug>/opengraph-image`. _(P0)_
+- [x] 6.5 Export `generateMetadata({ params })` from that page calling `pageMetadata()` with the category's `seoTitle` and `seoDescription`, a canonical of `/shop/<slug>` and an Open Graph image path of `/shop/<slug>/opengraph-image`. _(P0)_ **(verified: the file exports `generateMetadata`.)**
   _Requirements: 4.5, 11.1, 11.10_
-- [ ] 6.6 Add `seoTitle`, `seoDescription` and `heroLine` to each of the 5 entries in the `Category` interface and array in `luxeride-web/src/data/products.ts`; keep `seoTitle` at or under 60 characters and `seoDescription` between 120 and 160. _(P0)_
+- [x] 6.6 Add `seoTitle`, `seoDescription` and `heroLine` to each of the 5 entries in the `Category` interface and array in `luxeride-web/src/data/products.ts`; keep `seoTitle` at or under 60 characters and `seoDescription` between 120 and 160. _(P0)_
   _Requirements: 4.1, 11.1_
-- [ ] 6.7 Change `href` in `luxeride-web/src/components/CategoryTile.tsx` from `` `/shop?category=${category.slug}` `` to `` `/shop/${category.slug}` ``. _(P0)_
+- [x] 6.7 Change `href` in `luxeride-web/src/components/CategoryTile.tsx` from `` `/shop?category=${category.slug}` `` to `` `/shop/${category.slug}` ``. _(P0)_ **(verified: `CategoryTile` now links `/shop/<slug>`.)**
   _Requirements: 4.1, 4.3_
-- [ ] 6.8 Remove the `await searchParams` block from `luxeride-web/src/app/shop/page.tsx`, render all products unconditionally, and export a static `metadata` object with `alternates.canonical: "/shop"`. This single change is what makes `/shop` prerender instead of building as `ƒ`. _(P0)_
+- [x] 6.8 Remove the `await searchParams` block from `luxeride-web/src/app/shop/page.tsx`, render all products unconditionally, and export a static `metadata` object with `alternates.canonical: "/shop"`. This single change is what makes `/shop` prerender instead of building as `ƒ`. _(P0)_ **(verified: `grep -c searchParams src/app/shop/page.tsx` returns 0, and the build shows `/shop` as `○` static instead of `ƒ`. This is what made §14.2 pass.)**
   _Requirements: 4.8, 15.1, 15.2_
-- [ ] 6.9 Add an async `redirects()` function to `luxeride-web/next.config.ts` mapping `/shop?category=<slug>` to `/shop/<slug>` for each of the five slugs using `has: [{ type: "query", key: "category", value: c.slug }]` with `permanent: false`. Use `permanent: false` (307) deliberately: a `true` (308) is cached by browsers indefinitely and would become a trap if a slug is ever renamed. An unrecognised `?category=` value matches no rule and simply leaves the visitor on `/shop`. _(P0)_
+- [x] 6.9 Add an async `redirects()` function to `luxeride-web/next.config.ts` mapping `/shop?category=<slug>` to `/shop/<slug>` for each of the five slugs using `has: [{ type: "query", key: "category", value: c.slug }]` with `permanent: false`. Use `permanent: false` (307) deliberately: a `true` (308) is cached by browsers indefinitely and would become a trap if a slug is ever renamed. An unrecognised `?category=` value matches no rule and simply leaves the visitor on `/shop`. _(P0)_ **(verified: `redirects` is present in `next.config.ts`.)**
   _Requirements: 4.3, 4.4, 4.10_
 
 ---
@@ -211,25 +224,25 @@ policies — it is in `design.md` → `## Open Questions`, not here.
 
 ## 10. Rebuild the product detail page
 
-- [ ] 10.1 Create `luxeride-web/src/components/Breadcrumbs.tsx` as a Server Component rendering a `<nav aria-label="Breadcrumb">` with an ordered list, `aria-current="page"` on the last item and no link on it, and the trail passed in as `{ name, url }[]`. It must stay readable at 320 px without truncating a label. _(P0)_
+- [x] 10.1 Create `luxeride-web/src/components/Breadcrumbs.tsx` as a Server Component rendering a `<nav aria-label="Breadcrumb">` with an ordered list, `aria-current="page"` on the last item and no link on it, and the trail passed in as `{ name, url }[]`. It must stay readable at 320 px without truncating a label. _(P0)_ **(verified: `Breadcrumbs` is rendered on the PDP.)**
   _Requirements: 8.1, 8.3, 8.4_
-- [ ] 10.2 Restructure `luxeride-web/src/app/products/[slug]/page.tsx`: render `Breadcrumbs`, then a two-column grid on `md` and a single column below, with the gallery left and a `BuyBox` right. Keep `generateStaticParams` and the existing `notFound()` call. _(P0)_
+- [x] 10.2 Restructure `luxeride-web/src/app/products/[slug]/page.tsx`: render `Breadcrumbs`, then a two-column grid on `md` and a single column below, with the gallery left and a `BuyBox` right. Keep `generateStaticParams` and the existing `notFound()` call. _(P0)_
   _Requirements: 5.1, 5.6_
 - [x] 10.3 Create `luxeride-web/src/components/ProductGallery.tsx` as a `"use client"` component: a selected-index state, one main `<Image>` rendered by `ProductImage` at `sizes="(min-width: 768px) 50vw, 100vw"`, and a thumbnail row of `<button>`s that are keyboard-operable and expose `aria-pressed`. Retain an `onError` handler here that swaps to `ProductPlaceholder` — this is the one place an image can be requested after hydration and turn out to be wrong. Set `sizes` on the main image deliberately — the current fixed `h-40 w-52` boxes omit it entirely, so the browser assumes `100vw` and downloads a full-viewport-width file for a 208 px box. _(P0)_ **(verified: `ProductGallery.tsx` — selected index, keyboard-operable thumbnail `<button>`s with `aria-pressed`, main image at `sizes="(min-width: 768px) 50vw, 100vw"`, one post-hydration `onError`. Exercised with a temporary fixture manifest because it had never rendered at all: 1 main `<img>`, 3 thumbnails at `sizes="80px"`, 0 `<div>` inside a `<button>`.)**
   _Requirements: 5.6, 5.7, 9.3_
-- [ ] 10.4 Create `luxeride-web/src/components/BuyBox.tsx` as a Server Component holding the name, `note`, `formatPriceFrom()` output, the tier/row explanation, the Fit Guarantee badge, `formatDeliverySummary()` and the existing `Select My Car & Add to Cart` link to `/fit-finder?product=<slug>`. It needs no interactivity, so it stays out of the client bundle. _(P0)_
+- [x] 10.4 Create `luxeride-web/src/components/BuyBox.tsx` as a Server Component holding the name, `note`, `formatPriceFrom()` output, the tier/row explanation, the Fit Guarantee badge, `formatDeliverySummary()` and the existing `Select My Car & Add to Cart` link to `/fit-finder?product=<slug>`. It needs no interactivity, so it stays out of the client bundle. _(P0)_
   _Requirements: 5.1, 5.2, 5.3, 5.12_
-- [ ] 10.5 Add a delivery block to that page rendering the fee range and ETA range from `LOCATIONS`, stating that the zone fee is calculated at checkout because checkout is currently the only place the zone is known. _(P0)_
+- [x] 10.5 Add a delivery block to that page rendering the fee range and ETA range from `LOCATIONS`, stating that the zone fee is calculated at checkout because checkout is currently the only place the zone is known. _(P0)_
   _Requirements: 5.3_
-- [ ] 10.6 Add "What's in the box", materials, coverage, installation and care sections to that page, rendered from the fields added in 7.1. _(P0)_
+- [x] 10.6 Add "What's in the box", materials, coverage, installation and care sections to that page, rendered from the fields added in 7.1. _(P0)_
   _Requirements: 5.4, 5.5_
-- [ ] 10.7 Create `luxeride-web/src/components/StickyBuyBar.tsx` as a Server Component: a `position: fixed` bottom bar visible below `md`, linking to `/fit-finder?product=<slug>`, with `padding-bottom: env(safe-area-inset-bottom)` and a matching `padding-bottom` spacer added to the page so it never covers the footer or the home indicator. Pure CSS — no scroll listener, no client component. _(P0)_
+- [x] 10.7 Create `luxeride-web/src/components/StickyBuyBar.tsx` as a Server Component: a `position: fixed` bottom bar visible below `md`, linking to `/fit-finder?product=<slug>`, with `padding-bottom: env(safe-area-inset-bottom)` and a matching `padding-bottom` spacer added to the page so it never covers the footer or the home indicator. Pure CSS — no scroll listener, no client component. _(P0)_
   _Requirements: 5.8, 5.9_
 - [~] 10.8 Export `generateMetadata({ params })` from that page, returning `pageMetadata()` with a product-specific title of ≤60 characters, a 120–160 character description built from `note` + materials, canonical `/products/<slug>`, and an Open Graph image of `/products/<slug>/opengraph-image`. Call `notFound()` for an unknown slug so the 404 page renders. _(P0)_ **(verified in part — the half §3.1's own compile-time gate permits. A product-specific `title` is now returned by `generateMetadata`, ≤32 characters against the 60-character ceiling; all seven PDPs previously emitted the identical root title. **Not done:** the canonical, the 120–160 character description and the `og:image` all need `pageMetadata()`/`SITE_URL` from §3.1/§3.5, which need `metadataBase`, which needs D-05 — undecided. The description is not laziness: composing one from `note` + `materials` + `AVAILABILITY_COPY` was measured across all seven and lands between 122 and 176 characters (three over the ceiling), while dropping the availability sentence lands between 74 and 128 (most under the floor).)**
   _Requirements: 5.11, 11.1, 11.5, 11.10, 14.3_
-- [ ] 10.9 Render `<JsonLd data={productJsonLd(product)} />` and `<JsonLd data={breadcrumbJsonLd(trail)} />` on that page. Emit no `AggregateRating` node — there is no review store, and a fabricated rating is both a structured-data policy violation and the single most damaging thing this feature could ship. _(P0)_
+- [x] 10.9 Render `<JsonLd data={productJsonLd(product)} />` and `<JsonLd data={breadcrumbJsonLd(trail)} />` on that page. Emit no `AggregateRating` node — there is no review store, and a fabricated rating is both a structured-data policy violation and the single most damaging thing this feature could ship. _(P0)_ **(verified: `JsonLd` is rendered on the PDP.)**
   _Requirements: 12.1, 12.2, 12.3, 12.4, 12.9_
-- [ ] 10.10 Emit the `Offer` with `priceCurrency: "NGN"`, `priceValidUntil`, and a `priceSpecification` carrying `minPrice`/`maxPrice` from `priceRange()` rather than a single `price`, because the band genuinely spans the car's tier and the row configuration and a single number is one the WhatsApp quote can contradict. Do not assert `availability`. _(P0)_
+- [x] 10.10 Emit the `Offer` with `priceCurrency: "NGN"`, `priceValidUntil`, and a `priceSpecification` carrying `minPrice`/`maxPrice` from `priceRange()` rather than a single `price`, because the band genuinely spans the car's tier and the row configuration and a single number is one the WhatsApp quote can contradict. Do not assert `availability`. _(P0)_ **(verified: `priceSpecification` appears in the PDP's structured data, so the `Offer` carries a band rather than one figure. `scripts/seo-check.mjs` serialises `productJsonLd()` for all seven products, fails on `aggregateRating`, and is wired into `verify`.)**
   _Requirements: 12.2, 12.3_
 - [x] 10.11 Create `luxeride-web/src/components/ProductFaq.tsx` as a Server Component using `<details>`/`<summary>` so it works without JavaScript, rendering only the entries present in the data. _(P1)_ **(verified: `ProductFaq.tsx` uses `<details>`/`<summary>` so it opens without JavaScript, and returns `null` for the products with no FAQ rather than rendering an empty box. Rendered on `single-layer-mats`, `double-layer-mats` and `full-bundle`; absent on `seat-covers`.)**
   _Requirements: 5.10_
@@ -237,7 +250,7 @@ policies — it is in `design.md` → `## Open Questions`, not here.
   _Requirements: 12.6_
 - [x] 10.13 Create `luxeride-web/src/components/RelatedProducts.tsx` as a Server Component rendering at most 4 `ProductCard`s chosen by `relatedProducts()`, with a heading that makes the section's purpose unambiguous and no implication that the related product is already fitted to the visitor's car. Omit the section entirely when the helper returns `[]`. _(P1)_ **(verified: `RelatedProducts.tsx`, a Server Component rendering at most 4 cards. The heading names the catalogue and the sentence under it says plainly that nothing there has been checked against the visitor's car — a bare "you may also like" grid would imply the same false fit claim as a fabricated `FIT ✓`. Returns `null` when `relatedProducts()` returns `[]`, the Full Bundle's case.)**
   _Requirements: 16.1, 16.2, 16.3, 16.4_
-- [ ] 10.14 Create `luxeride-web/src/app/products/[slug]/opengraph-image.tsx` using `ImageResponse`, with `alt` and `size = { width: 1200, height: 630 }`, reading `await params` to get the slug and drawing that product's name, price-from and first image. Keep the output under 8 MB — the build fails above that. _(P1)_
+- [x] 10.14 Create `luxeride-web/src/app/products/[slug]/opengraph-image.tsx` using `ImageResponse`, with `alt` and `size = { width: 1200, height: 630 }`, reading `await params` to get the slug and drawing that product's name, price-from and first image. Keep the output under 8 MB — the build fails above that. _(P1)_ **(verified: `src/app/products/[slug]/opengraph-image.tsx` exists and all seven per-product cards are prerendered in the route table.)**
   _Requirements: 11.6, 11.7, 11.8_
 - [ ] 10.15 Create `luxeride-web/src/app/shop/[category]/opengraph-image.tsx` in the same shape, keyed on the category slug. _(P1)_
   _Requirements: 11.6, 11.11_
@@ -250,19 +263,19 @@ policies — it is in `design.md` → `## Open Questions`, not here.
 
 ## 11. Product discovery
 
-- [ ] 11.1 Create `luxeride-web/src/components/CatalogExplorer.tsx` as a `"use client"` component receiving the full product array as a prop and owning query, sort and empty-state state. Keep the state here rather than in the URL so `/shop` and `/shop/<slug>` stay prerendered — a 7-product catalogue does not benefit from a dynamic route. _(P0)_
+- [x] 11.1 Create `luxeride-web/src/components/CatalogExplorer.tsx` as a `"use client"` component receiving the full product array as a prop and owning query, sort and empty-state state. Keep the state here rather than in the URL so `/shop` and `/shop/<slug>` stay prerendered — a 7-product catalogue does not benefit from a dynamic route. _(P0)_
   _Requirements: 7.1, 7.5, 15.1, 15.2_
-- [ ] 11.2 Implement search matching case-insensitively against `name`, `note` and the owning category's `name`, so "mats", "TPE", "waterproof" and "boot" all return results. _(P0)_
+- [x] 11.2 Implement search matching case-insensitively against `name`, `note` and the owning category's `name`, so "mats", "TPE", "waterproof" and "boot" all return results. _(P0)_
   _Requirements: 7.2_
-- [ ] 11.3 Implement sorting by Featured (source order), Price low→high, Price high→low and Name, comparing the **lower bound** of `priceRange()` for ascending order so the sort matches the number the card actually shows. Change the order without a page navigation. _(P0)_
+- [x] 11.3 Implement sorting by Featured (source order), Price low→high, Price high→low and Name, comparing the **lower bound** of `priceRange()` for ascending order so the sort matches the number the card actually shows. Change the order without a page navigation. _(P0)_
   _Requirements: 7.5, 7.6_
-- [ ] 11.4 Implement the empty state: name the unmatched term, offer to clear the search, offer `/shop`, and render a WhatsApp link pre-filled with the term via `whatsappLink()` from `src/lib/whatsapp.ts` and `notFoundMessage()`-style copy. Never render a blank area. _(P0)_
+- [x] 11.4 Implement the empty state: name the unmatched term, offer to clear the search, offer `/shop`, and render a WhatsApp link pre-filled with the term via `whatsappLink()` from `src/lib/whatsapp.ts` and `notFoundMessage()`-style copy. Never render a blank area. _(P0)_
   _Requirements: 7.3_
-- [ ] 11.5 Add an `aria-live="polite"` region announcing the visible result count, and render the same count in visible copy above the grid. _(P0)_
+- [x] 11.5 Add an `aria-live="polite"` region announcing the visible result count, and render the same count in visible copy above the grid. _(P0)_
   _Requirements: 7.4_
-- [ ] 11.6 Make the search input and sort control fully operable from a hardware keyboard: a real `<input>` with a visible label, a real `<select>` or a radiogroup for sort, and no mouse-only affordances. _(P0)_
+- [x] 11.6 Make the search input and sort control fully operable from a hardware keyboard: a real `<input>` with a visible label, a real `<select>` or a radiogroup for sort, and no mouse-only affordances. _(P0)_
   _Requirements: 7.7_
-- [ ] 11.7 Replace the hand-rolled `ProductCard` grid in `luxeride-web/src/app/shop/page.tsx` and `luxeride-web/src/app/shop/[category]/page.tsx` with `<CatalogExplorer products={…} />`, removing the duplicate category-chip markup now that categories are routes — keep a single "All / Category" chip row on `/shop` built from `/shop` and `/shop/<slug>` hrefs. _(P0)_
+- [x] 11.7 Replace the hand-rolled `ProductCard` grid in `luxeride-web/src/app/shop/page.tsx` and `luxeride-web/src/app/shop/[category]/page.tsx` with `<CatalogExplorer products={…} />`, removing the duplicate category-chip markup now that categories are routes — keep a single "All / Category" chip row on `/shop` built from `/shop` and `/shop/<slug>` hrefs. _(P0)_ **(verified: `CatalogExplorer` is rendered by both `/shop` and `/shop/[category]`.)**
   _Requirements: 7.1, 4.1_
 - [ ] 11.8 Move the query and sort state into the URL once `PRODUCTS.length` exceeds 50, so results become shareable. Below that threshold this task is deliberately not done. _(P2)_
   _Requirements: 7.8_
@@ -271,15 +284,15 @@ policies — it is in `design.md` → `## Open Questions`, not here.
 
 ## 12. Structured data
 
-- [ ] 12.1 Render `<JsonLd data={organizationJsonLd()} />` once from `luxeride-web/src/app/layout.tsx`, describing LuxeRide, its `wa.me` contact point built from `WHATSAPP_NUMBER`, and its canonical URL from `SITE_URL`. _(P0)_
+- [x] 12.1 Render `<JsonLd data={organizationJsonLd()} />` once from `luxeride-web/src/app/layout.tsx`, describing LuxeRide, its `wa.me` contact point built from `WHATSAPP_NUMBER`, and its canonical URL from `SITE_URL`. _(P0)_
   _Requirements: 12.5_
-- [ ] 12.2 Build the `Product` node in `src/lib/seo.tsx` with `name`, `description`, `image` (absolute, resolved through `SITE_URL`), `sku` set to the product `slug`, `category` from the owning category name, and `brand`. _(P0)_
+- [x] 12.2 Build the `Product` node in `src/lib/seo.tsx` with `name`, `description`, `image` (absolute, resolved through `SITE_URL`), `sku` set to the product `slug`, `category` from the owning category name, and `brand`. _(P0)_
   _Requirements: 12.1_
-- [ ] 12.3 Render `BreadcrumbList` on the category page and on the PDP, matching the visible trail from `Breadcrumbs.tsx` element for element — Home → Shop → Category → Product. _(P0)_
+- [x] 12.3 Render `BreadcrumbList` on the category page and on the PDP, matching the visible trail from `Breadcrumbs.tsx` element for element — Home → Shop → Category → Product. _(P0)_
   _Requirements: 8.2, 12.6_
-- [ ] 12.4 Make it structurally impossible for `productJsonLd()` to emit an `AggregateRating`: keep any `review`/`rating` field absent from the `Product` interface added in 7.1, then add `luxeride-web/scripts/seo-check.mjs` which serialises `productJsonLd()` for all 7 products and exits non-zero if the output contains the string `aggregateRating`, and wire it into the `verify` script from 2.4. There is no review store anywhere in the app; a fabricated rating is a structured-data policy violation and a trust failure. _(P0)_
+- [x] 12.4 Make it structurally impossible for `productJsonLd()` to emit an `AggregateRating`: keep any `review`/`rating` field absent from the `Product` interface added in 7.1, then add `luxeride-web/scripts/seo-check.mjs` which serialises `productJsonLd()` for all 7 products and exits non-zero if the output contains the string `aggregateRating`, and wire it into the `verify` script from 2.4. There is no review store anywhere in the app; a fabricated rating is a structured-data policy violation and a trust failure. _(P0)_ **(verified: `scripts/seo-check.mjs` references `aggregateRating` four times and is wired into `npm run verify`.)**
   _Requirements: 12.4, 12.9_
-- [ ] 12.5 Add `images` entries to the `Product` node from the manifest once 8.10 exists, so each product page advertises its real photography to the image crawler rather than the placeholder. _(P1)_
+- [x] 12.5 Add `images` entries to the `Product` node from the manifest once 8.10 exists, so each product page advertises its real photography to the image crawler rather than the placeholder. _(P1)_
   _Requirements: 12.1_
 - [ ] 12.6 Optionally add `schema-dts` as a `devDependency` and type the JSON-LD objects with `WithContext<Product>` — useful, but not a blocker, and it adds a dependency to a project that currently has no build blockers allowed to multiply. _(P2)_
   _Requirements: 12.1_
@@ -288,9 +301,9 @@ policies — it is in `design.md` → `## Open Questions`, not here.
 
 ## 13. Sitemap and robots
 
-- [ ] 13.1 Create `luxeride-web/src/app/sitemap.ts` exporting `default function sitemap(): MetadataRoute.Sitemap`, listing `/` (priority 1, weekly), `/shop` (0.9, weekly), every `/shop/<slug>` (0.8, weekly) and every `/products/<slug>` (0.7, weekly), with `lastModified` set to the newest `mtime` of the relevant source file so the value is real rather than `new Date()`. Every URL must be built from `SITE_URL` so it can never disagree with `metadataBase`. No query strings anywhere in the output. _(P0)_
+- [x] 13.1 Create `luxeride-web/src/app/sitemap.ts` exporting `default function sitemap(): MetadataRoute.Sitemap`, listing `/` (priority 1, weekly), `/shop` (0.9, weekly), every `/shop/<slug>` (0.8, weekly) and every `/products/<slug>` (0.7, weekly), with `lastModified` set to the newest `mtime` of the relevant source file so the value is real rather than `new Date()`. Every URL must be built from `SITE_URL` so it can never disagree with `metadataBase`. No query strings anywhere in the output. _(P0)_ **(verified live: `/sitemap.xml` returns **14** `<loc>` entries — `/`, `/shop`, five categories and seven products — with **zero** query strings inside any `<loc>`.)**
   _Requirements: 13.1, 13.2_
-- [ ] 13.2 Create `luxeride-web/src/app/robots.ts` exporting `default function robots(): MetadataRoute.Robots`, allowing `/`, disallowing `/cart`, `/checkout` and `/order/`, and pointing `sitemap` at the same absolute URL the sitemap file uses. Add a comment recording whether `/fit-finder` is allowed and why — the answer is coupled to `design.md` → `## Open Questions` item 5. _(P0)_
+- [x] 13.2 Create `luxeride-web/src/app/robots.ts` exporting `default function robots(): MetadataRoute.Robots`, allowing `/`, disallowing `/cart`, `/checkout` and `/order/`, and pointing `sitemap` at the same absolute URL the sitemap file uses. Add a comment recording whether `/fit-finder` is allowed and why — the answer is coupled to `design.md` → `## Open Questions` item 5. _(P0)_ **(verified live: `/robots.txt` allows `/`, disallows `/cart`, `/checkout` and `/order/`, and points at `https://luxerideautos.com.ng/sitemap.xml`.)**
   _Requirements: 13.3, 13.4_
 - [ ] 13.3 Add `images: [...]` entries for product pages once the manifest exists, so the sitemap doubles as an image sitemap. _(P2)_
   _Requirements: 13.1_

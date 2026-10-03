@@ -25,6 +25,25 @@ on the line. `[~]` genuinely half-done, with the missing half and its blocker na
 - **M2.1, M2.3, M2.4, M2.5, M2.6, M2.7, M2.8** — the fitment engine, `POST /api/fit-check`, the demand
   log and the Fit Finder rewrite. **The fabricated `FIT ✓` is gone.**
 
+**M2 is NOT complete, and its exit gate fails on two assertions rather than one.** Both were found by
+running the thing rather than reading it:
+
+1. **`liveLayoutCount()` returns 0**, and the gate requires `>= 1`. The table ships empty; 2.11 is the
+   fix and it is D-03-gated.
+2. **"every refusal produces a demand-log line" fails.** `POST /api/fit-check` for a known-shaped car
+   returns `NOT_STOCKED` and writes **nothing**; the line appears only when the *client* separately
+   POSTs to `/api/demand`. `fitment-engine` §5.5 forbids exactly that arrangement — *"from
+   `/api/fit-check`, not from the client, so a closed tab or an ad blocker cannot lose the refusal"* —
+   and locked decision 2 is the reason: refusals are this product's only sourcing signal. Refusals
+   through the UI are captured; an API-only refusal is not, and a blocked or closed tab loses the data
+   silently. A few lines inside the handler fix it.
+
+**A third defect was found and fixed while checking, because it destroys data rather than degrading.**
+The demand log defaulted to `/tmp/luxeride-demand.ndjson`, and `findmnt /tmp` on this machine reports
+**tmpfs** — every refusal captured would have been destroyed by the next reboot. Moved to
+`~/.local/state/luxeride/demand.ndjson`, the same durable per-user directory the E5 backup log uses,
+still overridable with `LUXERIDE_DEMAND_LOG` for a hosted deploy where `$HOME` is not writable.
+
 **The M2 result is worth stating plainly because it looks like a regression and is not.** The fitment
 table ships **empty**, so the Fit Finder now refuses **every** car with "we have not measured a floor pan
 for the {make} {model} yet" and captures the request. That is the intended behaviour, not a blocker: the
@@ -48,7 +67,7 @@ Confirmed layouts — not code.** M2.2 is the only M2 item left, and it is D-03-
 | **The `luxeride` role's password** | E4's database half, and therefore E5's drill. The role **exists** now, but the password in `.env.local` does not match it, so `psql` returns `password authentication failed`. There is no superuser path from the agent's shell (`sudo` needs a password, peer auth as `postgres` fails, there is no `joseph` role). |
 | **A shell where Chrome can open a socket** | M1.12's last assertion. Re-tested this pass: still **6 of 6 routes never loaded**, every navigation landing on `chrome-error://chromewebdata/`. `npm run check:hydration` exists and exits 2 rather than passing when it cannot load a page. |
 | **D-03 — which cars are genuinely Confirmed** | M2.2, and with it the Fit Finder's first real "yes". |
-| **A private git remote** | M0.1's push. Three commits are local only. |
+| **A private git remote** | M0.1's push. **Every commit is local only** — the whole history, not three of them. There is still no off-machine copy and no `git revert` for anything built since. |
 | **D-02 — route handler vs Server Action** | M6. `fit-check` was built as a **Route Handler**, which the spec allows (`§3.7`). If you decide otherwise it is a contained change. |
 
 **E5's schedule is installed and proven.** A user crontab entry runs `scripts/db-backup.sh` nightly at
@@ -558,3 +577,22 @@ failure paths verified: no `.env.local`, placeholder URL, `--restore` with no fi
 backup directory each exit non-zero with a message that says what to do. **What is not done is the part
 that matters:** nothing is scheduled yet, and no dump has ever been restored. A backup that has never
 been restored is a hypothesis.
+
+### Module specs marked, 2026-10-03
+
+The tracker had been kept current through both runs, but the **module specs it cross-references by task
+number had not** — so following M1.3 into `storefront-catalog` §8.1 showed an unchecked box for shipped
+work. All four are now marked against the code rather than against commit messages:
+
+| Spec | Before | Now |
+|---|---|---|
+| `storefront-catalog` | 54 done, 4 partial, 58 untouched | **93 done, 4 partial, 19 untouched** |
+| `fitment-engine` | 7 done, 105 remaining | **34 done, 8 partial, 84 remaining** |
+| `fit-finder` | 18 done, 68 remaining | **26 done, 72 remaining** |
+| `commerce-backend`, `cart-checkout`, `payments-paystack` | marked in the M0/M1 pass | unchanged |
+
+Every added check carries a `(verified: …)` note naming the file or the command, and deviations are
+recorded on the line rather than smoothed over — including the ones that are defects
+(`fitment-engine` 5.5), the ones that are superseded (`fit-finder` 2.1–2.2, `storefront-catalog` 2.1),
+and the ones where the implementation is better than the spec asked for (`fitment-engine` 5.2's
+`liveLayoutsAtThisTime`).
