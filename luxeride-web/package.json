@@ -14,10 +14,15 @@
     "verify": "tsc --noEmit && eslint . && npm run media:check && npm run seo:check && next build",
     "check:hydration": "node scripts/hydration-check.mjs",
     "postinstall": "prisma generate",
-    "db:seed": "node prisma/seed.mts",
+    "db:seed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local prisma/seed.mts",
     "db:backup": "bash scripts/db-backup.sh",
     "db:check": "node scripts/db-check.mjs",
-    "fitment:report": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/fitment-report.mjs"
+    "fitment:report": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/fitment-report.mjs",
+    "db:migrate": "node --env-file=.env.local scripts/prisma.mjs migrate dev",
+    "db:deploy": "node --env-file=.env.local scripts/prisma.mjs migrate deploy",
+    "db:status": "node --env-file=.env.local scripts/prisma.mjs migrate status",
+    "db:studio": "node --env-file=.env.local scripts/prisma.mjs studio",
+    "db:validate": "node --env-file=.env.local scripts/prisma.mjs validate"
   },
   "prisma": {
     "seed": "node prisma/seed.mts"

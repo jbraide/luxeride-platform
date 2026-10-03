@@ -1,3 +1,35 @@
+// LuxeRide — commerce model.
+//
+// Reconciled per `commerce-backend/design.md` § Data Models. This is **stage 1**
+// of three staged migrations; the staging rule that makes it work is that nothing
+// here references a table that does not exist yet.
+//
+//   1. init_commerce_model   (this file)  — Category, Product, Location, Make,
+//                                           Vehicle, Order, OrderItem
+//   2. add_layout_refs                    — nullable OrderItem.layoutId /
+//                                           layoutVariantId + the updatedAt columns
+//   3. add_fitment_tables                 — owned by fitment-engine, then the FK
+//
+// WHY `Car` AND `CarModelFlag` ARE GONE, NOT MIGRATED
+//
+// There was no `prisma/migrations/` directory and the schema had never been
+// applied, so neither table was ever created and both hold zero rows. Nothing is
+// lost because nothing existed. `Car` is superseded by `Make` + `Vehicle`: once a
+// floor pan is the unit of sale, a car name is not a sellable row.
+//
+// WHY `Product` HAS TWO PRICES AND NO `tier` (defect D2)
+//
+// The old schema stored one `basePrice` and a `tier` string, and the seed wrote
+// `basePrice: p.regular` for all seven products — so the premium price was
+// discarded on every seed. Eight of the 33 brands are premium, and a Lexus
+// GX 470 double-layer order should be ₦82,000, not ₦68,000. `basePrice` becomes
+// `regular` + `premium`, and `tier` is dropped outright: tier is a property of
+// the car's brand (`BRANDS[brand].tier`), never of the product, and no code path
+// ever read the column.
+//
+// `Make.defaultTier` keeps that brand-level knowledge, demoted to a seed default.
+// See the header of `prisma/seed.mts`.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,93 +39,193 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Catalogue ────────────────────────────────────────────────────────────────
+
 model Category {
-  id        String     @id @default(uuid())
+  id        String    @id @default(uuid())
+  slug      String    @unique
   name      String
-  slug      String     @unique
+  /// Present in `src/data/products.ts` but had no column and was never seeded.
+  blurb     String?
+  createdAt DateTime  @default(now())
   products  Product[]
-  createdAt DateTime   @default(now())
 }
 
 model Product {
-  id                 String       @id @default(uuid())
-  categoryId         String
-  name               String
-  slug               String       @unique
-  note               String?
-  tier               String       // "regular" | "premium"
-  rowApplicable      Boolean      @default(false)
-  basePrice          Int
-  threeRowSurcharge  Int?         // null when not row-applicable
-  images             String[]     // paths under /public
-  category           Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  orderItems         OrderItem[]
-  createdAt          DateTime     @default(now())
+  id                String       @id @default(uuid())
+  categoryId        String
+  slug              String       @unique
+  name              String
+  note              String?
+  /// The two prices the app actually charges from: `regular` for a regular-tier
+  /// brand, `premium` for a premium-tier one. See `Make.defaultTier`.
+  regular           Int
+  premium           Int
+  rowApplicable     Boolean      @default(false)
+  /// Null when the product is not row-applicable.
+  threeRowSurcharge Int?
+  images            String[]
+  /// The honesty sentence. No row here claims stock for a specific car.
+  availability      String?
+
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
 
   @@index([categoryId])
 }
 
-model Car {
-  id         String    @id @default(uuid())
-  brand      String
-  model      String
-  tier       String    // "regular" | "premium"
-  available  Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  orderItems OrderItem[]
-  // Opposite side of CarModelFlag.car. Without it `prisma generate` fails with
-  // P1012 ("missing an opposite relation field on the model Car"), which would
-  // break the `postinstall` script and every fresh `npm install`.
-  flag       CarModelFlag?
+// ─── Cars ─────────────────────────────────────────────────────────────────────
 
-  @@index([brand, model])
+model Make {
+  id          String  @id @default(uuid())
+  /// "Toyota", "Mercedes-Benz", and the "Other" catch-all.
+  name        String  @unique
+  /// "regular" | "premium". A SEED DEFAULT for variant pricing, never the pricing
+  /// authority — once a LayoutVariant row exists its own `priceFrom` wins.
+  defaultTier String
+  /// Explains the "Other" row, which is a real Make so the Fit Finder keeps the
+  /// "enter model on WhatsApp" escape hatch instead of losing it.
+  note        String?
+  /// False for "Other": `FLAT_CARS` excludes it, so it is not searchable.
+  isSearchable Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  vehicles  Vehicle[]
 }
 
-model CarModelFlag {
+model Vehicle {
   id         String   @id @default(uuid())
-  carId      String   @unique
-  available  Boolean  @default(true)
-  car        Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
-}
+  makeId     String
+  model      String
+  /// "Toyota::Camry" — the seed's upsert key, stable across renames.
+  sourceKey  String   @unique
+  /// Null in P0: `src/data/cars.ts` has no year dimension at all, and inventing
+  /// one here would manufacture fitment evidence this project has no basis for.
+  yearFrom   Int?
+  yearTo     Int?
+  generation String?
+  aliases    String[] @default([])
+  bodyType   String?
+  facelift   Boolean  @default(false)
+  /// The 8 `POPULAR_CARS` pairs, for ordering the Fit Finder's default list.
+  isPopular  Boolean  @default(false)
+  /// "recognised" | "mapped" | "excluded".
+  status     String   @default("recognised")
 
-model Location {
-  id         String    @id @default(uuid())
-  name       String    @unique
-  fee        Int
-  etaText    String    // e.g. "24–48 hours"
-  createdAt  DateTime  @default(now())
-  orders     Order[]
-}
+  make       Make        @relation(fields: [makeId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
 
-model Order {
-  id              String       @id @default(uuid())
-  customerName    String
-  phone           String
-  address         String
-  locationId      String
-  location        Location     @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  paymentMethod   String       // "pod" | "prepay"
-  status          String       @default("pending")
-  createdAt       DateTime     @default(now())
-  items           OrderItem[]
+  createdAt DateTime @default(now())
 
-  @@index([locationId])
+  @@unique([makeId, model, yearFrom, yearTo])
+  @@index([makeId, model])
   @@index([status])
 }
 
-model OrderItem {
+// ─── Delivery ─────────────────────────────────────────────────────────────────
+
+model Location {
   id        String   @id @default(uuid())
-  orderId   String
+  /// Stable identifier, so renaming a zone cannot break a stored order.
+  slug      String   @unique
+  name      String   @unique
+  fee       Int
+  /// e.g. "24–48 hours".
+  etaText   String
+
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+// ─── Orders ───────────────────────────────────────────────────────────────────
+
+model Order {
+  id String @id @default(uuid())
+
+  /// "LR-" + 10 Crockford base32 characters, minted server-side. The
+  /// customer-facing handle. Replaces the `LR-<base36>` the browser used to
+  /// invent, which no server ever saw.
+  reference String @unique
+  /// The real double-submit guard. A unique violation re-reads and returns the
+  /// existing order rather than creating a second one — a disabled button is not
+  /// a guard, because a double-click is two real sequential POSTs.
+  idempotencyKey String? @unique
+
+  customerName String
+  phone        String
+  address      String
+
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  /// Snapshots: a later fee change must not rewrite what was owed.
+  locationName String
+  locationEta  String
+  shippingFee  Int
+
+  subtotal Int
+  /// The prepay discount, as charged. Zero for pay-on-delivery.
+  discount Int
+  /// The authoritative figure. Every client-sent price is ignored.
+  total    Int
+
+  /// "pod" | "prepay".
+  paymentMethod String
+  /// "pending", and the rest of the union owned by payments-paystack and
+  /// whatsapp-engine. Declared here so they import one type instead of three.
+  status        String @default("pending")
+
+  // Reserved so no order row ever needs backfilling. `ad-landing-and-tracking`
+  // owns the taxonomy; this schema only guarantees the columns exist.
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  referrer    String?
+  landingPath String?
+
+  /// Exactly the text the customer was handed, so the record and the message
+  /// cannot disagree about what was ordered.
+  whatsappMessage String
+
+  createdAt DateTime    @default(now())
+  items     OrderItem[]
+
+  @@index([status, createdAt])
+  @@index([phone])
+  @@index([locationId])
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   productId String
-  carId     String?
-  rows      String?  // "2" | "3" | null
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  /// Supersedes `carId`. Nullable: a car the catalogue recognises but the
+  /// fitment engine has not mapped yet is still a legitimate line.
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  /// Snapshots of what was bought, frozen. A vehicle rename must not rewrite
+  /// history.
+  brandSnapshot String
+  modelSnapshot String
+  yearSnapshot  Int
+  /// "2" | "3" | null.
+  rows          String?
+
+  /// Server-computed and frozen at write time. Never re-derived, which is what
+  /// keeps a historical order correct when a layout is later split or retired.
   unitPrice Int
-  qty       Int      @default(1)
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  car       Car?     @relation(fields: [carId], references: [id], onDelete: SetNull)
+  qty       Int @default(1)
+  lineTotal Int
 
   @@index([orderId])
   @@index([productId])
-  @@index([carId])
+  @@index([vehicleId])
 }
