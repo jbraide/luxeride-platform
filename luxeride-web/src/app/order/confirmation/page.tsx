@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import ConfirmationView from "./ConfirmationView";
 
@@ -35,5 +36,11 @@ export const metadata: Metadata = {
  * record, and the copy says so.
  */
 export default function OrderConfirmationPage() {
-  return <ConfirmationView />;
+  // `ConfirmationView` reads `?ref=` with `useSearchParams`, which must sit
+  // inside a Suspense boundary (the route is cheap enough to prerender).
+  return (
+    <Suspense fallback={null}>
+      <ConfirmationView />
+    </Suspense>
+  );
 }

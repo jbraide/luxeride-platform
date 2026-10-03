@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ProductImage from "@/components/ProductImage";
 import ProductPlaceholder from "@/components/ProductPlaceholder";
 import Link from "next/link";
@@ -12,8 +12,17 @@ import { fmtNaira } from "@/lib/pricing";
 import { Chip } from "@/components/Chip";
 import { Button } from "@/components/Button";
 import { useCartStore } from "@/store/cart";
-import { whatsappLink, comingSoonMessage, notFoundMessage } from "@/lib/whatsapp";
-import type { FitCheckResponse } from "@/lib/fitment-contract";
+import {
+  whatsappLink,
+  comingSoonMessage,
+  notFoundMessage,
+  photosRequestMessage,
+  offerMessage,
+} from "@/lib/whatsapp";
+import type { FitCheckResponse, FitVariantOffer } from "@/lib/fitment-contract";
+import { track } from "@/lib/analytics";
+import { fittedCopy, guarantee, refusals } from "@/lib/copy";
+import type { ResolvedLanding } from "@/data/landing";
 
 /**
  * `results` is now reachable ONLY on a server-confirmed FITTED. Both refusal
@@ -21,7 +30,15 @@ import type { FitCheckResponse } from "@/lib/fitment-contract";
  * them. The fabricated card that used to appear for all 4,671 car/year
  * combinations in `src/data/cars.ts` is gone.
  */
-type Step = "car" | "year" | "product" | "row" | "checking" | "results" | "comingsoon";
+type Step =
+  | "car"
+  | "year"
+  | "product"
+  | "row"
+  | "checking"
+  | "results"
+  | "comingsoon"
+  | "lockedmiss";
 
 const YEAR_FROM = 2000;
 const YEAR_TO = 2026;
@@ -30,6 +47,7 @@ const YEARS = Array.from({ length: YEAR_TO - YEAR_FROM + 1 }, (_, i) => YEAR_TO 
 export default function FitFinder({
   lockedProductSlug,
   mediaBySlug,
+  resolvedLanding,
 }: {
   lockedProductSlug?: string;
   /**
@@ -38,6 +56,12 @@ export default function FitFinder({
    * product means no photography yet, which renders `ProductPlaceholder`.
    */
   mediaBySlug: Record<string, ProductMedia | null>;
+  /**
+   * The resolved `?product=` variant, passed from the server so the served
+   * variant is exposed to the tracking layer as data attributes rather than
+   * re-resolved in the client.
+   */
+  resolvedLanding?: ResolvedLanding | null;
 }) {
   const lockedProduct = lockedProductSlug ? getProductBySlug(lockedProductSlug) : undefined;
 
@@ -49,6 +73,13 @@ export default function FitFinder({
   const [product, setProduct] = useState<Product | null>(lockedProduct ?? null);
   const [rows, setRows] = useState<"2" | "3" | null>(null);
   const [comingSoon, setComingSoon] = useState<{ brand: string; model: string | null } | null>(null);
+  /**
+   * The advertised product is confirmed NOT cut for the car we just confirmed.
+   * Kept as its own state rather than folded into `comingSoon`, because it is
+   * not a refusal: the car IS confirmed and the alternatives are real
+   * (`fit-finder` §3.6).
+   */
+  const [lockedMiss, setLockedMiss] = useState<FitVariantOffer[] | null>(null);
   const [fit, setFit] = useState<FitCheckResponse | null>(null);
   const [fitError, setFitError] = useState<string | null>(null);
   const [comingSoonPhone, setComingSoonPhone] = useState("");
@@ -72,6 +103,9 @@ export default function FitFinder({
 
   function pickCar(b: string, m: string, available: boolean) {
     if (!available) {
+      // A car we cannot sell is a refusal, and refusals are this product's
+      // only sourcing signal — so it is measured here, not inferred later.
+      track("fit_refused", { brand: b, model: m, state: "NOT STOCKED" });
       setComingSoon({ brand: b, model: m });
       setStep("comingsoon");
       return;
@@ -100,6 +134,21 @@ export default function FitFinder({
   function pickRow(v: "2" | "3") {
     setRows(v);
     void runFitCheck(product);
+  }
+
+  /**
+   * Pick one of the confirmed alternatives after a locked-product miss. The
+   * product is re-resolved from the catalogue and the fit is checked again, so
+   * the result is always the server's answer for THIS product — never a card
+   * carried over from the product the ad promised (`fit-finder` §3.6).
+   */
+  function selectVariant(variant: FitVariantOffer) {
+    const chosen = getProductBySlug(variant.productSlug);
+    if (!chosen) return;
+    setLockedMiss(null);
+    setProduct(chosen);
+    if (chosen.rowApplicable) setStep("row");
+    else void runFitCheck(chosen);
   }
 
   /**
@@ -134,6 +183,7 @@ export default function FitFinder({
         setFitError(
           "We could not reach the fit checker. Please try again, or ask us on WhatsApp.",
         );
+        track("fit_refused", { brand, model, state: "UNKNOWN" });
         setComingSoon({ brand, model });
         setStep("comingsoon");
         return;
@@ -142,9 +192,51 @@ export default function FitFinder({
     setFit(payload);
 
     if (payload.state === "FITTED") {
+      track("fit_result_rendered", { brand, model, year, state: "FITTED" });
+
+      // The locked-product MISS (`fit-finder` §3.6). The car is Confirmed, but
+      // the product the ad promised is not among the variants the server just
+      // confirmed for it. Showing a different product than the ad promised,
+      // silently, is the same failure as a wrong fit claim — so the miss is
+      // stated, logged to the demand log, and the real alternatives offered.
+      // The demand log is the record that the ad is promising something this
+      // car cannot be quoted for.
+      if (forProduct && payload.variants) {
+        const advertised = payload.variants.some((v) => v.productSlug === forProduct.slug);
+        if (!advertised) {
+          track("fit_refused", { brand, model, state: "NOT STOCKED" });
+          void fetch("/api/demand", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              make: brand,
+              model,
+              year: Number(year),
+              outcome: "NOT_STOCKED",
+              reason: `Locked product ${forProduct.slug} is not cut for this car; alternatives offered.`,
+              phone: comingSoonPhone || undefined,
+            }),
+          }).catch(() => {
+            // Never block the miss screen on the log write.
+          });
+          setLockedMiss(payload.variants);
+          setStep("lockedmiss");
+          return;
+        }
+      }
+
+      setLockedMiss(null);
       setStep("results");
       return;
     }
+
+    // The wire contract uses `NOT_STOCKED`; the event taxonomy uses
+    // `NOT STOCKED` (§3.9). Map at the boundary rather than changing either.
+    track("fit_refused", {
+      brand,
+      model,
+      state: payload.state === "NOT_STOCKED" ? "NOT STOCKED" : payload.state,
+    });
 
     // A refusal is demand. Locked decision 2 makes capturing it a launch
     // requirement, so it happens here rather than being left to a database
@@ -171,6 +263,21 @@ export default function FitFinder({
     [brand, model, year, comingSoonPhone],
   );
 
+  // Debounced car search measurement. The query TEXT never leaves the browser —
+  // only its length and the result count do (§3.12).
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (q === "") return;
+    const timer = setTimeout(() => {
+      const resultCount = FLAT_CARS.filter((c) =>
+        (c.brand + " " + c.model).toLowerCase().includes(q),
+      ).length;
+      track("car_search", { queryLength: q.length, resultCount });
+      if (resultCount === 0) track("car_search_no_match", { queryLength: q.length });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   const tier: Tier = brand ? BRANDS[brand].tier : "regular";
   const unitPrice = product ? productBase(product, tier, rows) : 0;
   const resultMedia = product ? (mediaBySlug[product.slug] ?? null) : null;
@@ -186,6 +293,16 @@ export default function FitFinder({
       rows: product.rowApplicable ? rows : null,
       unitPrice,
       image: product.images[0],
+    });
+    track("add_to_cart", {
+      productSlug: product.slug,
+      productName: product.name,
+      brand,
+      model,
+      year,
+      rows: product.rowApplicable ? rows : null,
+      unitPrice,
+      qty: 1,
     });
     setAdded(true);
   }
@@ -219,7 +336,11 @@ export default function FitFinder({
   const showProgress = pos !== -1;
 
   return (
-    <div>
+    <div
+      data-campaign={resolvedLanding?.campaignSlug ?? ""}
+      data-landing-product={resolvedLanding?.productSlug ?? ""}
+      data-landing-match={resolvedLanding?.match ?? "none"}
+    >
       {showProgress && (
         <div className="mb-6">
           <div className="h-[3px] overflow-hidden rounded-full bg-white/10">
@@ -262,6 +383,9 @@ export default function FitFinder({
               href={whatsappLink(notFoundMessage(query.trim()))}
               target="_blank"
               rel="noreferrer"
+              onClick={() =>
+                track("whatsapp_cta_clicked", { ctaType: "car_not_found", location: "fit_finder_car_step" })
+              }
               className="mt-4 block text-center text-sm text-gold-dim hover:text-gold"
             >
               Can&apos;t find your car? Ask us on WhatsApp →
@@ -347,9 +471,10 @@ export default function FitFinder({
 
       {step === "results" && product && brand && model && fit?.state === "FITTED" && (
         <div>
-          <h2 className="font-display text-2xl font-semibold">We Found Your Fit!</h2>
+          <h2 className="font-display text-2xl font-semibold">{fittedCopy.headline}</h2>
           <p className="mt-1 text-sm text-muted">
-            We have a confirmed fit for your {year} {brand} {model}. Lead time: {fit.leadTime}.
+            We have a confirmed fit for your {year} {brand} {model}. {fittedCopy.leadTimePrefix}{" "}
+            {fit.leadTime}.
           </p>
 
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -393,7 +518,7 @@ export default function FitFinder({
           </div>
 
           <div className="mt-4 rounded-lg border border-line bg-gold/5 px-4 py-2.5 text-center text-xs text-gold">
-            🛡️ 100% Perfect Fit Guarantee — doesn&apos;t fit? We swap it free.
+            🛡️ {guarantee}
           </div>
 
           {!added ? (
@@ -421,10 +546,18 @@ export default function FitFinder({
 
           <a
             href={whatsappLink(
-              `Hi! Before I order the ${product.name}, could you send live photos of the fit for my ${year} ${brand} ${model} first? Thanks!`
+              photosRequestMessage({
+                productName: product.name,
+                car: `${year} ${brand} ${model}`,
+                layoutCode: fit.internalCode,
+              })
             )}
             target="_blank"
             rel="noreferrer"
+            onClick={() => {
+              track("live_photo_requested", { productSlug: product.slug });
+              track("whatsapp_cta_clicked", { ctaType: "live_photos", location: "fit_result" });
+            }}
             className="mt-3 block w-full rounded-xl border border-white/25 px-5 py-3.5 text-center text-sm font-semibold hover:border-gold hover:text-gold"
           >
             Request Live Photos First
@@ -447,10 +580,20 @@ export default function FitFinder({
               />
               <a
                 href={whatsappLink(
-                  `Hi! I'm interested in:\n${brand} ${model} ${year} | ${product.name}\nListed price: ${fmtNaira(unitPrice)}\nMy offer: ${fmtNaira(Number(offer) || 0)}\nCan we work something out? Thanks!`
+                  offerMessage({
+                    productName: product.name,
+                    car: `${brand} ${model} ${year}`,
+                    listedPrice: unitPrice,
+                    offerPrice: Number(offer) || 0,
+                    layoutCode: fit.internalCode,
+                  })
                 )}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => {
+                  track("offer_sent", { productSlug: product.slug });
+                  track("whatsapp_cta_clicked", { ctaType: "offer", location: "fit_result" });
+                }}
                 className="block w-full rounded-xl bg-gold px-5 py-3.5 text-center text-sm font-semibold text-ink"
               >
                 Send My Offer on WhatsApp
@@ -504,6 +647,16 @@ export default function FitFinder({
               )}
               target="_blank"
               rel="noreferrer"
+              onClick={() => {
+                // The number itself is never transmitted to Meta or Google —
+                // not even hashed (§3.12). Only the fact that one was left.
+                if (comingSoonPhone.trim() !== "") {
+                  track("waitlist_phone_submitted", {
+                    car: comingSoon.model ? `${comingSoon.brand} ${comingSoon.model}` : comingSoon.brand,
+                  });
+                }
+                track("whatsapp_cta_clicked", { ctaType: "coming_soon", location: "fit_refusal" });
+              }}
               className="block w-full rounded-xl bg-gold px-5 py-3.5 text-center text-sm font-semibold text-ink"
             >
               Notify Me on WhatsApp

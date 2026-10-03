@@ -1,15 +1,32 @@
 "use client";
 
+import { useEffect } from "react";
 import ProductPlaceholder from "@/components/ProductPlaceholder";
 import StorageSkeleton from "@/components/StorageSkeleton";
 import { useCartStore } from "@/store/cart";
 import { fmtNaira } from "@/lib/pricing";
 import { useHasMounted } from "@/lib/use-has-mounted";
+import { track } from "@/lib/analytics";
 import { LinkButton } from "@/components/Button";
+import { TrustStrip } from "@/components/TrustStrip";
+import { delivery } from "@/lib/copy";
 
 export default function CartView() {
-  const { items, removeItem, setQty, subtotal } = useCartStore();
+  const { items, removeItem, setQty, subtotal, count } = useCartStore();
   const mounted = useHasMounted();
+
+  const itemCount = count();
+  const cartSubtotal = subtotal();
+
+  // `cart_view` (`cart-checkout` §12.2, master-build-plan M3.15) — fired once
+  // the persisted cart has actually rehydrated, so the numbers are the real
+  // ones. Firing before `mounted` would report an empty cart every time.
+  useEffect(() => {
+    if (!mounted || itemCount === 0) return;
+    track("cart_view", { itemCount, subtotal: cartSubtotal });
+    // Deliberately mount-scoped: a quantity change is not a new cart view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
 
   // Defect D1: the persisted store rehydrates synchronously on the client, so
   // rendering it before that produces HTML the server never produced.
@@ -88,10 +105,29 @@ export default function CartView() {
         <span className="text-sm text-muted">Subtotal</span>
         <span className="font-mono text-xl font-bold text-gold">{fmtNaira(subtotal())}</span>
       </div>
-      <p className="mt-1 text-xs text-muted">Delivery fee is calculated at checkout, based on your zone.</p>
+      {/* The delivery figure is quoted from the copy register, so the cart, the
+          policy page and the checkout cannot disagree (`trust-and-policies`
+          §5.7). It used to say "calculated at checkout" with no number at all,
+          which left the biggest objection on the page unanswered. */}
+      <p className="mt-1 text-xs text-muted">
+        Delivery is {delivery.range()} depending on your zone.{" "}
+        <a href="/delivery" className="text-gold hover:underline">
+          See delivery
+        </a>
+      </p>
+
+      <div className="mt-4">
+        <TrustStrip variant="cta" />
+      </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <LinkButton href="/checkout" className="sm:w-auto sm:px-8">
+        <LinkButton
+          href="/checkout"
+          className="sm:w-auto sm:px-8"
+          // `InitiateCheckout` / `begin_checkout`, carrying item count and
+          // subtotal (§3.5). Synchronous, so it cannot delay the navigation.
+          onClick={() => track("begin_checkout", { itemCount, subtotal: cartSubtotal })}
+        >
           Proceed to Checkout
         </LinkButton>
         <LinkButton href="/shop" variant="outline" className="sm:w-auto sm:px-8">

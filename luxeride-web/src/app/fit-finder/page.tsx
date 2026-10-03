@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import FitFinder from "@/components/FitFinder";
 import { PRODUCTS } from "@/data/products";
+import { resolveCampaign } from "@/data/landing";
 import { resolveAllMedia } from "@/lib/media-manifest";
 import { pageMetadata } from "@/lib/seo";
 
@@ -20,9 +21,17 @@ export default async function FitFinderPage({
   // A Client Component cannot read the media manifest, so the server resolves it
   // for the whole catalogue and passes plain data down.
   const mediaBySlug = resolveAllMedia(PRODUCTS.map((p) => p.slug));
+  // Resolve the campaign on the server too, so the alias locks the RIGHT product.
+  // Passing the raw value straight through meant `?product=mats` locked nothing,
+  // because `mats` is an alias, not a product slug (`ad-landing-and-tracking` §3.5).
+  const resolvedLanding = resolveCampaign(product);
   return (
     <div className="mx-auto max-w-md px-5 py-10">
-      <FitFinder lockedProductSlug={product} mediaBySlug={mediaBySlug} />
+      <FitFinder
+        lockedProductSlug={resolvedLanding?.productSlug ?? product}
+        mediaBySlug={mediaBySlug}
+        resolvedLanding={resolvedLanding}
+      />
     </div>
   );
 }

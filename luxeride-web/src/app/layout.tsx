@@ -1,9 +1,14 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Oswald, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import AnnouncementBar from "@/components/AnnouncementBar";
 import JsonLd from "@/components/JsonLd";
+import Analytics from "@/components/Analytics";
+import PageView from "@/components/PageView";
+import CampaignCapture from "@/components/CampaignCapture";
 import { organizationJsonLd } from "@/lib/seo";
 import { SITE_LOCALE, SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -56,6 +61,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full flex flex-col font-sans antialiased bg-ink text-white">
         <JsonLd data={organizationJsonLd()} />
+        {/* Analytics is registry-driven: it renders no script tag when a
+            provider's env var is absent. PageView must be inside Suspense
+            because `/` is statically prerendered and it calls useSearchParams.
+            CampaignCapture is outside that boundary so capture is never gated
+            on it. */}
+        <Analytics />
+        <CampaignCapture />
+        <Suspense fallback={null}>
+          <PageView />
+        </Suspense>
+        {/* Non-sticky and above the header, so the sticky header needs no
+            offset. Three items, all from the copy register. */}
+        <AnnouncementBar />
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />

@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { BuyBox } from "@/components/BuyBox";
 import JsonLd from "@/components/JsonLd";
-import ProductFaq from "@/components/ProductFaq";
 import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
-import { LinkButton } from "@/components/Button";
-import { PRODUCTS, getCategoryBySlug, getProductBySlug } from "@/data/products";
-import { formatDeliverySummary, formatPriceFrom } from "@/lib/availability";
+import { StickyBuyBar } from "@/components/StickyBuyBar";
+import ViewItemTracker from "@/components/ViewItemTracker";
+import { PRODUCTS, getCategoryBySlug, getProductBySlug, priceRange } from "@/data/products";
 import { resolveMedia } from "@/lib/media-manifest";
 import { breadcrumbJsonLd, faqJsonLd, pageMetadata, productJsonLd } from "@/lib/seo";
 
@@ -64,7 +64,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const product = getProductBySlug(slug);
   if (!product) notFound();
 
-  const price = formatPriceFrom(product);
+  const [priceMin, priceMax] = priceRange(product);
   const media = resolveMedia(product.slug);
   const category = getCategoryBySlug(product.categorySlug);
 
@@ -111,6 +111,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       />
       <JsonLd data={breadcrumbJsonLd(trail)} />
       {faqJsonLd(product.faq) ? <JsonLd data={faqJsonLd(product.faq)!} /> : null}
+      <ViewItemTracker
+        productSlug={product.slug}
+        productName={product.name}
+        priceMin={priceMin}
+        priceMax={priceMax}
+      />
 
       <Breadcrumbs trail={trail} />
       <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
@@ -118,36 +124,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <ProductGallery media={media} name={product.name} />
         </div>
 
-        <div>
-          <h1 className="font-display text-3xl font-semibold">{product.name}</h1>
-          <p className="mt-2 text-muted">{product.note}</p>
-
-          {/* A band, never one number: a single figure is one the WhatsApp quote
-              can contradict. storefront-catalog §7.3. */}
-          <p className="mt-5 font-mono text-2xl font-bold text-gold">{price.from}</p>
-          <p className="mt-1 text-xs text-muted">
-            {price.range} — {price.reason}
-          </p>
-          {/* No availability claim. Nothing in the app establishes stock for a
-              specific car, so the honest sentence is about making the item. */}
-          <p className="mt-3 text-xs text-muted">{product.availability}</p>
-          <p className="mt-3 text-xs text-muted">{formatDeliverySummary()}</p>
-
-          <div className="mt-6 rounded-xl border border-line bg-panel/60 px-4 py-3 text-xs text-gold">
-            🛡️ 100% Perfect Fit Guarantee — doesn&apos;t fit? We swap it free.
-          </div>
-
-          <div className="mt-6">
-            <LinkButton href={`/fit-finder?product=${product.slug}`}>
-              Select My Car &amp; Add to Cart
-            </LinkButton>
-          </div>
-
-          <ProductFaq product={product} />
-        </div>
+        {/* The whole buy column, extracted so the route is about routing and
+            metadata (§10.2). The guarantee and the delivery band come from
+            `TrustStrip`, so the PDP cannot restate a different figure. */}
+        <BuyBox product={product} />
       </div>
 
       <RelatedProducts product={product} />
+
+      {/* Mobile-only, fixed to the viewport, so a visitor who has scrolled the
+          gallery and the FAQ can still act. The spacer keeps the footer clear
+          of the bar on a phone. */}
+      <div aria-hidden className="h-20 md:hidden" />
+      <StickyBuyBar product={product} />
     </div>
   );
 }

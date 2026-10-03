@@ -89,6 +89,12 @@ export async function POST(request: Request): Promise<Response> {
           internalCode: result.internalCode,
           customerName: result.customerName,
           leadTime: result.leadTime,
+          // Every product the confirmed car can be quoted for
+          // (`fit-finder` §2.7). The client uses this to tell a locked-product
+          // MISS from a plain refusal — an advertised product that is not in
+          // this list is a miss, and a miss must be stated rather than
+          // silently substituted.
+          variants: result.variants,
         });
       case "NOT_STOCKED":
         return respond({ state: "NOT_STOCKED", reason: result.reason });

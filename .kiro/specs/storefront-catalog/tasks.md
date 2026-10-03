@@ -123,13 +123,13 @@ policies — it is in `design.md` → `## Open Questions`, not here.
   _Requirements: 2.1, 2.7_
 - [ ] 5.3 Add `aria-current="page"` to the active navigation item in `luxeride-web/src/components/Header.tsx` using `usePathname()`. _(P1)_
   _Requirements: 2.5_
-- [ ] 5.4 Rewrite `luxeride-web/src/components/Footer.tsx` as a Server Component (it has no client code today, so the directive is simply absent) with three link columns — Shop / categories / Help — a contact block rendering `WHATSAPP_NUMBER` as a `wa.me` link, and the policy links. Source every fee and ETA from `LOCATIONS` in `src/data/locations.ts` so the footer and the checkout cannot disagree. State the Fit Guarantee as a WhatsApp-verified swap, matching what `src/components/ProductCard.tsx` and the PDP actually promise today. Minimum 44 px tap targets. _(P0)_
+- [x] 5.4 Rewrite **(done — master-build-plan M4.7)** `luxeride-web/src/components/Footer.tsx` as a Server Component (it has no client code today, so the directive is simply absent) with three link columns — Shop / categories / Help — a contact block rendering `WHATSAPP_NUMBER` as a `wa.me` link, and the policy links. Source every fee and ETA from `LOCATIONS` in `src/data/locations.ts` so the footer and the checkout cannot disagree. State the Fit Guarantee as a WhatsApp-verified swap, matching what `src/components/ProductCard.tsx` and the PDP actually promise today. Minimum 44 px tap targets. _(P0)_
   _Requirements: 3.1, 3.2, 3.4, 3.5_
-- [ ] 5.5 Create `luxeride-web/src/data/policies.ts` with a typed `Policy { slug, title, updatedAt, sections }` record for `delivery`, `returns`, `privacy` and `terms`. Populate `delivery` completely from `LOCATIONS`; for the other three leave clearly-marked `TODO(owner)` copy slots rather than inventing legal text — see `design.md` → `## Open Questions` item 6. _(P0)_
+- [x] 5.5 Create **(done — master-build-plan M4.7)** `luxeride-web/src/data/policies.ts` with a typed `Policy { slug, title, updatedAt, sections }` record for `delivery`, `returns`, `privacy` and `terms`. Populate `delivery` completely from `LOCATIONS`; for the other three leave clearly-marked `TODO(owner)` copy slots rather than inventing legal text — see `design.md` → `## Open Questions` item 6. _(P0)_
   _Requirements: 3.3_
-- [ ] 5.6 Create `luxeride-web/src/app/policies/[slug]/page.tsx` as a Server Component with `generateStaticParams` over the four policy slugs, `dynamicParams = false`, and `notFound()` for anything else. Render the sections as a semantic `<article>` inside the site shell. _(P0)_
+- [x] 5.6 Create **(done — master-build-plan M4.7)** `luxeride-web/src/app/policies/[slug]/page.tsx` as a Server Component with `generateStaticParams` over the four policy slugs, `dynamicParams = false`, and `notFound()` for anything else. Render the sections as a semantic `<article>` inside the site shell. _(P0)_
   _Requirements: 3.3, 3.6_
-- [ ] 5.7 Export a static `metadata` object from `luxeride-web/src/app/policies/[slug]/page.tsx` built with `pageMetadata()` from `src/lib/seo.tsx`, so each policy page has its own title, description and self-referencing canonical. _(P1)_
+- [x] 5.7 Export **(done — master-build-plan M4.7)** a static `metadata` object from `luxeride-web/src/app/policies/[slug]/page.tsx` built with `pageMetadata()` from `src/lib/seo.tsx`, so each policy page has its own title, description and self-referencing canonical. _(P1)_
   _Requirements: 11.10_
 
 ---

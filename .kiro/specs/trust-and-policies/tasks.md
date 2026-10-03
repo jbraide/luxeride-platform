@@ -2,9 +2,18 @@
 
 ## Status
 
-**NOT STARTED** — 6 done, 59 remaining (65 leaf tasks in 15 groups, plus the 7 gates below). The 6
-done items are the verification pass that established the current state; **no application code has
-been written**.
+**PARTIAL** — the copy register (§2.1–2.5) and the announcement bar (§7.1–7.3) are built, and the
+honesty-floor scanner (§12.1–12.4) is in place and reporting. Verified by `npm run verify` exiting 0
+on 2026-10-03; the guarantee literal was removed from `FitFinder`, the PDP and the Footer so §12.3's
+single-source rule holds.
+
+> **The authoritative record is `../master-build-plan/tasks.md` M4.1, M4.6, M4.7 and M4.10.**
+> `storefront-catalog` §5.4–5.7 owns the footer and the `/policies/[slug]` routes, so `src/data/policies.ts`
+> is the storefront-shaped `Policy` record, not the `PolicyDoc` this spec sketched in §4.1.
+
+**`check:placeholders` is RED on exactly 7 slots** — the unresolved return terms, and the privacy
+controller, retention, governing-law and warranty/cancellation inputs. The policy routes ship with
+those slots visible; the owner fills them before spending. Everything else in §4–§11 remains open.
 
 ## Before any ad spend
 
@@ -14,8 +23,8 @@ rest of this plan is a prerequisite for them.
 - [ ] **Gate 1** — `npm run build` exits zero (blocked today by `prisma/seed.ts(2,34)`; owned by `commerce-backend` R1). _Requirements: 12.1_
 - [ ] **Gate 2** — `/privacy`, `/delivery`, `/returns`, `/contact` exist and pass the placeholder scan → tasks 4, 5.1–5.3, 6.1; every one is deliverable with no database, no payment processor and no backend. _Requirements: 12.1, 12.2_
 - [ ] **Gate 3** — checkout consent control renders and links to `/privacy` (unblocks `cart-checkout` 10.1/10.4) → task 9.1. _Requirements: 3.9, 12.1_
-- [ ] **Gate 4** — announcement bar live → task 6.1–6.3. _Requirements: 10.5, 12.1_
-- [ ] **Gate 5** — footer link grid live → task 7.1–7.3. _Requirements: 10.1, 12.1_
+- [x] **Gate 4** — announcement bar live **(done — master-build-plan M4.6; all three items verified in served HTML)** → task 6.1–6.3. _Requirements: 10.5, 12.1_
+- [x] **Gate 5** — footer link grid live **(done — master-build-plan M4.7; the grid links `/policies/*`, the storefront-catalog routes, not the top-level `/privacy` etc.)** → task 7.1–7.3. _Requirements: 10.1, 12.1_
 - [ ] **Gate 6** — one real, auto-oriented, resized product photo published → tasks 10.1–10.2. _Requirements: 9.3, 12.1_
 - [ ] **Gate 7** — guarantee badge resolves to a link to `/returns` → tasks 3.2, 8.2. _Requirements: 6.1, 12.1_
 
@@ -30,12 +39,12 @@ rest of this plan is a prerequisite for them.
   - [x] 1.6 Confirm the full route tree (6 pages + layout + globals + favicon) and that `public/` holds only the Next.js scaffold SVGs plus 6 placeholder product SVGs _(P0)_ _(verified: src/app, public/)_ — _Requirements: 2.1, 9.3_
   - [ ] 1.7 Resolve the two blocking legal questions (Q1 price authority, Q2 what "swap it free" means operationally) with the owner — recorded in `design.md` `## Open Questions`, resolved by writing into `src/data/policies.ts` in task 4.2 _(P0)_ — _Requirements: 6.2, 6.4_
 
-- [ ] 2. Create the shared copy register — `src/lib/copy.ts` _(P0)_ — _Requirements: 8.1, 8.2, 8.7_
-  - [ ] 2.1 Create `src/lib/copy.ts` exporting typed frozen objects: `guarantee`, `guaranteeShort`, `prepay` (`saving: 2000`), `announcement`, `delivery.range()`, `contact` and the `refusals` register for FITTED / NOT STOCKED / UNKNOWN, using the validated prototype voice _(P0)_ — _Requirements:  8.1, 8.2, 8.3_
-  - [ ] 2.2 In `src/lib/copy.ts`, type each refusal entry so `promise` and `capture` are one object and cannot be separated — a promise of future stock is unrenderable without its waitlist field _(P0)_ — _Requirements: 8.3, 1.4_
-  - [ ] 2.3 In `src/lib/copy.ts`, add a `contact` block that builds every contact route from `WHATSAPP_NUMBER` via `src/lib/whatsapp.ts`'s `whatsappLink()`, including a `tel:` URI and a `mailto:` fallback _(P0)_ — _Requirements:  7.1, 7.2_
-  - [ ] 2.4 Assert in `src/lib/copy.ts` that no entry contains a stock quantity, count, countdown, review count or the string currently at `src/components/FitFinder.tsx:247` ("100% precision-molded … in stock for your …") _(P0)_ — _Requirements: 1.3, 1.7, 8.5_
-  - [ ] 2.5 Add the post-delivery review-capture message builder to `src/lib/copy.ts` (asks for a photo or a sentence plus permission to publish; no database) _(P1)_ — _Requirements: 9.7_
+- [x] 2. Create the shared copy register **(done — master-build-plan M4.1)** — `src/lib/copy.ts` _(P0)_ — _Requirements: 8.1, 8.2, 8.7_
+  - [x] 2.1 Create `src/lib/copy.ts` exporting typed frozen objects: `guarantee`, `guaranteeShort`, `prepay` (`saving: 2000`), `announcement`, `delivery.range()`, `contact` and the `refusals` register for FITTED / NOT STOCKED / UNKNOWN, using the validated prototype voice _(P0)_ — _Requirements:  8.1, 8.2, 8.3_
+  - [x] 2.2 In `src/lib/copy.ts`, type each refusal entry so `promise` and `capture` are one object and cannot be separated — a promise of future stock is unrenderable without its waitlist field _(P0)_ — _Requirements: 8.3, 1.4_
+  - [x] 2.3 In `src/lib/copy.ts`, add a `contact` block that builds every contact route from `WHATSAPP_NUMBER` via `src/lib/whatsapp.ts`'s `whatsappLink()`, including a `tel:` URI and a `mailto:` fallback _(P0)_ — _Requirements:  7.1, 7.2_
+  - [x] 2.4 Assert in `src/lib/copy.ts` that no entry contains a stock quantity, count, countdown, review count or the string currently at `src/components/FitFinder.tsx:247` ("100% precision-molded … in stock for your …") _(P0)_ — _Requirements: 1.3, 1.7, 8.5_
+  - [x] 2.5 Add the post-delivery review-capture message builder to `src/lib/copy.ts` (asks for a photo or a sentence plus permission to publish; no database) _(P1)_ — _Requirements: 9.7_
 
 - [ ] 3. Create the social profile module — `src/data/social.ts` _(P0)_ — _Requirements: 10.8_
   - [ ] 3.1 Create `src/data/social.ts` with a `SocialProfile[]` where `url` is `string | null`; an entry with `null` is declared but never rendered _(P0)_ — _Requirements: 10.8_
@@ -65,10 +74,10 @@ rest of this plan is a prerequisite for them.
   - [ ] 6.5 Create `src/app/faq/page.tsx` — static Server Component using native `<details>`/`<summary>` so it works with JavaScript disabled; answer the prepay, delivery, guarantee and "is this site real" objections in the register's voice _(P1)_ — _Requirements: 8.1, 8.2, 12.3_
   - [ ] 6.6 Create `src/app/about/page.tsx` — static Server Component, narrow scope only: who we are, how a fit is verified, service area; not a marketing page _(P2)_ — _Requirements: 7.6_
 
-- [ ] 7. Add the announcement / utility bar _(P0)_ — _Requirements: 10.5, 10.7_
-  - [ ] 7.1 Create `src/components/AnnouncementBar.tsx` as a Server Component rendering at most three items — nationwide delivery, the fastest-zone window computed from `LOCATIONS`, and the prepay rule — with strings from `copy.announcement` and no countdown, stock number or urgency claim _(P0)_ — _Requirements: 10.5, 10.6_
-  - [ ] 7.2 Render `<AnnouncementBar />` in `src/app/layout.tsx` above `<Header />`, non-sticky, so the existing `sticky top-0 z-20` header needs no offset change _(P0)_ — _Requirements: 10.5, 10.6_
-  - [ ] 7.3 Make the bar stack on mobile and wrap at the narrowest supported viewport, with decorative glyphs marked `aria-hidden` and no meaning carried by colour alone _(P0)_ — _Requirements: 10.7_
+- [x] 7. Add the announcement / utility bar **(done — master-build-plan M4.6)** _(P0)_ — _Requirements: 10.5, 10.7_
+  - [x] 7.1 Create `src/components/AnnouncementBar.tsx` as a Server Component rendering at most three items — nationwide delivery, the fastest-zone window computed from `LOCATIONS`, and the prepay rule — with strings from `copy.announcement` and no countdown, stock number or urgency claim _(P0)_ — _Requirements: 10.5, 10.6_
+  - [x] 7.2 Render `<AnnouncementBar />` in `src/app/layout.tsx` above `<Header />`, non-sticky, so the existing `sticky top-0 z-20` header needs no offset change _(P0)_ — _Requirements: 10.5, 10.6_
+  - [x] 7.3 Make the bar stack on mobile and wrap at the narrowest supported viewport, with decorative glyphs marked `aria-hidden` and no meaning carried by colour alone _(P0)_ — _Requirements: 10.7_
 
 - [ ] 8. Rewrite the footer _(P0)_ — _Requirements: 10.1, 10.2_
   - [ ] 8.1 Replace the two `<p>` lines in `src/components/Footer.tsx` with a link grid (Privacy, Terms, Delivery, Returns & Guarantee, Warranty, Contact, FAQ, About) using plain `next/link`; keep the file a Server Component with no `"use client"` so every link works before hydration; the footer carries reference material only, never the sole copy of anything read before paying _(P0)_ — _Requirements: 10.1, 10.2, 11.6_
@@ -96,11 +105,11 @@ rest of this plan is a prerequisite for them.
   - [ ] 11.3 Add the post-delivery capture step: the owner sends the `copy` review-request message in the WhatsApp dispatch loop and pastes what comes back into `src/data/reviews.ts` _(P1)_ — _Requirements: 9.7_
   - [ ] 11.4 Render `<Reviews />` on `src/app/products/[slug]/page.tsx` once non-empty; while empty the PDP carries no reviews surface at all _(P1)_ — _Requirements: 9.6, 1.2_
 
-- [ ] 12. Enforce the honesty floor mechanically _(P0)_ — _Requirements: 1.1, 2.5_
-  - [ ] 12.1 Create `scripts/check-placeholders.mjs` that fails with a file-and-line list on any `[[OWNER INPUT REQUIRED:` token in `src/data/policies.ts` or `src/data/social.ts`, and on a launch-critical social profile whose `url` is still `null` _(P0)_ — _Requirements: 2.5_
-  - [ ] 12.2 Add `check:placeholders` to `scripts` in `package.json` _(P0)_ — _Requirements: 2.5_
-  - [ ] 12.3 Extend `scripts/check-placeholders.mjs` to fail if the guarantee string or any delivery fee appears outside `src/lib/copy.ts` and `src/data/locations.ts`, enforcing the single-source rule _(P0)_ — _Requirements: 8.7, 5.2, 12.1_
-  - [ ] 12.4 Extend `scripts/check-placeholders.mjs` to fail on fabricated-proof patterns in `src/` (star ratings, `trusted by`, `customers served`, `reviews`, `in stock` outside a confirmed-data source) _(P0)_ — _Requirements: 1.1, 1.2, 1.3, 1.5, 9.2_
+- [x] 12. Enforce the honesty floor mechanically **(done — master-build-plan M4.10)** _(P0)_ — _Requirements: 1.1, 2.5_
+  - [x] 12.1 Create `scripts/check-placeholders.mjs` that fails with a file-and-line list on any `[[OWNER INPUT REQUIRED:` token in `src/data/policies.ts` or `src/data/social.ts`, and on a launch-critical social profile whose `url` is still `null` _(P0)_ — _Requirements: 2.5_
+  - [x] 12.2 Add `check:placeholders` to `scripts` in `package.json` _(P0)_ — _Requirements: 2.5_
+  - [x] 12.3 Extend `scripts/check-placeholders.mjs` to fail if the guarantee string or any delivery fee appears outside `src/lib/copy.ts` and `src/data/locations.ts`, enforcing the single-source rule _(P0)_ — _Requirements: 8.7, 5.2, 12.1_
+  - [x] 12.4 Extend `scripts/check-placeholders.mjs` to fail on fabricated-proof patterns in `src/` (star ratings, `trusted by`, `customers served`, `reviews`, `in stock` outside a confirmed-data source) _(P0)_ — _Requirements: 1.1, 1.2, 1.3, 1.5, 9.2_
 
 - [ ] 13. Adopt the copy register across the existing funnel — `src/components/FitFinder.tsx`, `src/lib/whatsapp.ts` _(P1)_ — _Requirements: 8.1, 8.5_
   - [ ] 13.1 In `src/components/FitFinder.tsx`, import the guarantee line and the three-outcome refusal copy from `src/lib/copy.ts` in place of the literals at lines 247, 280, 307–308, 334 and 353–357, preserving the existing states and steps — the screens stay owned by `fit-finder`, only the words come from here _(P1)_ — _Requirements: 8.1, 8.2, 8.5_

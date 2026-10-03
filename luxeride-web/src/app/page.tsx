@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import CategoryTile from "@/components/CategoryTile";
+import HomeHero from "@/components/HomeHero";
 import ProductCard from "@/components/ProductCard";
-import { LinkButton } from "@/components/Button";
 import { CATEGORIES, PRODUCTS } from "@/data/products";
+import { resolveCampaign } from "@/data/landing";
 import { pageMetadata } from "@/lib/seo";
 import { resolveAllMedia } from "@/lib/media-manifest";
 
 // The root layout's `title.default` already reads as a homepage title, so this
-// route supplies only the description and the self-referencing canonical. The
-// canonical matters: without it this page inherits nothing and `/` competes
-// with every other route for its own URL.
+// route supplies only the description and the self-referencing canonical.
+//
+// NOTE: reading `searchParams` makes `/` dynamic rather than static
+// (`ad-landing-and-tracking` §3.1 requires it). The query string is the
+// campaign's lifetime and is deliberately left in the address bar untouched —
+// never canonicalised away (§1.7, §3.7).
 export const metadata: Metadata = pageMetadata({
   title: "LuxeRide Nigeria — Custom-Fit Car Accessories",
   description:
@@ -18,7 +22,16 @@ export const metadata: Metadata = pageMetadata({
   path: "/",
 });
 
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ product?: string }>;
+}) {
+  const { product } = await searchParams;
+  // Campaign aliases win over product slugs, so `seat-covers` gets the campaign
+  // copy and the product lock. A miss returns null and the default hero renders.
+  const landing = resolveCampaign(product);
+
   const featured = PRODUCTS.slice(0, 4);
   // Resolved here, on the server, and passed down: `ProductCard` cannot read the
   // media manifest itself without dragging `node:fs` into the component graph.
@@ -26,30 +39,7 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* Hero */}
-      <section className="mx-auto max-w-6xl px-5 pt-16 pb-14 text-center">
-        <h1 className="font-display text-4xl font-semibold leading-tight sm:text-5xl">
-          Custom-Fit Car Accessories for <span className="text-gold">Your Exact Car</span>
-        </h1>
-        <p className="mx-auto mt-4 max-w-xl text-white/70">
-          Laser-measured mats, seat covers, cargo liners and more. Fully waterproof. Pay on delivery, nationwide.
-        </p>
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <LinkButton href="/fit-finder" className="sm:w-auto sm:px-8">
-            Find My Perfect Fit
-          </LinkButton>
-          <LinkButton href="/shop" variant="outline" className="sm:w-auto sm:px-8">
-            Browse All Products
-          </LinkButton>
-        </div>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-          {["LASER-MEASURED", "100% WATERPROOF", "PAY ON DELIVERY"].map((b) => (
-            <span key={b} className="rounded-full border border-line px-3 py-1 font-mono text-[11px] text-gold">
-              {b}
-            </span>
-          ))}
-        </div>
-      </section>
+      <HomeHero landing={landing} />
 
       {/* Categories */}
       <section className="mx-auto max-w-6xl px-5 pb-14">

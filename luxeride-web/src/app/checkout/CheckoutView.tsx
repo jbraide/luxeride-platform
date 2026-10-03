@@ -1,22 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import StorageSkeleton from "@/components/StorageSkeleton";
 import { useCartStore } from "@/store/cart";
-import { useOrderStore } from "@/store/order";
+import { useOrderStore, type PlacedOrder } from "@/store/order";
 import { LOCATIONS } from "@/data/locations";
 import { fmtNaira } from "@/lib/pricing";
 import { PREPAY_AVAILABLE } from "@/lib/payment-options";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { validateNGPhone } from "@/lib/validation";
 import { buildOrderMessage, whatsappLink } from "@/lib/whatsapp";
+import { createOrderRef } from "@/lib/orderRef";
+import { track } from "@/lib/analytics";
+import { readAttribution } from "@/lib/analytics/attribution";
 import { Button } from "@/components/Button";
+import { TrustStrip } from "@/components/TrustStrip";
+import { contact, delivery } from "@/lib/copy";
 
 export default function CheckoutView() {
   const router = useRouter();
-  const { items, subtotal, clear } = useCartStore();
-  const setLastOrder = useOrderStore((s) => s.setLastOrder);
+  const { items, subtotal, count, clear } = useCartStore();
+  const orders = useOrderStore((s) => s.orders);
+  const setOrder = useOrderStore((s) => s.setOrder);
+  const markLeadFired = useOrderStore((s) => s.markLeadFired);
   const mounted = useHasMounted();
 
   const [name, setName] = useState("");
@@ -26,11 +34,26 @@ export default function CheckoutView() {
   const [payment, setPayment] = useState<"pod" | "prepay">("pod");
   const [phoneError, setPhoneError] = useState(false);
   const [zoneError, setZoneError] = useState(false);
+  const [nameError, setNameError] = useState(false);
+  const [addressError, setAddressError] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [consentError, setConsentError] = useState(false);
 
   const zone = LOCATIONS.find((l) => l.name === location);
   const shippingFee = payment === "prepay" ? 0 : (zone?.fee ?? 0);
   const discount = payment === "prepay" ? 2000 : 0;
   const total = Math.max(subtotal() + shippingFee - discount, 0);
+
+  const itemCount = count();
+  const cartSubtotal = subtotal();
+
+  // `checkout_start` (`cart-checkout` §12.2, master-build-plan M3.15). Fired
+  // after rehydration so the payload is the real cart, not the empty one.
+  useEffect(() => {
+    if (!mounted || items.length === 0) return;
+    track("checkout_start", { itemCount, subtotal: cartSubtotal, zone: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
 
   const preview = useMemo(
     () =>
@@ -67,18 +90,66 @@ export default function CheckoutView() {
   }
 
   function submit() {
+    // §5.1–5.2: every failure is named, announced and measured. The old
+    // `if (!name.trim() || !address.trim()) return;` exited silently, which
+    // reads as a dead button and tells the owner nothing. The server-side
+    // rejection that actually matters is still M6's; this is the surface half.
+    if (!name.trim()) {
+      setNameError(true);
+      track("checkout_validation_error", { field: "name", reason: "Name is required." });
+      return;
+    }
+    setNameError(false);
+
     if (!validateNGPhone(phone)) {
       setPhoneError(true);
+      track("checkout_validation_error", {
+        field: "phone",
+        reason: "Enter a valid Nigerian number.",
+      });
       return;
     }
     setPhoneError(false);
+
+    if (!address.trim()) {
+      setAddressError(true);
+      track("checkout_validation_error", { field: "address", reason: "Address is required." });
+      return;
+    }
+    setAddressError(false);
+
     if (!zone) {
       setZoneError(true);
+      track("checkout_validation_error", { field: "zone", reason: "No delivery zone chosen." });
       return;
     }
     setZoneError(false);
-    if (!name.trim() || !address.trim()) return;
 
+    // The consent control ships with the `/privacy` route or not at all
+    // (`trust-and-policies` §9.6, `cart-checkout` 10.1). It blocks submission
+    // and the `window.open` below while unchecked — the mechanic is this
+    // spec's; the route it links to is `trust-and-policies`'.
+    if (!consent) {
+      setConsentError(true);
+      track("checkout_validation_error", {
+        field: "consent",
+        reason: "Privacy consent not given.",
+      });
+      return;
+    }
+    setConsentError(false);
+
+    // First-touch attribution, copied onto the order so it carries its own
+    // campaign even if the record is later cleared (§5.6).
+    const attribution = readAttribution();
+    const campaign =
+      attribution && attribution.campaign !== "(not set)" ? attribution.campaign : undefined;
+
+    // Mint the reference against the retained history, build the message that
+    // carries it, write the order and fire `Lead` — ALL before `window.open`,
+    // and none of it awaited, because the popup must stay inside the user-gesture
+    // call stack or the browser blocks it (§6.8, §8.7).
+    const ref = createOrderRef(orders.map((o) => o.ref));
     const message = buildOrderMessage(
       {
         name,
@@ -91,12 +162,17 @@ export default function CheckoutView() {
         shippingFee,
         discount,
         total,
+        ref,
+        fitRef: null,
+        campaign,
       },
       false
     );
 
-    const order = {
-      id: `LR-${Date.now().toString(36).toUpperCase()}`,
+    const order: PlacedOrder = {
+      ref,
+      fitRef: null,
+      attribution,
       name,
       phone,
       address,
@@ -111,10 +187,27 @@ export default function CheckoutView() {
       placedAt: new Date().toISOString(),
     };
 
-    setLastOrder(order);
-    window.open(whatsappLink(message), "_blank");
+    setOrder(order);
+    track("order_prepared", {
+      ref,
+      value: total,
+      itemCount,
+      campaign: campaign ?? "(not set)",
+    });
+    track("lead", { value: total, ref });
+    markLeadFired(ref);
+
+    // `handoff_attempted` before the popup and `handoff_confirmed` after it,
+    // carrying `window.open`'s own return value — because the one thing that
+    // cannot be reconstructed later is whether the browser blocked the window.
+    // A `null` handle is not a reason to skip the event; it is the event's most
+    // important payload, and it is what M6.7's recovery path hangs off.
+    track("handoff_attempted", { ref });
+    const opened = window.open(whatsappLink(message), "_blank");
+    track("handoff_confirmed", { ref, popupOpened: opened !== null });
+
     clear();
-    router.push("/order/confirmation");
+    router.push(`/order/confirmation?ref=${encodeURIComponent(ref)}`);
   }
 
   return (
@@ -124,39 +217,66 @@ export default function CheckoutView() {
 
       <div className="mt-6 space-y-4">
         <div>
-          <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">Full name</label>
+          <label htmlFor="co-name" className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+            Full name
+          </label>
           <input
+            id="co-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            aria-invalid={nameError}
+            aria-describedby={nameError ? "co-name-error" : undefined}
             placeholder="e.g. Chidinma Okafor"
-            className="w-full rounded-xl border border-white/15 bg-panel px-4 py-3.5 text-sm focus:border-gold focus:outline-none"
+            className={`w-full rounded-xl border bg-panel px-4 py-3.5 text-sm focus:outline-none ${nameError ? "border-[#FF6B35]" : "border-white/15 focus:border-gold"}`}
           />
+          {nameError && (
+            <p id="co-name-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
+              Enter the name the rider should ask for.
+            </p>
+          )}
         </div>
 
         <div>
-          <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">WhatsApp number</label>
+          <label htmlFor="co-phone" className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+            WhatsApp number
+          </label>
           <input
+            id="co-phone"
+            type="tel"
+            inputMode="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
+            aria-invalid={phoneError}
+            aria-describedby={phoneError ? "co-phone-error" : undefined}
             placeholder="e.g. 0704 962 1694"
-            className="w-full rounded-xl border border-white/15 bg-panel px-4 py-3.5 text-sm focus:border-gold focus:outline-none"
+            className={`w-full rounded-xl border bg-panel px-4 py-3.5 text-sm focus:outline-none ${phoneError ? "border-[#FF6B35]" : "border-white/15 focus:border-gold"}`}
           />
           {phoneError && (
-            <p className="mt-1 text-xs text-[#FF6B35]">
+            <p id="co-phone-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
               Enter a valid Nigerian number (070/080/081/090/091 or +234)
             </p>
           )}
         </div>
 
         <div>
-          <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">Delivery address</label>
+          <label htmlFor="co-address" className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+            Delivery address
+          </label>
           <textarea
+            id="co-address"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
+            aria-invalid={addressError}
+            aria-describedby={addressError ? "co-address-error" : undefined}
             rows={2}
             placeholder="Street, estate/landmark, nearest bus stop"
-            className="w-full rounded-xl border border-white/15 bg-panel px-4 py-3.5 text-sm focus:border-gold focus:outline-none"
+            className={`w-full rounded-xl border bg-panel px-4 py-3.5 text-sm focus:outline-none ${addressError ? "border-[#FF6B35]" : "border-white/15 focus:border-gold"}`}
           />
+          {addressError && (
+            <p id="co-address-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
+              Enter the address the rider should deliver to.
+            </p>
+          )}
         </div>
 
         <div>
@@ -226,12 +346,62 @@ export default function CheckoutView() {
         </div>
         {!zone && <p className="text-xs text-muted">Choose a delivery zone to see the total.</p>}
 
+        {/* The trust block immediately above the submit button
+            (`trust-and-policies` §9.4) — the guarantee, the fee band and the
+            prepay saving in one component, so the four surfaces that quote them
+            cannot disagree. */}
+        <TrustStrip variant="summary" />
+
+        {/* The consent control (§9.6). It gates submission and the handoff; the
+            route it links to is `/privacy`, built by M4.4. */}
+        <div>
+          <label className="flex items-start gap-3 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              aria-invalid={consentError}
+              aria-describedby={consentError ? "co-consent-error" : undefined}
+              className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--gold)]"
+            />
+            <span>
+              I agree to the{" "}
+              <Link href="/privacy" className="text-gold hover:underline">
+                privacy policy
+              </Link>
+              . My name, number and address are used to deliver this order and are never
+              sent to Meta or Google.
+            </span>
+          </label>
+          {consentError && (
+            <p id="co-consent-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
+              Please tick the box so we may use your details to deliver the order.
+            </p>
+          )}
+        </div>
+
         <Button onClick={submit}>Confirm My Order on WhatsApp</Button>
+
+        {/* A WhatsApp hand-off is the only route out today, so a blocked popup
+            or an app-less phone would strand the order. `tel:` and the email
+            fallback make it survivable (§9.5, §7.2). */}
+        <p className="text-center text-xs text-muted">
+          WhatsApp not working?{" "}
+          <a href={contact.tel} className="text-gold hover:underline">
+            Call {contact.whatsappNumber}
+          </a>{" "}
+          and read the message below to us.
+        </p>
 
         <div className="rounded-xl border border-line bg-panel/60 p-4">
           <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Pre-filled WhatsApp message</p>
           <pre className="whitespace-pre-wrap font-mono text-xs text-white/90">{preview}</pre>
         </div>
+
+        <p className="text-center text-xs text-muted">
+          We confirm every order on WhatsApp before dispatch. Delivery is {delivery.range()} depending
+          on your zone — nothing is charged now.
+        </p>
       </div>
     </div>
   );
