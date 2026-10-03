@@ -476,6 +476,41 @@ laptop (M10.3).
 
 ---
 
+## Sequencing note: owner setup happens AFTER deploy, not before (2026-10-03)
+
+**Decision of the owner, recorded because it changes what "blocked" means for nine tasks.**
+
+The account and registration items below are **post-deploy setup**, to be done once the site is deployed
+and the domain is connected. They are not prerequisites for building, and they should not stop code work:
+
+| Item | Becomes possible after deploy |
+|---|---|
+| Meta Pixel ID, GA4 measurement ID | the tags have a real origin to report against (M5.2) |
+| Paystack account and `sk_test_` key | M7, and the prepay option can be un-hidden (D-09) |
+| WhatsApp Business Account and the four templates | M8 (D-10) — submission has an unbounded review, so the code is built against `wa.me` regardless |
+| NDPC data-controller registration | M5's spend gate (D-11) |
+| Instagram URL, social URLs | M4.2 renders nothing until they exist |
+| Registered company details | M4.5 `/contact` and the privacy controller slot |
+| The seven policy positions | M4.3's remaining slots |
+
+**Two things this note does NOT relax, because they are about honesty rather than timing:**
+
+1. **A shipped page may not display an authoring marker.** That was a live bug: `/policies/returns`
+   rendered `[[OWNER INPUT REQUIRED: define "swap" operationally …]]` to visitors. Fixed in `1351e20` —
+   slots are now source-only, empty sections are dropped, and a policy with nothing published says so and
+   offers a WhatsApp route. The gate still fails while the slots remain in the source; what changed is
+   that the gap is invisible rather than published.
+2. **`npm run check:placeholders` is the pre-spend gate, not a build gate.** It exits 1 today, correctly.
+   It must pass before money moves, not before the next commit — which is why it is deliberately absent
+   from `npm run verify`.
+
+**Consequence for the task list:** every remaining owner-input item is now tagged _post-deploy_ rather
+than _blocked_, and the code tasks that depend on them are split so the code half can be built and
+verified first — M4.5's shell with slots, M8's Cloud API client built against `wa.me`, M7's pricing and
+webhook verification exercised with a test key later.
+
+---
+
 ## Decisions and deviations recorded by the E/M0/M1 run (2026-10-02)
 
 **D-05 — production domain and hosting target — STILL OPEN, deliberately deferred by the owner.**
