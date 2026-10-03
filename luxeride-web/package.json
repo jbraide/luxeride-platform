@@ -16,6 +16,8 @@
     "check:hydration": "node scripts/hydration-check.mjs",
     "postinstall": "prisma generate",
     "db:seed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local prisma/seed.mts",
+    "db:seed:fitment": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local prisma/seed-fitment.mts",
+    "fitment:guard": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local scripts/fitment-guard.mjs",
     "db:backup": "bash scripts/db-backup.sh",
     "db:check": "node scripts/db-check.mjs",
     "fitment:report": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/fitment-report.mjs",

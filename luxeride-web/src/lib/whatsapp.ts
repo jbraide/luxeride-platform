@@ -3,6 +3,7 @@
 // and Footer (Server Components) do.
 import type { CartItem } from "@/store/cart";
 import { fmtNaira } from "./pricing";
+import { ZERO_FEE_LABEL } from "./order-pricing";
 import { WHATSAPP_NUMBER } from "@/data/locations";
 
 export interface OrderMessageInput {
@@ -16,12 +17,27 @@ export interface OrderMessageInput {
   shippingFee: number;
   discount: number;
   total: number;
-  /** The order reference. Absent on the checkout preview, which is not an order. */
+  /**
+   * The order reference, and from M6.8 it is the one the SERVER minted and
+   * returned — never one minted here or in the browser. A reference no server
+   * has seen cannot find an order, which is the whole defect this field exists
+   * to close. Absent only on the checkout preview, which is not an order.
+   */
   ref?: string;
   /** The fitment layout code. Always `null` until `fitment-engine` lands (§6.7). */
   fitRef?: string | null;
   /** The short campaign registry key, never a raw fbclid or a UTM string (§6.5). */
   campaign?: string;
+  /**
+   * The zone's arrival estimate, from `Order.locationEta` — the snapshot taken
+   * when the order was priced, not a live `LOCATIONS` lookup.
+   *
+   * `cart-checkout` requirement 3.7 and §3.2: "the prototype showed ETA next to
+   * the fee and the app dropped it". It is a snapshot for the same reason the fee
+   * is one: a later edit to the zone must not rewrite what the customer was told,
+   * and the thread is the durable record of what they were told.
+   */
+  locationEta?: string | null;
 }
 
 export function buildOrderMessage(input: OrderMessageInput, preview = false): string {
@@ -36,10 +52,22 @@ export function buildOrderMessage(input: OrderMessageInput, preview = false): st
     })
     .join("\n");
 
+  // `cart-checkout` requirement 3.7: "Free" at a zero fee. The POD branch used to
+  // interpolate unconditionally, so a prepay customer's message — and any future
+  // zero-fee zone — read "incl. ₦0 delivery", which looks like a broken quote
+  // rather than a free one.
+  const deliveryCost =
+    input.shippingFee > 0 ? fmtNaira(input.shippingFee) : ZERO_FEE_LABEL;
+
+  // §3.4: the prepay branch shows the pre-discount subtotal and the discount as
+  // its own line, so the customer can see where the saving came from instead of
+  // being handed a smaller total and a promise.
   const paymentLine =
     input.paymentMethod === "prepay"
-      ? `Prepay by Transfer — ${fmtNaira(input.total)} (free shipping, save ₦2,000)`
-      : `Pay on Delivery — ${fmtNaira(input.total)} (incl. ${fmtNaira(input.shippingFee)} delivery)`;
+      ? `Prepay by Transfer — ${fmtNaira(input.total)} (delivery ${ZERO_FEE_LABEL}, subtotal ${fmtNaira(input.subtotal)} less ${fmtNaira(input.discount)} discount)`
+      : `Pay on Delivery — ${fmtNaira(input.total)} (incl. ${deliveryCost} delivery)`;
+
+  const eta = input.locationEta ? ` (${input.locationEta} after confirmation)` : "";
 
   // The reference line rides on ONE line, and never leaves a dangling separator
   // when the fitment code is absent (§6.4, §6.7). 22 characters is the budget.
@@ -50,7 +78,7 @@ export function buildOrderMessage(input: OrderMessageInput, preview = false): st
     ? `\n🔖 Ref ${input.ref}${bits.length > 0 ? ` · ${bits.join(" · ")}` : ""}`
     : "";
 
-  return `Hi! I'm ${name} 🚗\n\nI'd like to order from LuxeRide Nigeria:\n${lines}\n\n📍 Delivery: ${address}, ${input.location}\n📱 Number: ${phone}\n💵 Payment: ${paymentLine}${refLine}\n\nPlease confirm my order. Thanks!`;
+  return `Hi! I'm ${name} 🚗\n\nI'd like to order from LuxeRide Nigeria:\n${lines}\n\n📍 Delivery: ${address}, ${input.location}${eta}\n📱 Number: ${phone}\n💵 Payment: ${paymentLine}${refLine}\n\nPlease confirm my order. Thanks!`;
 }
 
 export function whatsappLink(message: string): string {

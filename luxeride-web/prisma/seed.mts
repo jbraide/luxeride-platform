@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
 import { BRANDS, FLAT_CARS, POPULAR_CARS } from "../src/data/cars.ts";
+import { CATALOGUE_LAYOUTS, CATALOGUE_MAPPINGS } from "../src/data/fitment-catalogue.ts";
 import { LOCATIONS } from "../src/data/locations.ts";
 import { CATEGORIES, PRODUCTS } from "../src/data/products.ts";
 
@@ -30,6 +31,10 @@ import { CATEGORIES, PRODUCTS } from "../src/data/products.ts";
 // It leaves alone everything a person owns: Layout, LayoutVariant.priceFrom,
 // Vehicle.generation/aliases/yearFrom/yearTo, Order, OrderItem, and every
 // createdAt. Re-running this file must never overwrite a decision somebody made.
+//
+// It does not WRITE any fitment row either — `prisma/seed-fitment.mts` owns those
+// tables. The two fitment counts below are here so that running this file alone
+// reports, loudly, that the second seed has not been run yet.
 //
 // It also does not invent a year dimension. `src/data/cars.ts` has none, so
 // Vehicle.yearFrom/yearTo stay null and status stays "recognised". Filling those
@@ -158,12 +163,19 @@ async function main() {
   // ── The count assertion ────────────────────────────────────────────────────
   // The old seed printed "Seed complete." regardless of outcome, so a partial seed
   // looked like a success. This one exits non-zero if any table is short.
+  //
+  // The fitment tables are asserted here as well as in `prisma/seed-fitment.mts`,
+  // and that is not a duplicate: this seed cannot write them, so a short count here
+  // means `npm run db:seed:fitment` was never run. Running the two in order is the
+  // documented sequence.
   const expected = {
     categories: CATEGORIES.length,
     products: PRODUCTS.length,
     locations: LOCATIONS.length,
     makes: Object.keys(BRANDS).length,
     vehicles: FLAT_CARS.length,
+    layouts: CATALOGUE_LAYOUTS.length,
+    mappings: CATALOGUE_MAPPINGS.length,
   } as const;
 
   const actual = {
@@ -172,6 +184,8 @@ async function main() {
     locations: await prisma.location.count(),
     makes: await prisma.make.count(),
     vehicles: await prisma.vehicle.count(),
+    layouts: await prisma.layout.count(),
+    mappings: await prisma.mapping.count(),
   };
 
   const short: string[] = [];

@@ -73,6 +73,38 @@ sudo -u postgres createdb -O luxeride luxeride
 ```
 
 Then `.env.local` holds `DATABASE_URL="postgresql://luxeride:<yours>@localhost:5432/luxeride"` —
+
+### Migrations on this machine
+
+`npm run db:migrate` runs `prisma migrate dev`, **and that cannot work here**: Prisma needs to create a
+shadow database, and the `luxeride` role has no `CREATEDB` privilege, so it fails with
+`P3014: permission denied to create database`. Either grant it —
+
+```bash
+sudo -u postgres psql -c "ALTER ROLE luxeride CREATEDB;"
+```
+
+— or use the shadow-free path, which is what the first three migrations were written with:
+
+```bash
+TS=$(date +%Y%m%d%H%M%S); NAME=add_something
+M="prisma/migrations/${TS}_${NAME}"; mkdir -p "$M"
+node --env-file=.env.local scripts/prisma.mjs migrate diff \
+  --from-schema-datasource prisma/schema.prisma \
+  --to-schema-datamodel prisma/schema.prisma --script > "$M/migration.sql"
+node --env-file=.env.local scripts/prisma.mjs db execute --file "$M/migration.sql" --schema prisma/schema.prisma
+node --env-file=.env.local scripts/prisma.mjs migrate resolve --applied "${TS}_${NAME}"
+npm run db:status && npm run db:check
+```
+
+**`npm run db:check` is not optional at the end of that.** `migrate status` compares the migration
+*history*, not the schema, so a migration that was marked applied without its DDL ever running looks
+like success. That happened here: migration 2 was recorded as finished while four columns were missing,
+and nothing reported it. `db:check` now diffs the live database against `prisma/schema.prisma` and fails
+on any disagreement, which is the assertion `migrate status` cannot make.
+
+**`prisma migrate deploy` (not `migrate dev`) is what runs against production** — `db:deploy`. It needs
+no shadow database, so the CREATEDB problem does not affect a deploy.
 **and it already does**, with a generated password. Run the `ALTER ROLE` above with that same password
 (or put yours in `.env.local` instead), then confirm the whole thing in one command:
 

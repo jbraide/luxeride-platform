@@ -26,7 +26,7 @@ export function TrustStrip({ variant = "cta" }: { variant?: "cta" | "summary" })
             🛡️
           </span>
           {guarantee}{" "}
-          <Link href="/returns" className="text-gold hover:underline">
+          <Link href="/policies/returns" className="text-gold hover:underline">
             How it works
           </Link>
         </p>
@@ -46,7 +46,7 @@ export function TrustStrip({ variant = "cta" }: { variant?: "cta" | "summary" })
             🛡️
           </span>
           <span>
-            <Link href="/returns" className="text-gold hover:underline">
+            <Link href="/policies/returns" className="text-gold hover:underline">
               {guarantee}
             </Link>
           </span>
@@ -57,7 +57,7 @@ export function TrustStrip({ variant = "cta" }: { variant?: "cta" | "summary" })
           </span>
           <span>
             {delivery.range()} delivery depending on your zone.{" "}
-            <Link href="/delivery" className="text-gold hover:underline">
+            <Link href="/policies/delivery" className="text-gold hover:underline">
               See the zones
             </Link>
           </span>

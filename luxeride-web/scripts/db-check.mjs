@@ -113,6 +113,69 @@ if (!probe.ok) {
 
 if (probe.out !== "1") fail("`select 1` did not return 1", `got: ${JSON.stringify(probe.out)}`);
 
+// ── Does the DATABASE actually match the datamodel? ──────────────────────────
+//
+// This check exists because of a real failure. Migration 2
+// (`add_layout_refs`) was applied with `prisma db execute --file`, its
+// `ALTER TABLE "Product" ADD COLUMN "updatedAt" ... NOT NULL` failed against a
+// table that already had 7 seeded rows, the whole script rolled back — and
+// `prisma migrate resolve --applied` was run anyway, recording it as finished.
+//
+// `prisma migrate status` reported "Database schema is up to date!" the entire
+// time, because it compares the migration HISTORY in `_prisma_migrations`, not
+// the schema. Four columns were missing for hours and nothing said so.
+//
+// `migrate diff --from-schema-datasource --to-schema-datamodel --exit-code`
+// compares the live database to the datamodel and exits non-zero when they
+// disagree. That is the assertion `migrate status` cannot make, and it is the one
+// that would have caught the half-apply immediately.
+//
+// It catches the silent direction specifically: a migration marked applied but
+// never executed, a hand-edited table, or a schema change written but not
+// migrated. All three look like success to `status`.
+
+const schemaPath = path.join(PROJECT_ROOT, "prisma", "schema.prisma");
+let drift;
+try {
+  execFileSync(
+    process.execPath,
+    [
+      "--env-file=.env.local",
+      path.join(PROJECT_ROOT, "scripts", "prisma.mjs"),
+      "migrate",
+      "diff",
+      "--from-schema-datasource",
+      schemaPath,
+      "--to-schema-datamodel",
+      schemaPath,
+      "--exit-code",
+    ],
+    { cwd: PROJECT_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60000 },
+  );
+  drift = { ok: true };
+} catch (error) {
+  const out = `${error.stdout ?? ""}${error.stderr ?? ""}`.trim();
+  // Exit 2 is "differs"; anything else is the command itself failing, which is a
+  // different problem and must not be reported as schema drift.
+  drift = { ok: false, differs: error.status === 2, out, status: error.status };
+}
+
+if (!drift.ok && drift.differs) {
+  fail(
+    "the database does not match prisma/schema.prisma",
+    `${drift.out}\n\n` +
+      "A migration is recorded as applied but its DDL is not in the database, or the schema was\n" +
+      "edited without a migration. `prisma migrate status` cannot see this — it reads the migration\n" +
+      "history, not the schema. Generate the missing SQL and apply it:\n\n" +
+      "  node --env-file=.env.local scripts/prisma.mjs migrate diff \\\n" +
+      "    --from-schema-datasource prisma/schema.prisma \\\n" +
+      "    --to-schema-datamodel prisma/schema.prisma --script\n"
+  );
+}
+if (!drift.ok && !drift.differs) {
+  fail("could not compare the database to the datamodel", drift.out || `exit ${drift.status}`);
+}
+
 const version = query("show server_version");
 const tables = query(
   "select count(*) from information_schema.tables where table_schema = 'public'"
@@ -124,4 +187,8 @@ console.log("db:check OK");
 console.log(`  connected as   ${role.out} to ${dbName.out}`);
 console.log(`  server version ${version.out}`);
 console.log(`  public tables  ${tables.out}${tables.out === "0" ? "  (nothing migrated yet — that is task 2.6)" : ""}`);
-console.log("\nThe password in .env.local matches the one Postgres holds for this role.");
+console.log("  schema drift   none — the database matches prisma/schema.prisma");
+console.log(
+  "\nThe password in .env.local matches the one Postgres holds for this role, and the\n" +
+    "migration history agrees with the actual schema."
+);

@@ -110,16 +110,30 @@ export default function FitFinder({
     // "no confirmed fit yet" (and the reverse).
     setFit(null);
     setFitError(null);
-    if (!available) {
-      // A car we cannot sell is a refusal, and refusals are this product's
-      // only sourcing signal — so it is measured here, not inferred later.
-      track("fit_refused", { brand: b, model: m, state: "NOT STOCKED" });
-      setComingSoon({ brand: b, model: m });
-      setStep("comingsoon");
-      return;
-    }
+    // Set on both paths: the refusal screen below reads the car from this state,
+    // and a screen reached through the server must not render a blank car.
     setBrand(b);
     setModel(m);
+
+    if (!available) {
+      // Defect recorded in `fitment-engine` tasks §"Defects found while fixing
+      // 5.5", item 2: this used to `return` straight into the refusal screen, so
+      // a real refusal about a real car never reached `/api/fit-check` and was
+      // invisible in the demand log — the one place it is most useful, because a
+      // brand flagged `available: false` is a demand signal AND a sourcing hint.
+      // `fitment-engine` §5.5 put the write in the handler for exactly this
+      // reason: a refusal the browser never reports is a refusal nobody has.
+      // So this case now goes through the server like every other check, and the
+      // server decides the state, the wording and the log line.
+      //
+      // The year is the finder's current value, which at this point is the
+      // default `YEAR_TO` because the visitor has not been asked yet. That is
+      // deliberate rather than convenient: asking for the year first would mean
+      // asking a question whose answer we already have, and the year is not what
+      // the owner ranks refusals by.
+      void runFitCheck(null, { brand: b, model: m, year, notStocked: true });
+      return;
+    }
     setStep("year");
   }
 
@@ -166,10 +180,24 @@ export default function FitFinder({
    * A network failure, a non-2xx, or an unparseable body all land on the
    * refusal path. The asymmetry is deliberate: we would rather tell someone we
    * could not check than show them a fit we did not verify.
+   *
+   * WHY `car` IS A PARAMETER AND NOT ONLY STATE
+   *
+   * `pickCar()` can fire this before a re-render exists, and `setBrand`/`setModel`
+   * do not change what this closure has already read. Without the override, the
+   * unavailable-brand case would have posted the PREVIOUS car's make and model —
+   * writing a demand line against a car nobody asked about, which is worse than
+   * the hole it closes.
    */
   const runFitCheck = useCallback(
-    async (forProduct: Product | null) => {
-      if (!brand || !model) return;
+    async (
+      forProduct: Product | null,
+      car?: { brand: string; model: string; year: string; notStocked?: boolean },
+    ) => {
+      const make = car?.brand ?? brand;
+      const makeModel = car?.model ?? model;
+      const makeYear = car?.year ?? year;
+      if (!make || !makeModel) return;
       setFitError(null);
       setFit(null);
       setStep("checking");
@@ -180,9 +208,9 @@ export default function FitFinder({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            make: brand,
-            model,
-            year: Number(year),
+            make,
+            model: makeModel,
+            year: Number(makeYear),
             ...(forProduct ? { productSlug: forProduct.slug } : {}),
           }),
         });
@@ -191,8 +219,8 @@ export default function FitFinder({
         setFitError(
           "We could not reach the fit checker. Please try again, or ask us on WhatsApp.",
         );
-        track("fit_refused", { brand, model, state: "UNKNOWN" });
-        setComingSoon({ brand, model });
+        track("fit_refused", { brand: make, model: makeModel, state: "UNKNOWN" });
+        setComingSoon({ brand: make, model: makeModel });
         setStep("comingsoon");
         return;
       }
@@ -200,7 +228,23 @@ export default function FitFinder({
     setFit(payload);
 
     if (payload.state === "FITTED") {
-      track("fit_result_rendered", { brand, model, year, state: "FITTED" });
+      track("fit_result_rendered", { brand: make, model: makeModel, year: makeYear, state: "FITTED" });
+
+      // The catalogue and the fitment table disagree, and the storefront has to
+      // believe the catalogue: `available: false` in `src/data/cars.ts` is the
+      // list the shop is not taking orders for, and it is what the buyer is
+      // shown. Reachable only from the unavailable-brand path, where no product
+      // has been chosen yet — and without this the FITTED answer would render
+      // the results screen's `product &&` guard as nothing at all, a blank page
+      // where a refusal belongs. Nothing is written to the demand log here
+      // because the server believes this car fits and has no refusal to record;
+      // the disagreement is a data fault for `fitment-review.ts` to settle.
+      if (car?.notStocked) {
+        track("fit_refused", { brand: make, model: makeModel, state: "NOT STOCKED" });
+        setComingSoon({ brand: make, model: makeModel });
+        setStep("comingsoon");
+        return;
+      }
 
       // The locked-product MISS (`fit-finder` §3.6). The car is Confirmed, but
       // the product the ad promised is not among the variants the server just
@@ -212,14 +256,14 @@ export default function FitFinder({
       if (forProduct && payload.variants) {
         const advertised = payload.variants.some((v) => v.productSlug === forProduct.slug);
         if (!advertised) {
-          track("fit_refused", { brand, model, state: "NOT STOCKED" });
+          track("fit_refused", { brand: make, model: makeModel, state: "NOT STOCKED" });
           void fetch("/api/demand", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              make: brand,
-              model,
-              year: Number(year),
+              make,
+              model: makeModel,
+              year: Number(makeYear),
               outcome: "NOT_STOCKED",
               reason: `Locked product ${forProduct.slug} is not cut for this car; alternatives offered.`,
               phone: comingSoonPhone || undefined,
@@ -241,8 +285,8 @@ export default function FitFinder({
     // The wire contract uses `NOT_STOCKED`; the event taxonomy uses
     // `NOT STOCKED` (§3.9). Map at the boundary rather than changing either.
     track("fit_refused", {
-      brand,
-      model,
+      brand: make,
+      model: makeModel,
       state: payload.state === "NOT_STOCKED" ? "NOT STOCKED" : payload.state,
     });
 
@@ -253,7 +297,7 @@ export default function FitFinder({
     // source next — so it is gone, and nothing replaces it. The one demand write
     // that stays in this file is the locked-product miss above: the server
     // answered FITTED there, so it has no refusal to log.
-    setComingSoon({ brand, model });
+    setComingSoon({ brand: make, model: makeModel });
     setStep("comingsoon");
     },
     [brand, model, year, comingSoonPhone],

@@ -6,9 +6,15 @@ const nextConfig: NextConfig = {
   async redirects() {
     // Categories were query filters (`/shop?category=floor-mats`); they are real
     // paths now (storefront-catalog §6). Any ad, bookmark or shared link still
-    // carrying the old form is redirected rather than 404ing, and the redirect
-    // is permanent because the new form is canonical — a 308 keeps the signal
-    // with the path that is now the real one.
+    // carrying the old form is redirected rather than 404ing.
+    //
+    // `permanent: false` — a **307**, and §6.9 is explicit that it must not be a
+    // 308. This shipped as `permanent: true` and was measured returning 308; a 308
+    // is cached by browsers indefinitely, so if a category slug is ever renamed
+    // every visitor who ever loaded a category page is permanently trapped on a
+    // URL that no longer exists, with no way for the site to correct it. The
+    // search-engine argument for 308 does not outweigh a mistake that cannot be
+    // undone. Verified: 307 to `/shop/<slug>`.
     return CATEGORIES.map((category) => ({
       // A query string cannot go in `source` — Next rejects it as an invalid
       // route source, which the first attempt discovered the hard way. The
@@ -16,7 +22,7 @@ const nextConfig: NextConfig = {
       source: "/shop",
       has: [{ type: "query" as const, key: "category", value: category.slug }],
       destination: `/shop/${category.slug}`,
-      permanent: true,
+      permanent: false,
     }));
   },
 

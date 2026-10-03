@@ -1,15 +1,39 @@
 // LuxeRide — commerce model.
 //
-// Reconciled per `commerce-backend/design.md` § Data Models. This is **stage 1**
-// of three staged migrations; the staging rule that makes it work is that nothing
-// here references a table that does not exist yet.
+// Reconciled per `commerce-backend/design.md` § Data Models, then extended by
+// `fitment-engine/tasks.md` §6.1–6.9. This file began as **stage 1** of three
+// staged migrations; the staging rule that makes the sequence work is that no
+// stage references a table that does not exist yet.
 //
-//   1. init_commerce_model   (this file)  — Category, Product, Location, Make,
+//   1. init_commerce_model   (APPLIED)     — Category, Product, Location, Make,
 //                                           Vehicle, Order, OrderItem
-//   2. add_layout_refs   (APPLIED)        — nullable OrderItem.layoutId /
+//   2. add_layout_refs       (APPLIED)     — nullable OrderItem.layoutId /
 //                                           layoutVariantId + the updatedAt columns
-//   3. add_fitment_tables                 — owned by fitment-engine, then the FK
+//   3. add_fitment_tables    (APPLIED)     — Layout, LayoutVariant, Mapping,
+//                                           ImageSet, Exclusion, DemandLog,
+//                                           AuditEntry, and the two foreign keys
+//                                           stage 2 deliberately deferred
 //
+// WHY THE STAGING EXISTED AT ALL
+//
+// `commerce-backend/design.md` § Staged migration: stage 2 added *no* foreign key
+// into a table that did not exist, because a non-nullable reference would have made
+// every order unwritable until stage 3 landed and taken the storefront down for the
+// duration of the fitment build. Stage 3 is where the storey's debt is paid:
+// `OrderItem.layoutId` and `OrderItem.layoutVariantId` are still nullable, so
+// attaching them changes nothing about what may be written — it only makes a
+// dangling id impossible.
+//
+// WHY THE STATUS COLUMNS ARE `String` AND NOT ENUMS
+//
+// `Layout.status`, `LayoutVariant.kind`, `Mapping.confidence` and the rest carry
+// closed unions, and PostgreSQL could enforce them with CHECK constraints. Prisma's
+// schema language cannot express one, and a hand-written CHECK would be dropped by
+// the next `migrate diff` — which is how a constraint this codebase would rely on
+// disappears silently. So they are `String` with the union in the doc comment, the
+// same treatment `Vehicle.status`, `Order.paymentMethod` and `Order.status` already
+// get. The unions are enforced in TypeScript (`src/data/fitment.ts`) and, from the
+// admin console, in the Server Actions (`fitment-engine` §9.7, §9.11).
 // WHY `Car` AND `CarModelFlag` ARE GONE, NOT MIGRATED
 //
 // There was no `prisma/migrations/` directory and the schema had never been
@@ -52,24 +76,25 @@ model Category {
 }
 
 model Product {
-  id                String       @id @default(uuid())
+  id                String   @id @default(uuid())
   categoryId        String
-  slug              String       @unique
+  slug              String   @unique
   name              String
   note              String?
   /// The two prices the app actually charges from: `regular` for a regular-tier
   /// brand, `premium` for a premium-tier one. See `Make.defaultTier`.
   regular           Int
   premium           Int
-  rowApplicable     Boolean      @default(false)
+  rowApplicable     Boolean  @default(false)
   /// Null when the product is not row-applicable.
   threeRowSurcharge Int?
   images            String[]
   /// The honesty sentence. No row here claims stock for a specific car.
   availability      String?
 
-  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  orderItems OrderItem[]
+  category       Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems     OrderItem[]
+  layoutVariants LayoutVariant[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -80,19 +105,21 @@ model Product {
 // ─── Cars ─────────────────────────────────────────────────────────────────────
 
 model Make {
-  id          String  @id @default(uuid())
+  id           String  @id @default(uuid())
   /// "Toyota", "Mercedes-Benz", and the "Other" catch-all.
-  name        String  @unique
+  name         String  @unique
   /// "regular" | "premium". A SEED DEFAULT for variant pricing, never the pricing
   /// authority — once a LayoutVariant row exists its own `priceFrom` wins.
-  defaultTier String
+  defaultTier  String
   /// Explains the "Other" row, which is a real Make so the Fit Finder keeps the
   /// "enter model on WhatsApp" escape hatch instead of losing it.
-  note        String?
+  note         String?
   /// False for "Other": `FLAT_CARS` excludes it, so it is not searchable.
   isSearchable Boolean @default(true)
 
   createdAt DateTime  @default(now())
+  /// `Layout.makeId` is singular by locked decision 4, so a make has many layouts.
+  layouts   Layout[]
   vehicles  Vehicle[]
 }
 
@@ -117,6 +144,10 @@ model Vehicle {
 
   make       Make        @relation(fields: [makeId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
+  /// Added by `add_fitment_tables`. The join is a row, not a flag, because
+  /// "which floor pan" and "how sure are we" are different facts and only the
+  /// owner may raise the second one — see `Mapping`.
+  mappings   Mapping[]
 
   createdAt DateTime @default(now())
 
@@ -128,13 +159,13 @@ model Vehicle {
 // ─── Delivery ─────────────────────────────────────────────────────────────────
 
 model Location {
-  id        String   @id @default(uuid())
+  id      String @id @default(uuid())
   /// Stable identifier, so renaming a zone cannot break a stored order.
-  slug      String   @unique
-  name      String   @unique
-  fee       Int
+  slug    String @unique
+  name    String @unique
+  fee     Int
   /// e.g. "24–48 hours".
-  etaText   String
+  etaText String
 
   createdAt DateTime @default(now())
   orders    Order[]
@@ -148,7 +179,7 @@ model Order {
   /// "LR-" + 10 Crockford base32 characters, minted server-side. The
   /// customer-facing handle. Replaces the `LR-<base36>` the browser used to
   /// invent, which no server ever saw.
-  reference String @unique
+  reference      String  @unique
   /// The real double-submit guard. A unique violation re-reads and returns the
   /// existing order rather than creating a second one — a disabled button is not
   /// a guard, because a double-click is two real sequential POSTs.
@@ -158,8 +189,8 @@ model Order {
   phone        String
   address      String
 
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
   /// Snapshots: a later fee change must not rewrite what was owed.
   locationName String
   locationEta  String
@@ -232,14 +263,376 @@ model OrderItem {
   /// every order until the fitment tables exist, so the storefront could not
   /// trade at all in the meantime.
   ///
-  /// Scalar columns rather than relations at this stage — the `Layout` and
-  /// `LayoutVariant` tables arrive in the next migration, and stage 2 must add no
-  /// foreign key into a table that does not exist. The relations are added there.
+  /// Still nullable now that they DO exist, and that is the point rather than an
+  /// oversight. An order placed before the owner confirmed anything is a real
+  /// order with no fitment claim behind it, and forcing these non-null would
+  /// either fabricate one or refuse to sell.
+  ///
+  /// They were scalar columns through stage 2 because that stage must add no
+  /// foreign key into a table that does not exist; `add_fitment_tables` attached
+  /// them. `Restrict`, not `SetNull`: a floor pan somebody has already been sold
+  /// against must fail loudly on delete rather than quietly become "unknown", and
+  /// a Layout is retired — `status: "retired"` — never deleted.
   layoutId        String?
+  layout          Layout?        @relation(fields: [layoutId], references: [id], onDelete: Restrict)
   layoutVariantId String?
+  layoutVariant   LayoutVariant? @relation(fields: [layoutVariantId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([productId])
   @@index([vehicleId])
   @@index([layoutId])
+  @@index([layoutVariantId])
+}
+
+// ─── Fitment ──────────────────────────────────────────────────────────────────
+//
+// Added by `add_fitment_tables`, stage 3 of `commerce-backend/design.md`
+// § Staged migration, and the substance of `fitment-engine/tasks.md` §6.1–6.3,
+// §6.9 and §10.1. Seven models: the six entities of `src/data/fitment.ts`, plus
+// `DemandLog` and `AuditEntry`, which are not fitment but are owed by the admin
+// screens and by the refusal path.
+//
+// THE UNIT OF SALE IS A FLOOR PAN, NOT A CAR
+//
+// A `Vehicle` here is "a name a customer would actually type" — it is never
+// sellable. What is sold is a `Layout`: one real floor pan, photographed, priced
+// and stocked once, with many vehicles mapped onto it. That inversion is the whole
+// reason these tables exist; before it, the Fit Finder answered "yes" for all
+// 4,671 car/year combinations in `cars.ts` on no evidence at all.
+
+/// A physical floor pan — the unit of stock and of sale. `fitment-engine/tasks.md`
+/// §6.1–6.2; `fitment-engine/design.md` § Data Models; the grouping spec's "The
+/// rule that makes it work".
+///
+/// A row may only be `status: "confirmed"` once somebody has physically checked
+/// this floor pan — fitted it, or had a supplier or an OEM record confirm it in
+/// writing. That is locked decision 2 and the whole brand: the refusal is only
+/// worth something if the yes is reliable, and a wrong yes costs more than a
+/// hundred honest no's.
+model Layout {
+  id           String @id @default(uuid())
+  /// `^[A-Z0-9]{2,3}-\d{4}-\d{4}$` — "CRY-2007-2011". Ticker, first year, last
+  /// year; `INTERNAL_CODE_PATTERN` in `src/data/fitment.ts` is the authority and
+  /// `assertLiveLayouts` refuses the build when a confirmed row breaks it.
+  ///
+  /// **Indexed but deliberately NOT unique.** `internalCode` is the WhatsApp ref,
+  /// and a ref that resolved to two layouts would be worse than no ref — so
+  /// uniqueness is the invariant, not the index. But the constraint cannot be
+  /// global: `fitment-catalogue.ts` derives the code from the model name and
+  /// measures 13 collisions across the 212 preloaded rows (`CLA-2000-2026` is both
+  /// a Corolla and a Mercedes CLA; `FER-2000-2026` is a Fortuner, a Frontier and a
+  /// Freelander). Its own header records the decision — *"It is not guaranteed
+  /// unique, and it is not meant to be. `internalCode` is only validated on
+  /// Confirmed rows, so two drafts may share one"* — and `npm run fitment:report`
+  /// lists the collisions so they are never a surprise.
+  ///
+  /// What enforces uniqueness is therefore the confirmed-row gate:
+  /// `assertLiveLayouts` throws on a duplicate among live layouts today, and
+  /// `scripts/fitment-guard.mjs` fails the database with a non-zero exit when two
+  /// `confirmed` Layouts share a code. A partial unique index (`WHERE status =
+  /// 'confirmed'`) is the database-level version of the same rule and belongs with
+  /// the admin console, where the thing being guarded becomes an ordinary save.
+  internalCode String
+  /// "Toyota Corolla 2009–2013". Customer-facing, never the code: the customer does
+  /// not see the ref, the WhatsApp message does.
+  customerName String
+
+  /// Singular and required — locked decision 4: one layout is one make, and a
+  /// cross-brand platform match is two layouts cross-referenced in `notes`.
+  /// Restrict, not Cascade: deleting a make must not delete published claims.
+  makeId String
+  make   Make   @relation(fields: [makeId], references: [id], onDelete: Restrict)
+
+  /// "draft" | "inferred" | "confirmed" | "retired". Only `confirmed` is visible
+  /// to `/fit-check`; `retired` is retained forever so an old WhatsApp ref still
+  /// resolves to something useful (`fitment-engine` §10.6).
+  status String @default("draft")
+
+  /// "physical-fitting" | "supplier-confirmation" | "oem-floor-pan" — the three
+  /// things that count as evidence, and nothing else does. All three nullable
+  /// rather than required, because a `draft` has no evidence yet; the gate is
+  /// "confirmed implies evidence + confirmationNote + confirmedOn", which is a
+  /// constraint about a transition and belongs in the Server Action that performs
+  /// it (`fitment-engine` §9.7), not in a NOT NULL that would also block the row's
+  /// creation.
+  evidence         String?
+  /// The provenance note beside the evidence value.
+  evidenceNote     String?
+  /// The owner's own words. Mandatory on `confirmed` — it is the one thing that
+  /// cannot be inferred, and a week later it is the only record of what was
+  /// actually checked.
+  confirmationNote String?
+  confirmedOn      DateTime?
+
+  /// "2–3 days". Nullable rather than required because the honest pre-confirmation
+  /// answer is "To be confirmed", and a column that forces a value would push
+  /// somebody to type a number nobody has measured.
+  leadTime  String?
+  /// "sedan" | "suv" | "wagon" | "hatch" | "van" | "pickup" | "unknown". Part of
+  /// what a fitment claim means, so "unknown" is legitimate only pre-confirmation.
+  bodyType  String?
+  /// "lhd" | "rhd" | "unknown". Recorded, never used to refuse a mapping: the mat
+  /// is usually the same for a tokunbo import (`fitment-engine` §9.10).
+  driveSide String?
+  /// "footwell" | "boot". Decides whether a `boot_liner` variant is legal here.
+  kind      String  @default("footwell")
+  /// Free text for the verified cross-brand match that becomes two layouts.
+  notes     String?
+
+  variants   LayoutVariant[]
+  images     ImageSet[]
+  mappings   Mapping[]
+  /// `SetNull` is the one soft reference in this schema: an Exclusion is a written
+  /// refusal a customer is entitled to argue with, so it must outlive the layout it
+  /// was written against.
+  exclusions Exclusion[]
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Not unique, for the reason above.
+  @@index([internalCode])
+  /// The admin console's primary list: every layout for a make, live ones first.
+  @@index([makeId, status])
+  /// The dashboard's headline count, and `/fit-check`'s single gate.
+  @@index([status])
+}
+
+/// What is actually sold for a floor pan, and at what price. `fitment-engine`
+/// §6.1, §6.7; `commerce-backend/design.md` § The `ProductSlug` union.
+///
+/// Option B: `productId` is an open reference into the catalogue and `kind` is a
+/// separate semantic axis, so `full_set` may resolve to `seat-covers` on one layout
+/// and `full-bundle` on another — a floor pan physically fitted for covers has not
+/// necessarily been fitted for a bundle. That choice is why `Product` shipped in
+/// `init_commerce_model`, one migration before any of this.
+model LayoutVariant {
+  id String @id @default(uuid())
+
+  layoutId  String
+  layout    Layout  @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  productId String
+  /// Restrict, like `OrderItem.productId`: a catalogue product somebody has been
+  /// sold against must not vanish.
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  /// "single_layer" | "double_layer" | "boot_liner" | "full_set".
+  kind String
+
+  /// Locked decision 3: the price attaches to the layout variant, not to the car
+  /// or the product. Authoritative the moment this row exists — which is why
+  /// `Make.defaultTier` is only ever the value a first variant is seeded FROM.
+  priceFrom     Int
+  /// Null unless this same floor pan genuinely covers both row counts. A 7-seat
+  /// Highlander does not share a 5-seat floor pan, so the surcharge is a fact about
+  /// the pan and not a product-wide modifier (`fitment-engine` §3.4).
+  rowsSurcharge Int?
+  /// "in_stock" | "made_to_order" | "out_of_stock". "made_to_order" is the only
+  /// value this repository can honestly assert: nothing here establishes stock for
+  /// a specific car.
+  stockState    String @default("made_to_order")
+
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One row per (pan, product, kind). Option B keeps `kind` independent of
+  /// `productId`, so the constraint stops at the pair rather than at the product
+  /// alone — and it is what makes the seed's upsert idempotent.
+  @@unique([layoutId, productId, kind])
+  @@index([productId])
+}
+
+/// Joins a Vehicle — a name a customer types — onto the floor pan that covers it.
+/// `fitment-engine` §6.1–6.2; §9.4's generation-line guard reads this table.
+///
+/// A join row rather than a boolean on `Vehicle` because the two facts are
+/// different and only one of them may be asserted: *this car is covered* and *we
+/// have checked this car*. `confidence` is the second, and it starts at "inferred"
+/// for all 212 preloaded rows.
+model Mapping {
+  id String @id @default(uuid())
+
+  layoutId  String
+  layout    Layout  @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  /// "confirmed" | "inferred". `/fit-check` requires `confirmed`; `inferred` rows
+  /// are the reviewable queue and can never reach a customer.
+  confidence   String    @default("inferred")
+  evidenceNote String?
+  /// Who asserted it. One string, not a user table: locked decision 1 is a single
+  /// operator, and a permissions table would be reintroduced by the first person
+  /// who wanted a second seat.
+  confirmedBy  String?
+  confirmedOn  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The join may only exist once per pair. Without it, one vehicle can sit on two
+  /// layouts and "which floor pan fits?" stops having an answer — the exact failure
+  /// the admin's grouping conflict guard exists to refuse before it reaches here.
+  @@unique([layoutId, vehicleId])
+  @@index([vehicleId])
+}
+
+/// Photography for one floor pan, one angle. `fitment-engine` §6.1 and §11.
+///
+/// Separate from `Product.images: String[]`, which survives for `/shop` and the PDP.
+/// This is the fit-level axis: a generic product shot next to a per-car claim is
+/// the thing that must never happen, so the two are kept apart rather than merged.
+model ImageSet {
+  id String @id @default(uuid())
+
+  layoutId String
+  layout   Layout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+
+  /// "driver" | "passenger" | "rear" | "boot" | "detail" | "comparison".
+  /// `comparison` is always optional; a missing photograph never suppresses a fit
+  /// result or its price (`fitment-engine` §11.4).
+  angle String
+  src   String
+  /// Required and real. The gallery renders `alt=""` on images with content today.
+  alt   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One slot per angle per layout, which is what makes the image manager a form
+  /// rather than a list (`fitment-engine` §11.1).
+  @@unique([layoutId, angle])
+}
+
+/// A car we specifically looked at and know we cannot fit. `fitment-engine` §2.12,
+/// §8.6; the grouping spec's "looks like it belongs, does not fit".
+///
+/// Different from a refusal that says "not measured yet": this row says "checked,
+/// and it does not work", and `checkFit` short-circuits on it before any layout is
+/// considered so the customer gets that specific sentence instead of a generic one.
+model Exclusion {
+  id String @id @default(uuid())
+
+  /// Named as make and model rather than as a `vehicleId`, because an exclusion is
+  /// frequently about a car we have no `Vehicle` row for at all — a hybrid variant,
+  /// a 3rd-row derivative, a 7-seat against a 5-seat floor pan. Forcing a Vehicle
+  /// row would mean inventing one.
+  make     String
+  model    String
+  yearFrom Int
+  yearTo   Int
+  /// Optional discriminator: "hybrid", "3rd row", "7-seat".
+  trim     String?
+  layoutId String?
+  layout   Layout? @relation(fields: [layoutId], references: [id], onDelete: SetNull)
+
+  /// **Written, not generated.** A customer is entitled to argue with a refusal, and
+  /// a generated reason is an argument they win. This is the column the whole
+  /// exclusion screen exists to keep filled in.
+  reason String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The lookup `checkFit` performs.
+  @@index([make, model])
+  @@index([layoutId])
+}
+
+/// One refused fit check. `fitment-engine` §6.3 and §13; the database home for
+/// what `src/lib/demand-log.ts` still writes to an NDJSON file.
+///
+/// **Refusals only.** Nothing in this table asserts that a car is available, so it
+/// can never be read back as a claim that a fit was sold. Ranked by volume it is
+/// the sourcing roadmap: the most-requested unstocked model is the next one to
+/// confirm (`fitment-engine` §13.1).
+model DemandLog {
+  id String @id @default(uuid())
+
+  make  String
+  model String
+  year  Int
+
+  /// "NOT_STOCKED" | "UNKNOWN" — the only two outcomes that write a row. A `FITTED`
+  /// is an order, and an order belongs in `Order`.
+  outcome String
+  /// The server's own refusal sentence, verbatim, so the log cannot drift from the
+  /// copy the customer actually read.
+  reason  String
+
+  /// Present only when the visitor chose to leave a number. Voluntary, and never
+  /// required by the request path: capturing a phone the visitor did not offer is a
+  /// different decision from logging a refusal.
+  phone String?
+
+  /// Layouts confirmed at the moment of the refusal. It is what lets a growing
+  /// `confirmed` count be read as coverage catching up with demand rather than as
+  /// two unrelated numbers.
+  liveLayoutsAtThisTime Int
+
+  // First-party attribution. Mirrors `Order`'s reserved columns exactly and
+  // deliberately defines no key of its own — `ad-landing-and-tracking` owns the
+  // taxonomy, `fitment-engine` §13.3 — and omits `fbclid`/`gclid` because `Order`
+  // omits them too. Nullable and empty while the NDJSON writer still owns the
+  // refusal path: `src/lib/demand-log.ts` records none of these today (its §5.2
+  // deviation), so a column that claims otherwise would be a lie about the data.
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  referrer    String?
+  landingPath String?
+
+  createdAt DateTime @default(now())
+
+  /// The grouping the demand screen performs: rank by make + model.
+  @@index([make, model])
+  /// The 7/30/all-days window filter (§13.2).
+  @@index([createdAt])
+}
+
+/// Who changed what, when, and from what to what. `fitment-engine` §6.3 and §10.1.
+///
+/// **Append-only, by construction.** No `updatedAt`, because nothing may ever
+/// rewrite a row: the entry is the record, and a mutable audit log is not one.
+/// `entity`/`entityId` are deliberately loose strings rather than a nullable
+/// foreign key per target table — a real FK would need one column for every model
+/// this schema grows, and an `onDelete: Cascade` on any of them would delete the
+/// audit record along with the thing it describes, which is the one loss this table
+/// exists to prevent.
+model AuditEntry {
+  id String @id @default(uuid())
+
+  /// The model the change touched: "Layout" | "LayoutVariant" | "Mapping" | …
+  entity   String
+  entityId String
+
+  /// "create" | "update" | "confirm" | "split" | "retire" | "delete".
+  action String
+  /// The single field that moved, or null when the whole row did. The before/after
+  /// pair is stored per entry so a fat-fingered status change is legible a week
+  /// later without reconstructing anything.
+  field  String?
+  before Json?
+  after  Json?
+
+  /// `confirmationNote` is stored here verbatim beside `confirmedOn` (§10.2), and
+  /// `split` entries carry the parent code, the child code and the exact moved
+  /// Vehicle set (§9.6).
+  note String?
+
+  /// One name, not an identity: locked decision 1 is a single operator, and the
+  /// Basic-auth username is the only actor that can exist. Null when the change
+  /// came from the seed rather than from a person.
+  who String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
 }

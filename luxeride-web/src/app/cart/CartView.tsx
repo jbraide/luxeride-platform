@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import ProductPlaceholder from "@/components/ProductPlaceholder";
 import StorageSkeleton from "@/components/StorageSkeleton";
 import { useCartStore } from "@/store/cart";
-import { fmtNaira } from "@/lib/pricing";
+import { fmtNaira, MAX_LINE_QTY } from "@/lib/pricing";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { track } from "@/lib/analytics";
 import { LinkButton } from "@/components/Button";
@@ -53,52 +54,68 @@ export default function CartView() {
       <h1 className="font-display text-2xl font-semibold">Your Cart</h1>
 
       <div className="mt-6 space-y-3">
-        {items.map((item) => (
-          <div key={item.id} className="flex gap-4 rounded-xl border border-line bg-panel p-4">
-            {item.image && (
-              <div className="relative h-20 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-panel-2">
-                {/* Client Component: it cannot read the media manifest, so the
-                    branded placeholder stands in until photography lands
-                    (storefront-catalog §9, blocked on D-12). */}
-                <ProductPlaceholder name={item.productName} showLabel={false} />
-              </div>
-            )}
-            <div className="flex-1">
-              <p className="font-display font-semibold">{item.productName}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                {item.year} {item.brand} {item.model}
-                {item.rows ? ` · ${item.rows}-Row` : ""}
-              </p>
-              <div className="mt-2 flex items-center gap-3">
-                <div className="flex items-center rounded-lg border border-white/15">
+        {items.map((item) => {
+          // The cart holds one row per product per car (`cart-checkout` §7.1), so
+          // two rows can carry the same product name — a 2015 Camry and a 2019
+          // Camry. The controls therefore name the car as well: with the product
+          // alone, every "Increase quantity of Double Layer Mats" on the page
+          // was the same control as far as a screen reader was concerned.
+          const car = `${item.year} ${item.brand} ${item.model}`;
+          return (
+            <div key={item.id} className="flex gap-4 rounded-xl border border-line bg-panel p-4">
+              {item.image && (
+                <div className="relative h-20 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-panel-2">
+                  {/* Client Component: it cannot read the media manifest, so the
+                      branded placeholder stands in until photography lands
+                      (storefront-catalog §9, blocked on D-12). */}
+                  <ProductPlaceholder name={item.productName} showLabel={false} />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="font-display font-semibold">{item.productName}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {car}
+                  {item.rows ? ` · ${item.rows}-Row` : ""}
+                </p>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="flex items-center rounded-lg border border-white/15">
+                    <button
+                      aria-label={`Decrease quantity of ${item.productName} for ${car}`}
+                      className="px-3 py-1 text-white/70 hover:text-gold"
+                      // Not disabled at 1: `setLineQty` removes the line at zero,
+                      // which is what §7.2 asks this control to do. It used to be a
+                      // silent no-op here, so a customer at quantity one pressing
+                      // "-" got no line, no change and no explanation.
+                      onClick={() => setQty(item.id, item.qty - 1)}
+                    >
+                      –
+                    </button>
+                    <span className="w-8 text-center font-mono text-sm">{item.qty}</span>
+                    <button
+                      aria-label={`Increase quantity of ${item.productName} for ${car}`}
+                      // Disabled at the ceiling `validateQty` enforces, so the cart
+                      // can never hold a quantity the server would reject whole
+                      // (`cart-checkout` §7.3, `commerce-backend` §5.3).
+                      disabled={item.qty >= MAX_LINE_QTY}
+                      className="px-3 py-1 text-white/70 hover:text-gold disabled:cursor-not-allowed disabled:text-white/25 disabled:hover:text-white/25"
+                      onClick={() => setQty(item.id, item.qty + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
                   <button
-                    aria-label={`Decrease quantity of ${item.productName}`}
-                    className="px-3 py-1 text-white/70 hover:text-gold"
-                    onClick={() => setQty(item.id, item.qty - 1)}
+                    aria-label={`Remove ${item.productName} for ${car} from cart`}
+                    onClick={() => removeItem(item.id)}
+                    className="text-xs text-muted hover:text-white"
                   >
-                    –
-                  </button>
-                  <span className="w-8 text-center font-mono text-sm">{item.qty}</span>
-                  <button
-                    aria-label={`Increase quantity of ${item.productName}`}
-                    className="px-3 py-1 text-white/70 hover:text-gold"
-                    onClick={() => setQty(item.id, item.qty + 1)}
-                  >
-                    +
+                    Remove
                   </button>
                 </div>
-                <button
-                  aria-label={`Remove ${item.productName} from cart`}
-                  onClick={() => removeItem(item.id)}
-                  className="text-xs text-muted hover:text-white"
-                >
-                  Remove
-                </button>
               </div>
+              <p className="font-mono text-sm text-gold">{fmtNaira(item.unitPrice * item.qty)}</p>
             </div>
-            <p className="font-mono text-sm text-gold">{fmtNaira(item.unitPrice * item.qty)}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-6 flex items-center justify-between border-t border-dashed border-white/15 pt-4">
@@ -111,9 +128,9 @@ export default function CartView() {
           which left the biggest objection on the page unanswered. */}
       <p className="mt-1 text-xs text-muted">
         Delivery is {delivery.range()} depending on your zone.{" "}
-        <a href="/delivery" className="text-gold hover:underline">
+        <Link href="/policies/delivery" className="text-gold hover:underline">
           See delivery
-        </a>
+        </Link>
       </p>
 
       <div className="mt-4">

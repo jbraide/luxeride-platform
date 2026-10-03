@@ -29,6 +29,18 @@ import type { ResolvedZone, RowSelection } from "./order-pricing.ts";
  * the customer sent and not a number anyone supplied. A caller cannot reach
  * `priceOrder()` without a fee the server chose.
  *
+ * WHICH CATALOGUE, AND WHY IT IS A PARAMETER
+ *
+ * The default catalogue is `LOCATIONS`, the static storefront module. That is the
+ * right default for `/checkout`, which renders fee and ETA before a request is
+ * ever made. It is the WRONG catalogue for `POST /api/orders`: §5.5 says the fee
+ * comes from the `Location` **row**, and `Order.locationId` is a foreign key into
+ * that table — an order priced from `LOCATIONS` could carry a fee that no longer
+ * matches any row the order points at. So `validateOrderSubmission` accepts the
+ * catalogue as an argument, and the route handler passes the rows it just read.
+ * Without this the two halves of §5.5 would contradict each other and the
+ * authority would be the static file.
+ *
  * NO EXTERNAL VALIDATION LIBRARY
  *
  * Hand-rolled because the project has zero new dependencies as a rule
@@ -127,6 +139,24 @@ export type OrderFieldPath =
   | "location"
   | "paymentMethod"
   | "lines"
+  /**
+   * The privacy consent control. It is the one field `validateOrderSubmission`
+   * never produces an error for, because it is not sent to the server — the box
+   * gates submission in the browser only. It is on this union anyway because the
+   * union is also the naming convention `/checkout` uses to place an error next
+   * to a control, and a client-only control with no path would be an
+   * unplaceable error.
+   */
+  | "consent"
+  /**
+   * The whole request, as distinct from the whole order. For a body that could
+   * not be read at all — oversized, not JSON, cross-origin, missing
+   * `idempotencyKey`, or a server that could not price anything. It is a path
+   * rather than a free-form key so a caller cannot invent an error the client
+   * would not know how to place, and so the `Record` below keeps accepting only
+   * keys that mean something.
+   */
+  | "request"
   | `lines.${number}.${OrderLineField}`;
 
 export type OrderFieldErrors = Partial<Record<OrderFieldPath, string>>;
@@ -323,6 +353,11 @@ function validateYear(raw: unknown): { ok: true; value: string } | { ok: false; 
 /**
  * Narrow and bound a whole submission.
  *
+ * `zones` is the catalogue the delivery zone is resolved against — `LOCATIONS`
+ * for the storefront, the `Location` rows for `POST /api/orders`. See the header
+ * note on why the server must not read the static module. Every validation below
+ * is unconditional regardless of what a UI already checked.
+ *
  * Returns every error it found rather than the first, because a form that
  * reveals one field at a time makes a customer play whack-a-mole to discover
  * they also typed a bad quantity on line 3. The submission is refused whole
@@ -333,7 +368,10 @@ function validateYear(raw: unknown): { ok: true; value: string } | { ok: false; 
  * silently collapsing two lines on the server would change what was ordered
  * without telling anyone.
  */
-export function validateOrderSubmission(input: unknown): ValidateOrderResult {
+export function validateOrderSubmission(
+  input: unknown,
+  zones: readonly ZoneCatalogueEntry[] = LOCATIONS,
+): ValidateOrderResult {
   const errors: OrderFieldErrors = {};
 
   if (!isPlainObject(input)) {
@@ -357,7 +395,7 @@ export function validateOrderSubmission(input: unknown): ValidateOrderResult {
   // there is no `zone` alias: a payload carrying `zone: { fee: 0, … }` is a
   // payload trying to choose its own delivery charge, and the only correct
   // response to one is a refusal, not a convenient fallback field.
-  const zone = validateZone(input.location);
+  const zone = validateZone(input.location, zones);
   if (!zone.ok) errors.location = zone.error;
 
   const paymentMethod = validatePaymentMethod(input.paymentMethod);

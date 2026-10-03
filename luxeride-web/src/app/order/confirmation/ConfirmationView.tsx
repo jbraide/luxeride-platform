@@ -13,15 +13,37 @@ import { readAttribution } from "@/lib/analytics/attribution";
 import { whatsappLink, recoveryMessage } from "@/lib/whatsapp";
 
 /**
- * The thank-you screen (`ad-landing-and-tracking` §9).
+ * The thank-you screen (`ad-landing-and-tracking` §9, `cart-checkout` §7.1–7.8).
  *
  * It looks the order up BY REFERENCE rather than reading a single `lastOrder`,
- * so a second order does not erase the first. Three states:
+ * so a second order does not erase the first. Three states, from Design Decision
+ * 2, and all three occur in normal use:
  *
  *   - the order is stored -> the summary, with `Lead` fired at most once per ref
  *   - a ref in the URL but no stored order -> a RECOVERY screen addressed to that
  *     ref, never "No recent order found"
  *   - neither -> three actions, and no implication that an order was lost
+ *
+ * WHAT CHANGED AT M6.7/M6.10, AND WHY
+ *
+ * 1. **The string "Order sent" is gone.** It was an app-only regression: the
+ *    prototype's `submitCheckout()` only called `window.open` and claimed
+ *    nothing, and `cart-checkout` requirement 1.1 says the site must describe an
+ *    order as PREPARED AND HANDED OFF, never received, confirmed or dispatched.
+ *    The site cannot observe WhatsApp, so it cannot know any of those things.
+ * 2. **The tick is gated on `order.persisted`.** Requirement 1.4: while no
+ *    server-confirmed order record exists, render no success checkmark. Before
+ *    M6.7 every record was client-computed and no server had seen one, so the
+ *    tick was unconditional and unearned. Now it appears only for an order the
+ *    server priced and stored — and §13.2 records that this is where a
+ *    server-CONFIRMED order (the webhook's `confirmed`) will first justify it.
+ * 3. **The zone ETA and a re-send button were added** (§7.4). The re-send
+ *    reopens the same conversation with the same text, read off the record.
+ *
+ * This screen is now the fallback, not the destination: `/checkout` navigates to
+ * `/order/<reference>`, which reads the database, and
+ * `src/app/order/confirmation/page.tsx` redirects here-with-a-ref to it. What
+ * remains here is the no-reference case and the same-device recovery.
  */
 export default function ConfirmationView() {
   const searchParams = useSearchParams();
@@ -57,6 +79,13 @@ export default function ConfirmationView() {
   }
 
   // Ref present but no stored order: the RECOVERY screen (§7.4).
+  //
+  // `/order/confirmation?ref=…` now REDIRECTS to `/order/<ref>`, which reads the
+  // database and asks for the phone number, so this branch is reached only when
+  // the redirect is bypassed — a client-side navigation here without the
+  // parameter surviving, or a bot following the old URL. It is kept because §7.1
+  // asks for three branches and because "we cannot see it here" is still true
+  // of the local store even when the server has it.
   if (!order && ref) {
     const campaign = readAttribution()?.campaign;
     return (
@@ -134,12 +163,26 @@ export default function ConfirmationView() {
 
   return (
     <div className="mx-auto max-w-xl px-5 py-14 text-center">
-      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gold text-2xl text-gold">
-        ✓
-      </div>
-      <h1 className="font-display text-2xl font-semibold">Order sent — check WhatsApp</h1>
+      {/* Requirement 1.4 / §7.3: the tick renders ONLY for a record the server
+          priced and stored. An unpersisted record exists in the WhatsApp thread
+          and nowhere else, and a checkmark for it is exactly the unearned
+          promise this screen was rebuilt to remove. */}
+      {order.persisted && (
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gold text-2xl text-gold">
+          ✓
+        </div>
+      )}
+      <h1 className="font-display text-2xl font-semibold">
+        {order.persisted
+          ? "Your order is priced and on its way to us"
+          : "Your order is priced and waiting on WhatsApp"}
+      </h1>
+      {/* Requirement 1.1: prepared and handed off. Never received, confirmed,
+          accepted or dispatched — the site cannot observe any of those. */}
       <p className="mt-2 text-sm text-muted">
-        We&apos;ll confirm dispatch once you reply. Keep this reference:
+        {order.persisted
+          ? "We hold the record and will confirm on WhatsApp before dispatch. Keep this reference:"
+          : "We could not save a copy on our side, so the WhatsApp message is the only record. Keep this reference:"}
       </p>
       <button
         type="button"
@@ -163,7 +206,10 @@ export default function ConfirmationView() {
           </div>
         ))}
         <div className="flex justify-between border-t border-dashed border-white/15 pt-2 text-sm">
-          <span className="text-muted">Delivery ({order.location})</span>
+          <span className="text-muted">
+            Delivery ({order.location})
+            {order.locationEta ? ` — ${order.locationEta}` : ""}
+          </span>
           <span className="font-mono">{order.shippingFee ? fmtNaira(order.shippingFee) : "Free"}</span>
         </div>
         {order.discount > 0 && (
@@ -178,14 +224,28 @@ export default function ConfirmationView() {
         </div>
       </div>
 
+      {/* §7.4: the re-send button, opening the SAME conversation with the SAME
+          text. Read off the record rather than rebuilt, so what the customer
+          sends now is character-for-character what they sent the first time. */}
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+        <a
+          href={whatsappLink(order.whatsappMessage)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() =>
+            track("whatsapp_cta_clicked", { ctaType: "checkout_order", location: "confirmation_resend" })
+          }
+          className="inline-flex w-full items-center justify-center rounded-xl border border-white/25 px-5 py-3.5 text-sm font-semibold hover:border-gold hover:text-gold sm:w-auto sm:px-8"
+        >
+          Re-send on WhatsApp
+        </a>
         <LinkButton href="/shop" className="sm:w-auto sm:px-8">
           Continue Shopping
         </LinkButton>
-        <Link href="/" className="text-sm text-muted hover:text-white">
-          Back to Home
-        </Link>
       </div>
+      <Link href="/" className="mt-6 inline-block text-sm text-muted hover:text-white">
+        Back to Home
+      </Link>
     </div>
   );
 }

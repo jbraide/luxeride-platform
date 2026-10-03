@@ -61,6 +61,23 @@ export type RowSelection = "2" | "3" | null;
 export const PREPAY_DISCOUNT = 2000;
 
 /**
+ * What a zero naira figure is called in customer-facing text.
+ *
+ * `cart-checkout` §2.1 places this in `src/lib/pricing.ts`. It is here instead
+ * because `src/lib/pricing.ts` is owned by another agent this round and must not
+ * be edited from here; the two money libraries are also the ones that own the
+ * "what does a zero fee look like" question. §2.1 is a one-line move, and it must
+ * be a move rather than a second declaration — two exported constants with the
+ * same value is how they drift.
+ *
+ * `cart-checkout` requirement 3.7: print "Free" rather than `₦0`. A `wa.me`
+ * message that says "incl. ₦0 delivery" reads like a broken quote, and prepay
+ * orders charge no fee at all, so this string is now the normal case for them
+ * rather than an edge case.
+ */
+export const ZERO_FEE_LABEL = "Free";
+
+/**
  * The `Product` columns this module prices from, and nothing else.
  *
  * Narrower than `Product` in `src/data/products.ts` on purpose: the PDP copy,
