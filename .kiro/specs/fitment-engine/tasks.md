@@ -121,13 +121,13 @@ lost to the next reboot. Moved to `~/.local/state/luxeride/demand.ndjson`.
   - _Requirements: 1.1, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 12.1, 13.2, 17.1, 19.1, 19.7, 19.8, 20.1_
 
 - [ ] 7. Phase 1 — admin authentication with exactly one operator
-  - [ ] 7.1 Create `src/lib/admin-auth.ts` exporting `verifyAdminCredentials()` — constant-time compare against `ADMIN_USER` and a `scrypt$<saltHex>$<hashHex>` `ADMIN_PASSWORD_HASH` from the environment, using `node:crypto` so **no dependency is added** _(P1 — source-doc Phase 1)_
-  - [ ] 7.2 Create `src/proxy.ts` exporting a `proxy` function with `export const config = { matcher: ['/admin/:path*'] }`; return `401` with `WWW-Authenticate: Basic realm="LuxeRide Admin"` when the header fails. Next 16 renamed `middleware.ts` to `proxy.ts`, and only one is supported per project _(P1 — source-doc Phase 1)_
-  - [ ] 7.3 Add `requireAdmin()` to `src/lib/admin-auth.ts` and call it as the **first statement** of every mutating Server Action — render-time gating is not a security boundary, because an action is a POST reachable by anyone who can send one _(P1 — source-doc Phase 1)_
-  - [ ] 7.4 Add `scripts/hash-admin-password.mjs` using `crypto.scryptSync` to produce the env value; `jose`, `iron-session` and `server-only` are all verified **not installed**, which is why the Basic Auth + re-check option was taken over a session library _(P1 — source-doc Phase 1)_
-  - [ ] 7.5 Add `ADMIN_USER` and `ADMIN_PASSWORD_HASH` to `luxeride-web/.env` with placeholder values and document them; `luxeride-web/.env` currently holds only a placeholder `DATABASE_URL` _(P1 — source-doc Phase 1)_
-  - [ ] 7.6 Build **no** roles, permissions, permission matrix or second editor seat, and record the decision so a later helper does not quietly reintroduce them _(P1 — source-doc Phase 1)_
-  - [ ] 7.7 Add `403` handling for an authenticated-but-unauthorised action and a `401` response that renders no layout, price, mapping or demand data _(P1 — source-doc Phase 1)_
+  - [x] 7.1 Create `src/lib/admin-auth.ts` exporting `verifyAdminCredentials()` — constant-time compare against `ADMIN_USER` and a `scrypt$<saltHex>$<hashHex>` `ADMIN_PASSWORD_HASH` from the environment, using `node:crypto` so **no dependency is added** _(P1 — source-doc Phase 1)_ **(verified.)** `src/lib/admin-auth.ts` exports `verifyAdminCredentials()`, comparing the user and the `scrypt$<saltHex>$<hashHex>` hash in constant time via `crypto.timingSafeEqual` on equal-width buffers — comparing raw strings with `===` leaks how many leading characters were right, which is enough to recover a password one character at a time. Every failure returns `false` and explains nothing, so a bad user and a bad password are indistinguishable.
+  - [x] 7.2 Create `src/proxy.ts` exporting a `proxy` function with `export const config = { matcher: ['/admin/:path*'] }`; return `401` with `WWW-Authenticate: Basic realm="LuxeRide Admin"` when the header fails. Next 16 renamed `middleware.ts` to `proxy.ts`, and only one is supported per project _(P1 — source-doc Phase 1)_ **(verified live.)** `src/proxy.ts` — Next 16 renamed Middleware to Proxy, confirmed in `node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md`, which also states Proxy "should not be your only line of defense". Matcher `/admin/:path*`. Measured: no credentials 401, wrong password 401, wrong user 401, correct credentials 200, and public routes unaffected.
+  - [x] 7.3 Add `requireAdmin()` to `src/lib/admin-auth.ts` and call it as the **first statement** of every mutating Server Action — render-time gating is not a security boundary, because an action is a POST reachable by anyone who can send one _(P1 — source-doc Phase 1)_ **(verified: `requireAdmin(request)` throws rather than returning a falsy value, so a caller cannot forget to check the result and cannot write `await requireAdmin()` and ignore it. Nothing mutating exists yet — the admin console is read-only today — so this is the boundary the first Server Action will call.)**
+  - [x] 7.4 Add `scripts/hash-admin-password.mjs` using `crypto.scryptSync` to produce the env value; `jose`, `iron-session` and `server-only` are all verified **not installed**, which is why the Basic Auth + re-check option was taken over a session library _(P1 — source-doc Phase 1)_ **(verified: `scripts/hash-admin-password.mjs`, interactive with the echo suppressed or non-interactive. Output measured to verify: the correct pair returns true, a wrong password false, a wrong user false.)**
+  - [x] 7.5 Add `ADMIN_USER` and `ADMIN_PASSWORD_HASH` to `luxeride-web/.env` with placeholder values and document them; `luxeride-web/.env` currently holds only a placeholder `DATABASE_URL` _(P1 — source-doc Phase 1)_ **(verified: `ADMIN_USER` and `ADMIN_PASSWORD_HASH` are in `.env.local` (gitignored, never committed) and documented with placeholders in `.env.example`, which is the committed record of which variables exist.)**
+  - [x] 7.6 Build **no** roles, permissions, permission matrix or second editor seat, and record the decision so a later helper does not quietly reintroduce them _(P1 — source-doc Phase 1)_ **(verified by construction: there are no roles, no permissions, no permission matrix and no second seat anywhere. `src/proxy.ts` authenticates and then returns `NextResponse.next()` with a comment saying why there is no authorisation step to add — locked decision 1 gives exactly one operator, so there is no second role to authorise against. The comment exists so a later helper does not quietly reintroduce one.)**
+  - [x] 7.7 Add `403` handling for an authenticated-but-unauthorised action and a `401` response that renders no layout, price, mapping or demand data _(P1 — source-doc Phase 1)_ **(verified: the 401 body is the single line "Authentication required." with `Cache-Control: no-store`; grep for layout, price, mapping, demand, vehicle, Toyota and luxe finds zero hits, so nothing behind the door is disclosed. Authenticated-but-unauthorised cannot arise with one operator, and `/admin/<unknown>` returns 404 after passing the gate.)**
   - _Requirements: 5.7, 14.1, 14.2, 14.4_
 
 - [ ] 8. Phase 1 — the admin console, six screens
@@ -225,3 +225,34 @@ dev server is already running"*. The shared-`.next/` hazard is therefore broader
 workaround used here was to copy the app to a scratch directory, symlink `node_modules`, and pass
 `--webpack` because Turbopack rejects a `node_modules` symlink pointing outside the project root. Plan
 for that rather than assuming two agents can each have a dev server.
+
+### A defect found while testing 7.1–7.5, and it is a nasty one (2026-10-03)
+
+**The credential silently truncated, and every login failed with a 401 and no explanation.**
+
+`scrypt$<saltHex>$<hashHex>` — the format this spec mandates — contains two dollar signs, and **Next's
+env loader does shell-style variable expansion**. So `ADMIN_PASSWORD_HASH="scrypt$3055…"` was read as
+`scrypt` followed by a variable named `3055…` that does not exist, and arrived in the proxy as the
+six-character string `scrypt`. The verifier correctly returned false for every attempt.
+
+Measured, same file, both loaders, side by side:
+
+| Value in `.env.local` | Next's loader | Node's `--env-file` |
+|---|---|---|
+| `"a$b"` | `a` — **silently truncated** | `a$b` |
+| `"a\$b"` | `a$b` | `a\$b` — backslash kept, not unescaped |
+
+**The two loaders disagree, which is the part worth remembering.** `\$` is Next's escape for a literal
+dollar, and Node does not implement it. So:
+
+- `.env.local` must escape the dollars, and `scripts/hash-admin-password.mjs` now prints the **escaped**
+  form so nobody pastes an unescaped one.
+- `src/lib/admin-auth.ts` strips a stray `\$` before parsing, so the value verifies under **either**
+  loader. A credential that works with `next dev` and fails under a Node script — or the reverse — is
+  exactly the kind of difference nobody debugs twice.
+- **The same hazard applies to every variable whose value contains a dollar sign, `DATABASE_URL`
+  included.** A database password containing `$` would be expanded by the app and passed through intact
+  by the Prisma CLI, so the two would disagree about which database they were talking to.
+
+`.env.example` documents both variables and the escaping requirement, because that file is the committed
+record of what the app needs.
