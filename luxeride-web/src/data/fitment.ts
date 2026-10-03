@@ -380,7 +380,13 @@ export type FitResult =
       reason: string;
     };
 
-function norm(value: string): string {
+/**
+ * Exported because `src/lib/fitment-live.ts` — the database-backed lookup added by
+ * `fitment-engine` §6.10 — has to match make and model the same way this module
+ * does. Two normalisers would eventually disagree about "Mercedes Benz" and the
+ * two lookups would recognise different cars.
+ */
+export function norm(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
@@ -397,7 +403,40 @@ function findVehicle(make: string, model: string): Vehicle | undefined {
 }
 
 /**
- * The single lookup behind the Fit Finder.
+ * The refusal copy, defined once.
+ *
+ * These five sentences are product, not formatting. A refusal is the only
+ * sourcing signal this company has (locked decision 2), the WhatsApp message the
+ * customer sends quotes the reason verbatim, and the demand log stores the exact
+ * string the visitor read — so the wording is the thing a decision gets made
+ * from. They were inline in `checkFit` until §6.10 added a second, database-backed
+ * lookup, and two copies of five sentences is precisely how the file-based log and
+ * the admin screen end up disagreeing about why a car was refused.
+ */
+export const FIT_REFUSAL = {
+  /** No make, no model, or an unusable year. */
+  incomplete: "That is not enough to check a fit.",
+  /** No `Vehicle` row: nobody has ever measured a car with this name. */
+  notMeasured: (make: string, model: string) =>
+    `We have not measured a floor pan for the ${make} ${model} yet.`,
+  /** Recognised, but outside the years we cover. */
+  outsideYears: (label: string, yearFrom: number, yearTo: number, year: number) =>
+    `We cover the ${label} ${yearFrom}–${yearTo}. A ${year} is outside that range.`,
+  /** Recognised and in range, but nothing confirmed covers it. */
+  notConfirmed: (label: string, year: number) =>
+    `We do not have a confirmed fit for the ${label} ${year} yet.`,
+  /** Confirmed, but no variant carries a usable price, so there is nothing to quote. */
+  nothingToQuote: (label: string, year: number) =>
+    `We have the ${label} ${year} measured, but no product to quote for it yet.`,
+} as const;
+
+/**
+ * The single lookup behind the Fit Finder, over the COMPILE-TIME tables.
+ *
+ * Superseded by `checkFitLive` in `src/lib/fitment-live.ts`, which reads the
+ * database and is what `/api/fit-check` now calls. This one is retained because
+ * the tables below are still the source the build asserts on and the admin
+ * console's inferred baseline is generated from them.
  *
  * Every path that is not a positive, evidenced match returns a refusal. The
  * asymmetry is the whole point: `FITTED` requires a Confirmed layout, a
@@ -406,7 +445,7 @@ function findVehicle(make: string, model: string): Vehicle | undefined {
  */
 export function checkFit({ make, model, year }: FitRequest): FitResult {
   if (!make?.trim() || !model?.trim() || !Number.isFinite(year)) {
-    return { state: "UNKNOWN", reason: "That is not enough to check a fit." };
+    return { state: "UNKNOWN", reason: FIT_REFUSAL.incomplete };
   }
 
   // Exclusions short-circuit BEFORE any Layout is considered: an excluded car is
@@ -426,13 +465,18 @@ export function checkFit({ make, model, year }: FitRequest): FitResult {
   if (!vehicle) {
     return {
       state: "NOT_STOCKED",
-      reason: `We have not measured a floor pan for the ${make} ${model} yet.`,
+      reason: FIT_REFUSAL.notMeasured(make, model),
     };
   }
   if (year < vehicle.yearFrom || year > vehicle.yearTo) {
     return {
       state: "NOT_STOCKED",
-      reason: `We cover the ${vehicle.make} ${vehicle.model} ${vehicle.yearFrom}–${vehicle.yearTo}. A ${year} is outside that range.`,
+      reason: FIT_REFUSAL.outsideYears(
+        `${vehicle.make} ${vehicle.model}`,
+        vehicle.yearFrom,
+        vehicle.yearTo,
+        year,
+      ),
     };
   }
 
@@ -442,7 +486,7 @@ export function checkFit({ make, model, year }: FitRequest): FitResult {
   if (!mapping || !LIVE_LAYOUT_IDS.has(mapping.layoutId)) {
     return {
       state: "NOT_STOCKED",
-      reason: `We do not have a confirmed fit for the ${vehicle.make} ${vehicle.model} ${year} yet.`,
+      reason: FIT_REFUSAL.notConfirmed(`${vehicle.make} ${vehicle.model}`, year),
     };
   }
 
@@ -450,7 +494,7 @@ export function checkFit({ make, model, year }: FitRequest): FitResult {
   if (!layout) {
     return {
       state: "NOT_STOCKED",
-      reason: `We do not have a confirmed fit for the ${vehicle.make} ${vehicle.model} ${year} yet.`,
+      reason: FIT_REFUSAL.notConfirmed(`${vehicle.make} ${vehicle.model}`, year),
     };
   }
 
@@ -468,7 +512,7 @@ export function checkFit({ make, model, year }: FitRequest): FitResult {
   if (variants.length === 0) {
     return {
       state: "NOT_STOCKED",
-      reason: `We have the ${vehicle.make} ${vehicle.model} ${year} measured, but no product to quote for it yet.`,
+      reason: FIT_REFUSAL.nothingToQuote(`${vehicle.make} ${vehicle.model}`, year),
     };
   }
 
@@ -483,12 +527,26 @@ export function checkFit({ make, model, year }: FitRequest): FitResult {
   };
 }
 
-/** Launch metric. With the table empty this is 0, which is the honest number. */
+/**
+ * Launch metric, over the COMPILE-TIME table.
+ *
+ * **DEPRECATED — do not use this to report coverage.** It counts `LIVE_LAYOUTS`,
+ * which is empty and permanent, so it returns 0 no matter how many cars the owner
+ * confirms in the admin console. `liveLayoutCountLive()` in
+ * `src/lib/fitment-live.ts` is the real number and is what the dashboard and the
+ * demand log now read. Both are 0 today, which is why the difference is invisible
+ * until the first confirmation — and why this comment exists.
+ */
 export function liveLayoutCount(): number {
   return LIVE_LAYOUT_IDS.size;
 }
 
-/** The customer-facing names creative aligns to (`ad-landing-and-tracking`). */
+/**
+ * The customer-facing names creative aligns to (`ad-landing-and-tracking`).
+ *
+ * DEPRECATED for the same reason as `liveLayoutCount`: use
+ * `confirmedCustomerNamesLive()`.
+ */
 export function confirmedCustomerNames(): string[] {
   return LIVE_LAYOUTS.map((layout) => layout.customerName).sort();
 }

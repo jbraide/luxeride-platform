@@ -33,7 +33,11 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ logged: false }, { status: 202 });
     }
 
-    logRefusal({ make, model, year, outcome, reason, phone });
+    // Awaited: `logRefusal` reads the confirmed-layout count from the database
+    // (§6.10) and then appends the line. Not awaiting it would put the write after
+    // the response, which is the fire-and-forget loss the log's own header warns
+    // about.
+    await logRefusal({ make, model, year, outcome, reason, phone });
   } catch (error) {
     console.error("demand: could not record the refusal:", error);
   }

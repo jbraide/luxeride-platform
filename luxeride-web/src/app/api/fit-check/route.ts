@@ -1,4 +1,4 @@
-import { checkFit } from "@/data/fitment";
+import { checkFitLive } from "@/lib/fitment-live";
 import { logRefusal, type DemandOutcome } from "@/lib/demand-log";
 import {
   MAX_BODY_BYTES,
@@ -84,13 +84,17 @@ function unknown(validationReason: string): Response {
  * miss is a fact only the client can see.
  *
  * `logRefusal` never throws (§5.4), so this cannot turn a refusal into a 500.
+ *
+ * Async since §6.10: `logRefusal` reads the confirmed-layout count from the
+ * database before it appends, and every caller awaits it so the line is written
+ * before the response goes out.
  */
-function refuse(
+async function refuse(
   outcome: DemandOutcome,
   car: { make: string; model: string; year: number },
   reason: string,
-): Response {
-  logRefusal({ ...car, outcome, reason });
+): Promise<Response> {
+  await logRefusal({ ...car, outcome, reason });
   // `demandLogged` makes the capture observable from the response (§5.6), which
   // is the assertion that would have caught §5.5 going undone. The car is passed
   // through so the refusal names it (§3.4) rather than saying "your car".
@@ -129,10 +133,13 @@ export async function POST(request: Request): Promise<Response> {
     return unknown("That does not look like a valid year.");
   }
 
-  // The lookup itself is wrapped: a malformed internal state or a thrown
-  // assertion must not become a 500 that a caller could read as "yes".
+  // The lookup itself is wrapped: a malformed internal state, an unreachable
+  // database or a thrown assertion must not become a 500 that a caller could read
+  // as "yes". Since §6.10 the lookup reads Postgres, so this guard now covers a
+  // database outage as well — and it resolves to a refusal, which is the direction
+  // that cannot put a fit guarantee on a car nobody measured.
   try {
-    const result = checkFit({ make, model, year });
+    const result = await checkFitLive({ make, model, year });
 
     switch (result.state) {
       case "FITTED":
@@ -149,9 +156,9 @@ export async function POST(request: Request): Promise<Response> {
           variants: result.variants,
         });
       case "NOT_STOCKED":
-        return refuse("NOT_STOCKED", { make, model, year }, result.reason);
+        return await refuse("NOT_STOCKED", { make, model, year }, result.reason);
       default:
-        return refuse("UNKNOWN", { make, model, year }, result.reason);
+        return await refuse("UNKNOWN", { make, model, year }, result.reason);
     }
   } catch (error) {
     // Server-side cause, never sent to the client: a stack trace here would
@@ -161,6 +168,6 @@ export async function POST(request: Request): Promise<Response> {
     // the year was valid — the engine failed, not the request. §5.5 covers
     // "every ... UNKNOWN outcome", and a line naming the car that made the
     // lookup throw is the defect report this engine's refusals exist to produce.
-    return refuse("UNKNOWN", { make, model, year }, "We could not complete that check.");
+    return await refuse("UNKNOWN", { make, model, year }, "We could not complete that check.");
   }
 }

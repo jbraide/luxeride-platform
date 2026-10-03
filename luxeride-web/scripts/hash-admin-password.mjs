@@ -41,6 +41,28 @@ function hash(password) {
   return `scrypt$${salt.toString("hex")}$${derived.toString("hex")}`;
 }
 
+/**
+ * The value as `.env.local` needs it, with the dollars ESCAPED.
+ *
+ * WHY BOTH BRANCHES BELOW NOW ESCAPE, AND WHY THIS IS A BUG FIX RATHER THAN A
+ * COSMETIC ONE: Next's env loader expands `$name`, so an unescaped
+ * `scrypt$3055...` arrives at `src/lib/admin-auth.ts` as **`scrypt`** — six
+ * characters — and every login fails 401 with nothing in the log to explain it.
+ * The interactive branch always escaped; the non-interactive branch printed the
+ * raw form, so the fast path produced a value that silently could not work when
+ * pasted where it belongs. That is exactly what happened on 2026-10-03: the hash
+ * in `.env.local` was replaced from the non-interactive output, and the admin
+ * console 401'd while the password was correct.
+ *
+ * `src/lib/admin-auth.ts` normalises a stray backslash before parsing, so the
+ * escaped form is directly usable as the variable's value and this cannot break a
+ * raw consumer. The escaping is emitted with the reason attached rather than left
+ * for the reader to know.
+ */
+function envValue(password) {
+  return hash(password).replace(/\$/g, "\\$");
+}
+
 const provided = process.argv[2];
 
 if (provided) {
@@ -48,7 +70,8 @@ if (provided) {
     console.error("hash-admin-password: use at least 12 characters. This is the only credential on the console.");
     process.exit(1);
   }
-  console.log(hash(provided));
+  console.log(`ADMIN_PASSWORD_HASH="${envValue(provided)}"`);
+  console.log("\nPaste that line into luxeride-web/.env.local. The \\$ is required: Next expands unescaped dollars in .env files, which would leave the hash as the six characters \"scrypt\".");
 } else {
   // An interactive prompt with the echo suppressed, so the password does not land
   // in the shell's history or in scrollback.
@@ -96,6 +119,6 @@ if (provided) {
   // trap. Next's env loader expands `$name`, so an unescaped `scrypt$3055...`
   // arrives as `scrypt` — six characters — and every login fails 401 with no
   // explanation. Measured on both loaders; see the header of src/lib/admin-auth.ts.
-  console.log(`ADMIN_PASSWORD_HASH="${hash(password).replace(/\$/g, "\\$")}"`);
+  console.log(`ADMIN_PASSWORD_HASH="${envValue(password)}"`);
   console.log("\n(The \\$ above is required: Next expands unescaped dollars in .env files.)");
 }

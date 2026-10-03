@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { liveLayoutCount } from "@/data/fitment";
+import { liveLayoutCountLive } from "@/lib/fitment-live";
 
 /**
  * The demand log.
@@ -34,7 +34,14 @@ export interface DemandEntry {
   reason: string;
   /** Present only when the visitor chose to leave a number. */
   phone?: string;
-  /** Layouts confirmed at the time — lets you see coverage growing. */
+  /**
+   * Layouts confirmed at the time — lets you see coverage growing.
+   *
+   * `-1` when the count could not be read (database unreachable). A sentinel
+   * rather than `0`, because `0` is a real and meaningful value here — it is what
+   * "we have confirmed nothing yet" looks like — and a failed read must not be
+   * silently recorded as that fact.
+   */
   liveLayoutsAtThisTime: number;
 }
 
@@ -52,12 +59,18 @@ const DEFAULT_LOG =
   join(homedir(), ".local", "state", "luxeride", "demand.ndjson");
 
 /**
- * Append one refusal. Synchronous on purpose: the visitor is about to be shown
- * a WhatsApp link, and a fire-and-forget write would be lost if the process
- * exits first.
+ * Append one refusal.
+ *
+ * **Async since `fitment-engine` §6.10**, and every caller awaits it. It used to be
+ * synchronous because the visitor is about to be shown a WhatsApp link and a
+ * fire-and-forget write would be lost if the process exits first — that reasoning
+ * still holds, so the callers were changed to await rather than the guarantee being
+ * dropped. The write itself is still `appendFileSync`.
  *
  * Never throws. Losing a demand-log line must not turn a refusal into a 500 —
- * a customer who cannot order is the problem; a missing log line is not.
+ * a customer who cannot order is the problem; a missing log line is not. That now
+ * covers a database failure too: `liveLayoutCountLive()` is guarded separately
+ * below so a count that cannot be read costs the count and not the refusal.
  *
  * Server-only: `node:fs` is imported at the top level, so this must never be
  * reached from a Client Component. It is called from `src/app/api/demand` and,
@@ -65,15 +78,36 @@ const DEFAULT_LOG =
  * handler is the caller that matters, because it is the one no browser can
  * skip.
  */
-export function logRefusal(entry: Omit<DemandEntry, "at" | "liveLayoutsAtThisTime">): void {
+export async function logRefusal(
+  entry: Omit<DemandEntry, "at" | "liveLayoutsAtThisTime">,
+): Promise<void> {
   try {
     const path = DEFAULT_LOG;
     mkdirSync(dirname(path), { recursive: true });
 
+    // Read from the DATABASE, not from `liveLayoutCount()` in `src/data/fitment.ts`.
+    //
+    // That function counts the compile-time `LIVE_LAYOUTS` table, which is empty
+    // and permanent — so until §6.10 every refusal ever logged recorded
+    // `liveLayoutsAtThisTime: 0`, and would have gone on recording 0 forever, even
+    // after the owner confirmed the first car. The column exists so a growing
+    // confirmed count can be read against demand (`fitment-engine` §13); pinning it
+    // to 0 made that comparison meaningless rather than merely stale.
+    let liveLayoutsAtThisTime: number;
+    try {
+      liveLayoutsAtThisTime = await liveLayoutCountLive();
+    } catch (error) {
+      // The refusal is the data; the count is context. A database hiccup must
+      // cost the context, never the refusal — and must not be written down as a
+      // confident 0.
+      console.error("demand-log: could not read the confirmed-layout count:", error);
+      liveLayoutsAtThisTime = -1;
+    }
+
     const full: DemandEntry = {
       ...entry,
       at: new Date().toISOString(),
-      liveLayoutsAtThisTime: liveLayoutCount(),
+      liveLayoutsAtThisTime,
     };
 
     appendFileSync(path, `${JSON.stringify(full)}\n`, { encoding: "utf8", mode: 0o600 });
