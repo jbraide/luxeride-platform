@@ -11,7 +11,7 @@ import { getProductBySlug } from "@/data/products";
  * ad URL.
  *
  * `{em}...{em}` wraps the phrase that is highlighted in gold. It is split and
- * rendered as a `<span className="text-gold">` server-side — NEVER written with
+ * rendered as a `<span className="text-accent">` server-side — NEVER written with
  * `innerHTML` the way the prototype did
  * (`luxeride-funnel (2).html:729`), so a campaign string can never inject markup.
  */
@@ -21,6 +21,19 @@ export interface CampaignLanding {
   slug: string;
   /** A `PRODUCTS[].slug` — locks the funnel's product step away. */
   productSlug: string;
+  /**
+   * WHICH OPTION of that product the ad is for, when the ad is for one option.
+   *
+   * Added 2026-10-05, and it is what the two mat campaigns became when single layer
+   * and double layer stopped being products. `?product=mats` used to mean "the double
+   * layer mats product"; pointing it at `floor-mats` alone would have silently dropped
+   * what the ad was selling and locked the visitor into whichever layer the funnel
+   * happened to ask for first. So the ad locks the LAYER as well as the product —
+   * the funnel skips the layer question and opens on the option the ad named.
+   *
+   * Optional: most campaigns are for a whole product and name no option.
+   */
+  variationSlug?: string;
   /** Plain text with `{em}` markers around the gold-highlight phrase. */
   headline: string;
   sub: string;
@@ -55,7 +68,11 @@ export const DEFAULT_SUB =
 export const CAMPAIGN_LANDINGS: Record<string, CampaignLanding> = {
   mats: {
     slug: "mats",
-    productSlug: "double-layer-mats",
+    productSlug: "floor-mats",
+    // This ad has always been the double-layer one — it is the campaign the copy
+    // ("fully waterproof") describes and the one `full-bundle` is built on. Saying so
+    // here is what keeps the layer the ad sold from being decided by the funnel.
+    variationSlug: "double-layer",
     headline: "Custom-Fit Mats for {em}Your Exact Car{em}",
     sub: "Laser-measured to your model. Fully waterproof. Pay on delivery.",
     offer: ALLOWED_OFFER,
@@ -63,7 +80,8 @@ export const CAMPAIGN_LANDINGS: Record<string, CampaignLanding> = {
   },
   "single-layer": {
     slug: "single-layer",
-    productSlug: "single-layer-mats",
+    productSlug: "floor-mats",
+    variationSlug: "single-layer",
     headline: "Custom-Fit Mats for {em}Your Exact Car{em}",
     sub: "Laser-measured top-layer protection. Pay on delivery.",
     offer: ALLOWED_OFFER,
@@ -92,6 +110,8 @@ export interface ResolvedLanding {
   /** `null` when the value resolved as a bare product slug rather than an alias. */
   campaignSlug: string | null;
   productSlug: string;
+  /** Which option the ad locked, when it named one. See `CampaignLanding`. */
+  variationSlug?: string;
   headline: string;
   sub: string;
   offer?: string;
@@ -122,6 +142,17 @@ export function assertCampaignLandings(): void {
         `landing.ts: campaign "${key}" names productSlug "${landing.productSlug}", which is not in PRODUCTS.`,
       );
     }
+    // §2.3 for options. A campaign naming an option the product does not sell would
+    // lock the funnel on a layer nothing can be priced from — and it would fail at the
+    // customer's first price, not at the build, which is the wrong place to find out.
+    if (landing.variationSlug !== undefined) {
+      const product = getProductBySlug(landing.productSlug);
+      if (!product?.variations?.some((variation) => variation.slug === landing.variationSlug)) {
+        throw new Error(
+          `landing.ts: campaign "${key}" names variationSlug "${landing.variationSlug}", which is not an option of ${landing.productSlug}.`,
+        );
+      }
+    }
     // §1.6 / §2.5: only an offer the checkout honours.
     if (landing.offer !== undefined && landing.offer !== ALLOWED_OFFER) {
       throw new Error(
@@ -139,7 +170,7 @@ assertCampaignLandings();
  * and the product lock. A miss returns `null`; it never throws and never returns
  * a partial campaign.
  */
-export function resolveCampaign(raw?: string | null): ResolvedLanding | null {
+export function resolveCampaign(raw?: string | null, requestedVariation?: string | null): ResolvedLanding | null {
   if (raw === undefined || raw === null) return null;
   const value = raw.trim();
   if (value === "") return null;
@@ -152,6 +183,10 @@ export function resolveCampaign(raw?: string | null): ResolvedLanding | null {
       raw: value,
       campaignSlug: campaign.slug,
       productSlug: campaign.productSlug,
+      // The CAMPAIGN's option wins over the query: an ad for the single layer must not
+      // be steerable into the double one by editing the URL, which would make the ad's
+      // promise and what the funnel sells disagree.
+      variationSlug: campaign.variationSlug,
       headline: campaign.headline,
       sub: campaign.sub,
       offer: campaign.offer,
@@ -163,10 +198,21 @@ export function resolveCampaign(raw?: string | null): ResolvedLanding | null {
   if (product) {
     // A bare product slug locks the product but shows the default hero copy:
     // the campaign copy is only earned by a campaign alias (`fit-finder` §8.3).
+    //
+    // An OPTION MAY COME WITH IT, and that is the path the PDP's own CTA takes:
+    // `?product=floor-mats&variation=double-layer`. Without carrying it the layer a
+    // customer just picked on the product page would be dropped on the way into the
+    // funnel, and the funnel would ask — or worse, not ask — on its own.
+    //
+    // Validated against the product's OWN options. An option this product does not
+    // sell locks nothing rather than being passed on to be discovered later.
+    const requested = requestedVariation?.trim() ?? "";
+    const variationSlug = product.variations?.some((v) => v.slug === requested) ? requested : undefined;
     return {
       raw: value,
       campaignSlug: null,
       productSlug: product.slug,
+      variationSlug,
       headline: DEFAULT_HEADLINE,
       sub: DEFAULT_SUB,
       match: "product",

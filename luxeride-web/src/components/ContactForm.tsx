@@ -53,7 +53,7 @@ export default function ContactForm() {
       <div>
         <label
           htmlFor="contact-subject"
-          className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted"
+          className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted"
         >
           What is this about?
         </label>
@@ -61,7 +61,7 @@ export default function ContactForm() {
           id="contact-subject"
           value={subject}
           onChange={(event) => setSubject(event.target.value)}
-          className="w-full rounded-xl border border-white/15 bg-panel px-4 py-3.5 text-sm focus:border-gold focus:outline-none"
+          className="w-full rounded-xl border border-fg-muted/25 bg-surface px-4 py-3.5 text-sm focus:border-accent focus:outline-none"
         >
           {SUBJECTS.map((option) => (
             <option key={option} value={option}>
@@ -74,7 +74,7 @@ export default function ContactForm() {
       <div>
         <label
           htmlFor="contact-message"
-          className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted"
+          className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted"
         >
           Your message
         </label>
@@ -84,22 +84,22 @@ export default function ContactForm() {
           onChange={(event) => setMessage(event.target.value)}
           rows={4}
           placeholder="Tell us the car and year if it is a fit question, e.g. 2015 Toyota Camry."
-          className="w-full rounded-xl border border-white/15 bg-panel px-4 py-3.5 text-sm focus:border-gold focus:outline-none"
+          className="w-full rounded-xl border border-fg-muted/25 bg-surface px-4 py-3.5 text-sm focus:border-accent focus:outline-none"
         />
       </div>
 
-      <div className="rounded-xl border border-line bg-panel/60 p-4">
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">
+      <div className="rounded-xl border border-border bg-surface/60 p-4">
+        <p className="mb-2 text-[11px] uppercase tracking-wide text-fg-muted">
           This is what we will receive
         </p>
-        <pre className="whitespace-pre-wrap font-mono text-xs text-white/90">{composed}</pre>
+        <pre className="whitespace-pre-wrap font-mono text-xs text-fg/90">{composed}</pre>
       </div>
 
       <a
         href={href}
         target="_blank"
         rel="noreferrer"
-        className="block w-full rounded-xl bg-gold px-5 py-3.5 text-center text-sm font-semibold text-ink"
+        className="block w-full rounded-xl bg-accent px-5 py-3.5 text-center text-sm font-semibold text-on-accent"
       >
         Send on WhatsApp
       </a>

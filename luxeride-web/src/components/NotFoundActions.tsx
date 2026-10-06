@@ -20,7 +20,7 @@ export default function NotFoundActions({ kind = "missing" }: { kind?: "missing"
       href={whatsappLink(message)}
       target="_blank"
       rel="noreferrer"
-      className="block w-full rounded-xl border border-line bg-panel px-5 py-3 text-center text-sm font-semibold text-gold hover:border-gold"
+      className="block w-full rounded-xl border border-border bg-surface px-5 py-3 text-center text-sm font-semibold text-accent hover:border-accent"
     >
       Ask us on WhatsApp
     </a>

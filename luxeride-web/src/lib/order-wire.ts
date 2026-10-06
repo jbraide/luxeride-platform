@@ -37,6 +37,16 @@ export interface CreateOrderRequest {
   /** Identity only: which product, which car, which rows, how many. */
   lines: {
     productSlug: string;
+    /**
+     * WHICH OPTION of that product, when the customer chose one. Added 2026-10-05.
+     *
+     * Optional rather than required because most of the catalogue has one option and
+     * "the product, unspecified option" is what a single-option line has always meant.
+     * It is identity, not decoration: Floor Mats is one product sold in two layers at
+     * two prices, and the server refuses an option it does not sell rather than
+     * pricing it from the product's floor.
+     */
+    variationSlug?: string | null;
     brand: string;
     model: string;
     year: string;
@@ -53,6 +63,16 @@ export interface OrderLineResponse {
   key: string;
   productSlug: string;
   productName: string;
+  /**
+   * WHICH OPTION was bought, echoed back so the confirmation can name it.
+   *
+   * A customer who chose the double layer has to see "Double layer" on the receipt,
+   * in the admin and in the WhatsApp message. Without it the order says "Floor Mats"
+   * and leaves them guessing which of two things they just bought — and the cart
+   * rebuilt from this response would lose the option and re-add at the product's
+   * floor price.
+   */
+  variationSlug?: string | null;
   brand: string;
   model: string;
   year: string;

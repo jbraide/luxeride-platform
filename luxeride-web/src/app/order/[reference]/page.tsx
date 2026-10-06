@@ -176,14 +176,14 @@ export default async function OrderReferencePage({
     return (
       <div className="mx-auto max-w-xl px-5 py-14">
         <h1 className="font-display text-2xl font-semibold">We could not open that order</h1>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-fg-muted">
           Enter the WhatsApp number the order was placed with and we will show you the receipt. If the
           reference does not match an order, we will say so here rather than guess.
         </p>
 
         {/* Echoed back because the CUSTOMER supplied it and it is their own
             order handle. Nothing else on this page derives from it. */}
-        <p className="mt-5 rounded-xl border border-line bg-panel px-4 py-3 font-mono text-sm text-gold">
+        <p className="mt-5 rounded-xl border border-border bg-surface px-4 py-3 font-mono text-sm text-accent">
           {reference}
         </p>
 
@@ -211,13 +211,13 @@ export default async function OrderReferencePage({
             href={whatsappLink(recoveryMessage(reference))}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex w-full items-center justify-center rounded-xl bg-gold px-5 py-3.5 text-sm font-semibold text-ink sm:w-auto"
+            className="inline-flex w-full items-center justify-center rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-on-accent sm:w-auto"
           >
             Ask us on WhatsApp
           </a>
           <a
             href={contact.tel}
-            className="inline-flex w-full items-center justify-center rounded-xl border border-white/25 px-5 py-3.5 text-sm font-semibold hover:border-gold hover:text-gold sm:w-auto"
+            className="inline-flex w-full items-center justify-center rounded-xl border border-fg-muted/40 px-5 py-3.5 text-sm font-semibold hover:border-accent hover:text-accent sm:w-auto"
           >
             Call {contact.whatsappNumber}
           </a>
@@ -230,27 +230,27 @@ export default async function OrderReferencePage({
   return (
     <div className="mx-auto max-w-xl px-5 py-14">
       <h1 className="font-display text-2xl font-semibold">Your order</h1>
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 text-sm text-fg-muted">
         We have this order on file. We confirm every order on WhatsApp before dispatch, and we cannot see
         WhatsApp from here — so if you have not sent the message yet, that is the next step.
       </p>
 
-      <p className="mt-5 rounded-xl border border-line bg-panel px-4 py-3 font-mono text-sm text-gold">
+      <p className="mt-5 rounded-xl border border-border bg-surface px-4 py-3 font-mono text-sm text-accent">
         {view.reference}
       </p>
 
-      <div className="mt-5 space-y-2 rounded-xl border border-line bg-panel p-5">
+      <div className="mt-5 space-y-2 rounded-xl border border-border bg-surface p-5">
         {view.lines.map((line) => (
           <div key={line.key} className="flex justify-between text-sm">
             <span>
               {line.qty}x {line.productName} — {line.year} {line.brand} {line.model}
               {line.rows ? ` (${line.rows}-Row)` : ""}
             </span>
-            <span className="font-mono text-gold">{fmtNaira(line.lineTotal)}</span>
+            <span className="font-mono text-accent">{fmtNaira(line.lineTotal)}</span>
           </div>
         ))}
-        <div className="flex justify-between border-t border-dashed border-white/15 pt-2 text-sm">
-          <span className="text-muted">
+        <div className="flex justify-between border-t border-dashed border-fg-muted/25 pt-2 text-sm">
+          <span className="text-fg-muted">
             Delivery ({view.locationName}) — {view.locationEta}
           </span>
           <span className="font-mono">
@@ -258,18 +258,18 @@ export default async function OrderReferencePage({
           </span>
         </div>
         {view.discount > 0 && (
-          <div className="flex justify-between text-sm text-gold">
+          <div className="flex justify-between text-sm text-accent">
             <span>Prepay discount</span>
             <span className="font-mono">-{fmtNaira(view.discount)}</span>
           </div>
         )}
-        <div className="flex justify-between border-t border-dashed border-white/15 pt-2 text-base font-semibold">
+        <div className="flex justify-between border-t border-dashed border-fg-muted/25 pt-2 text-base font-semibold">
           <span>Total</span>
-          <span className="font-mono text-gold">{fmtNaira(view.total)}</span>
+          <span className="font-mono text-accent">{fmtNaira(view.total)}</span>
         </div>
       </div>
 
-      <p className="mt-3 text-xs text-muted">
+      <p className="mt-3 text-xs text-fg-muted">
         Estimated arrival: {view.locationEta} after confirmation.{" "}
         {view.paymentMethod === "prepay"
           ? "Pay by bank transfer — the discount above applies once the transfer is received."
@@ -284,19 +284,19 @@ export default async function OrderReferencePage({
           href={whatsappLink(view.whatsappMessage)}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex w-full items-center justify-center rounded-xl bg-gold px-5 py-3.5 text-sm font-semibold text-ink sm:w-auto sm:px-8"
+          className="inline-flex w-full items-center justify-center rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-on-accent sm:w-auto sm:px-8"
         >
           Re-open on WhatsApp
         </a>
         <a
           href={contact.tel}
-          className="inline-flex w-full items-center justify-center rounded-xl border border-white/25 px-5 py-3.5 text-sm font-semibold hover:border-gold hover:text-gold sm:w-auto"
+          className="inline-flex w-full items-center justify-center rounded-xl border border-fg-muted/40 px-5 py-3.5 text-sm font-semibold hover:border-accent hover:text-accent sm:w-auto"
         >
           Call us
         </a>
       </div>
 
-      <p className="mt-6 text-center text-xs text-muted">Placed {view.createdAt}.</p>
+      <p className="mt-6 text-center text-xs text-fg-muted">Placed {view.createdAt}.</p>
     </div>
   );
 }

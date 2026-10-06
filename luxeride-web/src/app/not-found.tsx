@@ -15,9 +15,9 @@ import { LinkButton } from "@/components/Button";
 export default function NotFound() {
   return (
     <div className="mx-auto max-w-lg px-5 py-20 text-center">
-      <p className="font-mono text-xs uppercase tracking-widest text-gold-dim">Error 404</p>
+      <p className="font-mono text-xs uppercase tracking-widest text-accent-dim">Error 404</p>
       <h1 className="font-display mt-3 text-2xl font-semibold">That page isn&apos;t here</h1>
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 text-sm text-fg-muted">
         The link may be old, or the address may have a typo. Nothing is broken on your side.
       </p>
 

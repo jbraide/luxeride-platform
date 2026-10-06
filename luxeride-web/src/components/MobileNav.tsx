@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CATEGORIES } from "@/data/products";
+import type { Category } from "@/data/products";
+import ThemeToggle from "@/components/ThemeToggle";
 
 /**
  * The routes a visitor needs when something has gone wrong or they want to check
@@ -38,7 +39,21 @@ const HELP_LINKS = [
  * `/contact` was until this change, and it is the page the M5 spend gate asserts is
  * one tap away.
  */
-export default function MobileNav() {
+/**
+ * `categories` is passed in, not imported.
+ *
+ * This is a Client Component — it opens and closes, so it cannot read Postgres — and
+ * a Client Component cannot import `src/lib/catalogue.ts` without pulling Prisma into
+ * every browser bundle. The root layout loads the categories and hands them down
+ * through `Header`, which is also a Client Component for the same reason.
+ *
+ * It is the same trade `mediaBySlug` already makes on the Fit Finder: the server
+ * resolves what a client cannot, and the client receives it as data. Before
+ * 2026-10-04 this list was a compile-time import, so a category created in
+ * `/admin/categories` never appeared here — the mobile menu was the one place the
+ * admin's changes could not reach.
+ */
+export default function MobileNav({ categories }: { categories: Category[] }) {
   // The open state is *derived* from the pathname rather than synced to it: the
   // panel is open only while the route is still the one it was opened on, so a
   // navigation closes it with no effect and no extra render pass.
@@ -80,7 +95,7 @@ export default function MobileNav() {
         aria-expanded={open}
         aria-controls="mobile-nav-panel"
         aria-label={open ? "Close menu" : "Open menu"}
-        className="rounded-lg border border-line px-3 py-2 text-sm hover:border-gold sm:hidden"
+        className="rounded-lg border border-border px-3 py-2 text-sm hover:border-accent sm:hidden"
       >
         <span aria-hidden>{open ? "✕" : "☰"}</span>
       </button>
@@ -98,19 +113,19 @@ export default function MobileNav() {
           aria-label="Close menu"
           tabIndex={-1}
           onClick={close}
-          className="absolute inset-0 h-full w-full cursor-default bg-ink/70 backdrop-blur-sm"
+          className="absolute inset-0 h-full w-full cursor-default bg-bg/70 backdrop-blur-sm"
         />
-        <nav className="absolute inset-y-0 right-0 flex w-[85%] max-w-sm flex-col overflow-y-auto border-l border-line bg-panel px-5 py-6">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-gold-dim">Menu</p>
+        <nav className="absolute inset-y-0 right-0 flex w-[85%] max-w-sm flex-col overflow-y-auto border-l border-border bg-surface px-5 py-6">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">Menu</p>
 
           <ul className="mt-5 space-y-1">
             <li>
-              <Link href="/" onClick={close} className="block rounded-lg px-3 py-3 text-base hover:bg-panel-2">
+              <Link href="/" onClick={close} className="block rounded-lg px-3 py-3 text-base hover:bg-surface-2">
                 Home
               </Link>
             </li>
             <li>
-              <Link href="/shop" onClick={close} className="block rounded-lg px-3 py-3 text-base hover:bg-panel-2">
+              <Link href="/shop" onClick={close} className="block rounded-lg px-3 py-3 text-base hover:bg-surface-2">
                 Shop
               </Link>
             </li>
@@ -118,21 +133,28 @@ export default function MobileNav() {
               <Link
                 href="/fit-finder"
                 onClick={close}
-                className="block rounded-lg px-3 py-3 text-base text-gold hover:bg-panel-2"
+                className="block rounded-lg px-3 py-3 text-base text-accent hover:bg-surface-2"
               >
                 Find my fit
               </Link>
             </li>
           </ul>
 
-          <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-gold-dim">Categories</p>
+          <div className="mt-6 flex items-center justify-between">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
+              Appearance
+            </p>
+            <ThemeToggle />
+          </div>
+
+          <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-accent-dim">Categories</p>
           <ul className="mt-3 space-y-1">
-            {CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <li key={category.slug}>
                 <Link
                   href={`/shop/${category.slug}`}
                   onClick={close}
-                  className="block rounded-lg px-3 py-3 text-sm text-white/85 hover:bg-panel-2"
+                  className="block rounded-lg px-3 py-3 text-sm text-fg/85 hover:bg-surface-2"
                 >
                   {category.name}
                 </Link>
@@ -140,23 +162,23 @@ export default function MobileNav() {
             ))}
           </ul>
 
-          <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-gold-dim">Your order</p>
+          <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-accent-dim">Your order</p>
           <ul className="mt-3 space-y-1">
             <li>
-              <Link href="/cart" onClick={close} className="block rounded-lg px-3 py-3 text-base hover:bg-panel-2">
+              <Link href="/cart" onClick={close} className="block rounded-lg px-3 py-3 text-base hover:bg-surface-2">
                 Cart
               </Link>
             </li>
           </ul>
 
-          <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-gold-dim">Help</p>
+          <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-accent-dim">Help</p>
           <ul className="mt-3 space-y-1 pb-6">
             {HELP_LINKS.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
                   onClick={close}
-                  className="block rounded-lg px-3 py-3 text-sm text-white/85 hover:bg-panel-2"
+                  className="block rounded-lg px-3 py-3 text-sm text-fg/85 hover:bg-surface-2"
                 >
                   {link.label}
                 </Link>

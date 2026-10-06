@@ -5,9 +5,9 @@ type Variant = "primary" | "outline" | "ghost";
 
 const base = "inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 text-sm font-semibold transition active:scale-[0.98]";
 const variants: Record<Variant, string> = {
-  primary: "bg-gold text-ink hover:brightness-110",
-  outline: "border border-white/25 text-white hover:border-gold hover:text-gold",
-  ghost: "text-muted hover:text-white",
+  primary: "bg-accent text-on-accent hover:brightness-110",
+  outline: "border border-fg-muted/40 text-fg hover:border-accent hover:text-accent",
+  ghost: "text-fg-muted hover:text-fg",
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

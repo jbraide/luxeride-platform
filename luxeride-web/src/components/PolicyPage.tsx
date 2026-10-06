@@ -49,15 +49,15 @@ export default function PolicyPage({
   return (
     <article className="mx-auto max-w-3xl px-5 py-12">
       <h1 className="font-display text-3xl font-semibold">{policy.title}</h1>
-      <p className="mt-2 text-sm text-muted">{policy.summary}</p>
-      <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-gold-dim">
+      <p className="mt-2 text-sm text-fg-muted">{policy.summary}</p>
+      <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-accent-dim">
         Last updated {policy.updatedAt}
       </p>
 
       {showZoneTable && (
-        <div className="mt-6 overflow-hidden rounded-xl border border-line">
+        <div className="mt-6 overflow-hidden rounded-xl border border-border">
           <table className="w-full text-left text-sm">
-            <thead className="bg-panel-2 text-[11px] uppercase tracking-wide text-muted">
+            <thead className="bg-surface-2 text-[11px] uppercase tracking-wide text-fg-muted">
               <tr>
                 <th className="px-4 py-2 font-medium">Zone</th>
                 <th className="px-4 py-2 font-medium">Fee</th>
@@ -66,10 +66,10 @@ export default function PolicyPage({
             </thead>
             <tbody>
               {LOCATIONS.map((zone) => (
-                <tr key={zone.name} className="border-t border-line">
+                <tr key={zone.name} className="border-t border-border">
                   <td className="px-4 py-2">{zone.name}</td>
-                  <td className="px-4 py-2 font-mono text-gold">{fmtNaira(zone.fee)}</td>
-                  <td className="px-4 py-2 text-muted">{zone.eta}</td>
+                  <td className="px-4 py-2 font-mono text-accent">{fmtNaira(zone.fee)}</td>
+                  <td className="px-4 py-2 text-fg-muted">{zone.eta}</td>
                 </tr>
               ))}
             </tbody>
@@ -83,7 +83,7 @@ export default function PolicyPage({
             <section key={section.id} id={section.id}>
               <h2 className="font-display text-lg font-semibold">{section.heading}</h2>
               {section.body.map((paragraph) => (
-                <p key={paragraph} className="mt-2 text-sm leading-relaxed text-white/80">
+                <p key={paragraph} className="mt-2 text-sm leading-relaxed text-fg/80">
                   {paragraph}
                 </p>
               ))}
@@ -95,9 +95,9 @@ export default function PolicyPage({
         // nobody than an empty page, and far better than showing the authoring
         // markers — and the WhatsApp route is the same answer the rest of the site
         // gives when it cannot answer.
-        <div className="mt-8 rounded-xl border border-line bg-panel/60 p-5">
+        <div className="mt-8 rounded-xl border border-border bg-surface/60 p-5">
           <h2 className="font-display text-lg font-semibold">This page is still being finalised</h2>
-          <p className="mt-2 text-sm leading-relaxed text-white/80">
+          <p className="mt-2 text-sm leading-relaxed text-fg/80">
             We would rather publish nothing here than something we cannot stand behind. Ask us
             directly and we will answer in writing.
           </p>
@@ -105,7 +105,7 @@ export default function PolicyPage({
             href={whatsappLink(`Hi! I have a question about your ${policy.title.toLowerCase()} policy.`)}
             target="_blank"
             rel="noreferrer"
-            className="mt-4 inline-flex rounded-xl border border-line bg-panel px-5 py-3 text-sm font-semibold text-gold hover:border-gold"
+            className="mt-4 inline-flex rounded-xl border border-border bg-surface px-5 py-3 text-sm font-semibold text-accent hover:border-accent"
           >
             Ask us on WhatsApp
           </a>
@@ -113,9 +113,9 @@ export default function PolicyPage({
       )}
 
       {sections.length > 0 && sections.length < policy.sections.length && (
-        <p className="mt-8 text-xs text-muted">
+        <p className="mt-8 text-xs text-fg-muted">
           Some answers on this page are still being written up. Message us on WhatsApp at{" "}
-          <span className="font-mono text-gold-dim">+{WHATSAPP_NUMBER}</span> and we will answer
+          <span className="font-mono text-accent-dim">+{WHATSAPP_NUMBER}</span> and we will answer
           directly.
         </p>
       )}

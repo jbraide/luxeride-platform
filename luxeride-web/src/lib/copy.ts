@@ -117,6 +117,22 @@ export const fittedCopy = Object.freeze({
   leadTimePrefix: "Lead time:",
 });
 
+/**
+ * The lead time a car falls back to when it has no recorded one of its own.
+ *
+ * Re-exported rather than declared here, because the function that resolves it —
+ * `resolveLeadTime` — lives in `src/lib/lead-time.ts`. That module has no imports at
+ * all, which is what lets `scripts/lead-time.test.mjs` load it under `node --test`;
+ * this register reaches `@/data/locations` and therefore cannot be loaded there.
+ *
+ * Full reasoning, and the bug a truthiness check caused, is on that module.
+ *
+ * THIS IS THE ONE PLACE TO CHANGE IT. It is a code constant rather than an admin
+ * field deliberately — it is a business fact, not per-car data, and putting it behind
+ * a form is how it drifts out of step with itself.
+ */
+export { DEFAULT_LEAD_TIME, resolveLeadTime } from "./lead-time.ts";
+
 export const refusals = {
   "NOT STOCKED": {
     headline: "No confirmed fit yet",

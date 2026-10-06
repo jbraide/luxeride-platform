@@ -24,7 +24,7 @@ export default function ProductGallery({ media, name }: { media: ProductMedia | 
 
   if (images.length === 0) {
     return (
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-line bg-panel-2">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border bg-surface-2">
         <ProductPlaceholder name={name} />
       </div>
     );
@@ -34,7 +34,7 @@ export default function ProductGallery({ media, name }: { media: ProductMedia | 
 
   return (
     <div>
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-line bg-panel-2">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border bg-surface-2">
         {showPlaceholder ? (
           <ProductPlaceholder name={name} />
         ) : (
@@ -58,8 +58,8 @@ export default function ProductGallery({ media, name }: { media: ProductMedia | 
               onClick={() => setSelected(i)}
               aria-pressed={i === selected}
               aria-label={`Show image ${i + 1} of ${images.length}`}
-              className={`relative h-16 w-20 flex-shrink-0 overflow-hidden rounded-lg border bg-panel-2 ${
-                i === selected ? "border-gold" : "border-line hover:border-gold-dim"
+              className={`relative h-16 w-20 flex-shrink-0 overflow-hidden rounded-lg border bg-surface-2 ${
+                i === selected ? "border-accent" : "border-border hover:border-accent-dim"
               }`}
             >
               {failed.includes(i) ? (

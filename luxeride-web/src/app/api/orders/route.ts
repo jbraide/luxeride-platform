@@ -1,12 +1,14 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import { resolveDiscountForOrder } from "@/lib/discounts-server";
 import type { Tier } from "@/data/cars";
 import {
   lineKey,
   priceOrder,
   type OrderLineToPrice,
   type PaymentMethod,
+  type PriceableVariation,
   type PricedLine,
   type RowSelection,
 } from "@/lib/order-pricing";
@@ -273,6 +275,18 @@ type ProductRow = {
   premium: number;
   rowApplicable: boolean;
   threeRowSurcharge: number | null;
+  /**
+   * The category this product sits in, needed by the discount resolver so a
+   * CATEGORY-scoped promotion can match a line. Loaded as a slug rather than
+   * joined, so the resolver compares strings and never an id.
+   */
+  categorySlug: string;
+  /**
+   * The product's options, since Floor Mats is one product in two layers (2026-10-05).
+   * `unitPriceFor` reads these, so a line that names an option is priced from THAT
+   * option's figures rather than the product's floor.
+   */
+  variations: PriceableVariation[];
 };
 
 /** `Make.defaultTier` — the brand's price tier, seeded from `BRANDS[brand].tier`. */
@@ -290,16 +304,72 @@ type MakeRow = { id: string; name: string; defaultTier: string };
 async function resolveCatalogue(
   lines: readonly ValidatedOrderLine[],
 ): Promise<
-  | { ok: true; products: Map<string, ProductRow>; makes: Map<string, MakeRow>; vehicles: Map<string, string> }
+  | {
+      ok: true;
+      products: Map<string, ProductRow>;
+      makes: Map<string, MakeRow>;
+      vehicles: Map<string, string>;
+      /** Product slug -> (option slug -> option id). See the note where it is built. */
+      variationIds: Map<string, Map<string, string>>;
+    }
   | { ok: false; errors: OrderFieldErrors }
 > {
-  const [productRows, makeRows] = await Promise.all([
-    prisma.product.findMany({ where: { slug: { in: [...new Set(lines.map((l) => l.productSlug))] } } }),
+  const [productRows, makeRows, categories] = await Promise.all([
+    prisma.product.findMany({
+      where: { slug: { in: [...new Set(lines.map((l) => l.productSlug))] } },
+      // THE OPTIONS, because Floor Mats is one product in two layers and the price
+      // engine prices from the option (2026-10-05). Read with the product rather than in
+      // a second query so one request cannot see the product without its options.
+      include: {
+        variations: {
+          select: {
+            id: true,
+            slug: true,
+            regular: true,
+            premium: true,
+            rowApplicable: true,
+            threeRowSurcharge: true,
+          },
+        },
+      },
+    }),
     prisma.make.findMany({ where: { name: { in: [...new Set(lines.map((l) => l.brand))] } } }),
+    // Read once for the whole request rather than per product: the product rows carry
+    // a `categoryId`, and turning that into a slug needs a lookup somewhere.
+    prisma.category.findMany({ select: { id: true, slug: true } }),
   ]);
+  const categorySlugsById = new Map(categories.map((c) => [c.id, c.slug]));
 
+  // `category` is INCLUDED, not joined: a category-scoped promotion matches on the
+  // category's slug, and this keeps the resolver comparing strings rather than ids.
   const products = new Map<string, ProductRow>();
-  for (const row of productRows) products.set(row.slug, row);
+  // Option slug -> id, per product. `OrderItem.variationId` is a reference, so the
+  // write path needs the id rather than the slug the customer chose \u2014 and resolving
+  // it here is what makes an option we do not sell a refusal rather than a silent null.
+  const variationIds = new Map<string, Map<string, string>>();
+  for (const row of productRows) {
+    products.set(row.slug, {
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      regular: row.regular,
+      premium: row.premium,
+      rowApplicable: row.rowApplicable,
+      threeRowSurcharge: row.threeRowSurcharge,
+      categorySlug: categorySlugsById.get(row.categoryId) ?? "",
+      variations: row.variations.map((variation) => ({
+        slug: variation.slug,
+        regular: variation.regular,
+        premium: variation.premium,
+        rowApplicable: variation.rowApplicable,
+        threeRowSurcharge: variation.threeRowSurcharge,
+      })),
+    });
+    variationIds.set(
+      row.slug,
+      new Map(row.variations.map((variation) => [variation.slug, variation.id])),
+    );
+  }
   const makes = new Map<string, MakeRow>();
   for (const row of makeRows) makes.set(row.name, row);
 
@@ -311,6 +381,13 @@ async function resolveCatalogue(
     if (!products.has(line.productSlug)) {
       errors[`lines.${index}.productSlug`] =
         `"${line.productSlug}" is not a product we sell. Remove it from your cart and try again.`;
+    } else if (line.variationSlug && !variationIds.get(line.productSlug)?.has(line.variationSlug)) {
+      // An option we do not sell is refused by NAME. It used to be impossible to send
+      // one, and it is not harmless now that the layer is the thing being bought: a
+      // request for a nonexistent layer would otherwise be priced from the product's
+      // floor and recorded as "the product, no option".
+      errors[`lines.${index}.variationSlug`] =
+        `"${line.variationSlug}" is not an option of ${line.productSlug}. Remove that line from your cart and try again.`;
     }
     if (!makes.has(line.brand)) {
       errors[`lines.${index}.brand`] =
@@ -340,7 +417,11 @@ async function resolveCatalogue(
     if (!vehicles.has(key)) vehicles.set(key, row.id);
   }
 
-  return { ok: true, products, makes, vehicles };
+  // The option ids travel OUT of here rather than being re-read by the write path.
+  // `writeOrder` needs an id, the customer chose a slug, and the translation between
+  // the two is the same translation the refusal above just made \u2014 so it happens once,
+  // in one place, over one snapshot of the options.
+  return { ok: true, products, makes, vehicles, variationIds };
 }
 
 // ─── Pricing ──────────────────────────────────────────────────────────────────
@@ -371,20 +452,36 @@ interface ResolvedLine extends PricedLine {
  * rows, and it does nothing with the numbers beyond handing the resolved zone to
  * the tested library. Reimplementing the arithmetic here would recreate exactly
  * the defect the library exists to prevent.
+ *
+ * ASYNC because it resolves a discount, which is a DATABASE READ. `priceOrder`
+ * itself is pure and stays that way; the promotion and coupon lookup is the one
+ * impure step, and it lives here rather than inside the arithmetic.
  */
-function priceSubmission(
+async function priceSubmission(
   value: ValidatedOrderSubmission,
   catalogue: { products: Map<string, ProductRow>; makes: Map<string, MakeRow>; vehicles: Map<string, string> },
   location: LocationRow,
-): { ok: true; lines: ResolvedLine[]; subtotal: number; shippingFee: number; discount: number; total: number } | {
-  ok: false;
-  errors: OrderFieldErrors;
-} {
+): Promise<
+  | {
+      ok: true;
+      lines: ResolvedLine[];
+      subtotal: number;
+      shippingFee: number;
+      discount: number;
+      /** What the discount was called, so the order message can name it. */
+      discountLabel?: string | null;
+      total: number;
+    }
+  | { ok: false; errors: OrderFieldErrors }
+> {
   const toPrice: OrderLineToPrice[] = value.lines.map((line) => {
     const product = catalogue.products.get(line.productSlug) as ProductRow;
     const make = catalogue.makes.get(line.brand) as MakeRow;
     return {
       productSlug: line.productSlug,
+      // Which layer. `unitPriceFor` reads it, so this is where a double-layer order
+      // stops being priced from the single-layer figure.
+      variationSlug: line.variationSlug,
       brand: line.brand,
       model: line.model,
       year: line.year,
@@ -402,20 +499,63 @@ function priceSubmission(
   // The zone is the `Location` ROW: its fee is a number the server chose, never
   // one the customer sent (§5.5). `validateZone` already matched the submitted
   // identifier to this catalogue entry by slug or exact name.
-  const priced = priceOrder({
-    lines: toPrice,
-    zone: { slug: location.slug, name: location.name, fee: location.fee, eta: location.etaText },
-    paymentMethod: value.paymentMethod,
-  });
+  const zone = { slug: location.slug, name: location.name, fee: location.fee, eta: location.etaText };
 
-  if (!priced.ok) {
+  /**
+   * PRICED TWICE, ON PURPOSE.
+   *
+   * The first pass exists only to learn what the lines are worth: a discount is a share
+   * of a number, and `resolveDiscount` needs the CONFIRMED per-year totals before it can
+   * say what to take off. The second pass is the authoritative one and carries the
+   * resolved discount into `priceOrder`.
+   *
+   * `priceOrder` is a pure function, so the second call is deterministic and cannot
+   * disagree with the first about a line — the lines and their prices are inputs, not
+   * outputs of anything time- or order-dependent. And the money arithmetic stays in ONE
+   * module rather than being re-derived here, which is the whole reason that module has
+   * its own test suite.
+   *
+   * The alternative — discount the lines in this file and hand `priceOrder` a subtotal —
+   * would put a second implementation of "subtotal minus discount" next to the first,
+   * and the two drifting apart is the failure mode `order-pricing.ts` exists to prevent.
+   */
+  const firstPass = priceOrder({ lines: toPrice, zone, paymentMethod: value.paymentMethod });
+
+  if (!firstPass.ok) {
     const errors: OrderFieldErrors = {};
-    for (const error of priced.errors) {
+    for (const error of firstPass.errors) {
       const path: OrderFieldPath =
         error.index === -1 ? "lines" : `lines.${error.index}.${pricingFieldTo(error.field)}`;
       if (!(path in errors)) errors[path] = error.reason;
     }
     return { ok: false, errors };
+  }
+
+  // The discount is resolved against the priced lines, so "20% off" means 20% of what
+  // the customer is actually paying — per-year confirmed prices, plus any row-count
+  // surcharge `priceOrder` already applied.
+  const outcome = await resolveDiscountForOrder({
+    lines: firstPass.order.lines.map((line) => ({
+      productSlug: line.productSlug,
+      categorySlug: catalogue.products.get(line.productSlug)?.categorySlug ?? "",
+      amount: line.lineTotal,
+    })),
+    couponCode: value.couponCode,
+  });
+
+  const priced = priceOrder({
+    lines: toPrice,
+    zone,
+    paymentMethod: value.paymentMethod,
+    promotionalDiscount: outcome.applied?.amountOff ?? 0,
+    discountLabel: outcome.applied?.label ?? null,
+  });
+
+  // The second pass cannot fail when the first did not: same inputs, one extra field
+  // that is a non-negative integer. The guard is here so a future change cannot turn
+  // that into an unchecked `priced.order` access.
+  if (!priced.ok) {
+    return { ok: false, errors: { lines: "This order could not be priced. Nothing was charged." } };
   }
 
   const lines: ResolvedLine[] = priced.order.lines.map((line) => {
@@ -428,7 +568,15 @@ function priceSubmission(
   });
 
   const { subtotal, shippingFee, discount, total } = priced.order;
-  return { ok: true, lines, subtotal, shippingFee, discount, total };
+  return {
+    ok: true,
+    lines,
+    subtotal,
+    shippingFee,
+    discount,
+    discountLabel: priced.order.discountLabel ?? null,
+    total,
+  };
 }
 
 // ─── The message ──────────────────────────────────────────────────────────────
@@ -448,6 +596,10 @@ function responseLines(lines: readonly ResolvedLine[]): OrderLineResponse[] {
     key: line.key,
     productSlug: line.productSlug,
     productName: line.productName,
+    // Echoed back so the confirmation, the admin and the cart rebuild can all name
+    // the layer. A Floor Mats order does not say which of its two layers was bought
+    // without this.
+    variationSlug: line.variationSlug ?? null,
     brand: line.brand,
     model: line.model,
     year: line.year,
@@ -476,7 +628,13 @@ function responseLines(lines: readonly ResolvedLine[]): OrderLineResponse[] {
 function buildMessage(
   value: ValidatedOrderSubmission,
   lines: readonly ResolvedLine[],
-  money: { subtotal: number; shippingFee: number; discount: number; total: number },
+  money: {
+    subtotal: number;
+    shippingFee: number;
+    discount: number;
+    discountLabel?: string | null;
+    total: number;
+  },
   location: LocationRow,
   reference: string,
   campaign: string | null,
@@ -505,6 +663,7 @@ function buildMessage(
       subtotal: money.subtotal,
       shippingFee: money.shippingFee,
       discount: money.discount,
+      discountLabel: money.discountLabel ?? null,
       total: money.total,
       ref: reference,
       // `fitment-engine` owns the layout code. `OrderItem.layoutId` is null for
@@ -528,7 +687,12 @@ function buildMessage(
  */
 type StoredOrder = Prisma.OrderGetPayload<{
   include: {
-    items: { include: { product: { select: { slug: true; name: true } } } };
+    items: {
+      include: {
+        product: { select: { slug: true; name: true } },
+        variation: { select: { slug: true; name: true } },
+      };
+    };
     location: { select: { slug: true; name: true; fee: true; etaText: true } };
   };
 }>;
@@ -539,7 +703,14 @@ type StoredOrder = Prisma.OrderGetPayload<{
  * read a narrower row than the create path.
  */
 const storedOrderInclude = {
-  items: { include: { product: { select: { slug: true, name: true } } } },
+  items: {
+    include: {
+      product: { select: { slug: true, name: true } },
+      // The option, so a stored order can say "Double Layer" rather than only
+      // "Floor Mats" \u2014 on the order page, in the admin and in the WhatsApp message.
+      variation: { select: { slug: true, name: true } },
+    },
+  },
   location: { select: { slug: true, name: true, fee: true, etaText: true } },
 } as const;
 
@@ -551,6 +722,8 @@ interface WriteArgs {
   idempotencyKey: string;
   attribution: ReturnType<typeof readAttribution>;
   products: Map<string, ProductRow>;
+  /** From `resolveCatalogue`: product slug -> option slug -> option id. */
+  variationIds: Map<string, Map<string, string>>;
 }
 
 /**
@@ -571,7 +744,7 @@ async function writeOrder(args: WriteArgs): Promise<
   | { kind: "stored"; order: StoredOrder; idempotent: boolean }
   | { kind: "failed"; error: unknown }
 > {
-  const { value, lines, money, location, idempotencyKey, attribution, products } = args;
+  const { value, lines, money, location, idempotencyKey, attribution, products, variationIds } = args;
 
   for (let attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt += 1) {
     // §6.6: the reference is drawn from the ORDER UUID and the order UUID is
@@ -630,6 +803,17 @@ async function writeOrder(args: WriteArgs): Promise<
                 const product = products.get(line.productSlug) as ProductRow;
                 return {
                   productId: product.id,
+                  // WHICH LAYER, when the line named one. Null for every product with a
+                  // single option, which is most of the catalogue, and null means "the
+                  // product, unspecified option" \u2014 exactly what it meant before
+                  // `ProductVariation` existed.
+                  //
+                  // Resolved to an id from the options read WITH the product, so a
+                  // request naming an option we do not sell was already refused in
+                  // `resolveCatalogue` and never reaches this write.
+                  variationId: line.variationSlug
+                    ? (variationIds.get(line.productSlug)?.get(line.variationSlug) ?? null)
+                    : null,
                   // Null when the catalogue has no such car yet, which is a
                   // legitimate line rather than a failed one.
                   vehicleId: line.vehicleId,
@@ -767,13 +951,17 @@ export async function POST(request: Request): Promise<Response> {
   if (!catalogue.ok) return rejected(catalogue.errors, 422);
 
   // ── Price it. Server-side, from the rows above, ignoring every client price ──
-  const priced = priceSubmission(value, catalogue, location);
+  const priced = await priceSubmission(value, catalogue, location);
   if (!priced.ok) return rejected(priced.errors, 422);
 
   const money = {
     subtotal: priced.subtotal,
     shippingFee: priced.shippingFee,
     discount: priced.discount,
+    // What the discount was CALLED, so the WhatsApp message can read "less ₦13,600
+    // Black Friday" rather than a bare subtraction. Null on a prepay-only saving, which
+    // has no name — `buildOrderMessage` falls back to the word "discount" there.
+    discountLabel: priced.discountLabel ?? null,
     total: priced.total,
   };
   const attribution = readAttribution(body);
@@ -787,6 +975,7 @@ export async function POST(request: Request): Promise<Response> {
     idempotencyKey,
     attribution,
     products: catalogue.products,
+    variationIds: catalogue.variationIds,
   });
 
   if (written.kind === "failed") {
@@ -851,6 +1040,11 @@ export async function POST(request: Request): Promise<Response> {
       lines: order.items.map((item) => {
         const identity = {
           productSlug: item.product.slug,
+          // Read off the STORED option rather than from this request. The created
+          // path already reads its figures from the row for the same reason: a repeat
+          // whose body drifted must be answered with what the order ON FILE says, and
+          // the layer is part of that.
+          variationSlug: item.variation?.slug ?? null,
           brand: item.brandSnapshot,
           model: item.modelSnapshot,
           year: String(item.yearSnapshot),
@@ -863,6 +1057,7 @@ export async function POST(request: Request): Promise<Response> {
           key: lineKey(identity),
           productSlug: identity.productSlug,
           productName: item.product.name,
+          variationSlug: identity.variationSlug,
           brand: identity.brand,
           model: identity.model,
           year: identity.year,

@@ -11,7 +11,16 @@ import { absoluteUrl, OG_FALLBACK, SITE_LOCALE, SITE_NAME, SITE_URL } from "@/li
 interface PageMetadataInput {
   /** Page title WITHOUT the site-name suffix — the template adds "| LuxeRide". */
   title: string;
-  description: string;
+  /**
+   * Optional from 2026-10-04.
+   *
+   * A product or category created in `/admin/products` has no authored
+   * `seoDescription`, because nothing in the admin writes one yet. Rather than
+   * force every caller to invent a fallback — which is how a page ends up
+   * describing something it is not — this falls back to the site's own
+   * description. Every PDP has one, so this has no empty-slot path.
+   */
+  description?: string;
   /** Site-relative path with a leading slash, no query string. e.g. "/shop". */
   path: string;
   /** Site-relative Open Graph image path, e.g. "/products/mats/opengraph-image". */

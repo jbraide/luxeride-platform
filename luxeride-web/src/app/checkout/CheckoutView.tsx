@@ -14,6 +14,7 @@ import { LOCATIONS } from "@/data/locations";
 import { fmtNaira } from "@/lib/pricing";
 import { PREPAY_DISCOUNT } from "@/lib/order-pricing";
 import { PREPAY_AVAILABLE } from "@/lib/payment-options";
+import CouponBox, { type DiscountPreview } from "@/components/CouponBox";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import {
   validateOrderSubmission,
@@ -32,6 +33,7 @@ import { readAttribution } from "@/lib/analytics/attribution";
 import { Button } from "@/components/Button";
 import { TrustStrip } from "@/components/TrustStrip";
 import { contact, delivery } from "@/lib/copy";
+import { optionLabel } from "@/lib/select-variation";
 
 /**
  * The checkout form and the whole handoff sequence (`cart-checkout` §5.1–5.9 and
@@ -132,6 +134,31 @@ export default function CheckoutView() {
   const [address, setAddress] = useState(restoredDraft().address);
   const [location, setLocation] = useState(restoredDraft().location);
   const [payment, setPayment] = useState<"pod" | "prepay">(restoredDraft().paymentMethod);
+  /**
+   * The coupon the SERVER accepted, or null.
+   *
+   * Set only from `/api/discount` saying `couponAccepted: true`. It is never set from
+   * what the customer typed, because typing is not qualifying — a code with a minimum
+   * spend has to be checked against the basket before it means anything. It is
+   * re-resolved by `POST /api/orders` regardless, so a code that expired between
+   * checking and submitting is simply not applied, rather than trusted.
+   */
+  const [coupon, setCoupon] = useState<string | null>(null);
+
+  /**
+   * WHAT THE SERVER PRICED THE GOODS AT — a promotion, a coupon, or nothing.
+   *
+   * A promotion and a coupon are ONE figure, not two, because `resolveDiscount` picks
+   * the better of them and never both: the owner's no-stacking decision. So there is one
+   * number here and it is whatever the server said is best.
+   *
+   * It is state rather than something derived from the cart on purpose. The basket alone
+   * does not determine a discount — the date does, the rules in the database do, and
+   * whether a code was typed does — so deriving it would mean reimplementing
+   * `resolveDiscount` in the browser, which is the one thing the money path must not
+   * have a second implementation of.
+   */
+  const [discount, setDiscount] = useState<DiscountPreview>({ amountOff: 0, label: null });
   // Deliberately NOT restored from the draft: ticking a privacy box is a
   // decision, and re-ticking one on the customer's behalf is not consent this
   // session asked for.
@@ -181,11 +208,118 @@ export default function CheckoutView() {
   // SERVER's figure the one shown, so this exists only to let the number react
   // to a zone or a payment method before anything is sent.
   const shownShippingFee = payment === "prepay" ? 0 : (zone?.fee ?? 0);
-  const shownDiscount = payment === "prepay" ? PREPAY_DISCOUNT : 0;
+
+  /**
+   * THE TOTAL, AND THE DEFECT THAT WAS IN IT.
+   *
+   * This used to be:
+   *
+   *     const shownDiscount = payment === "prepay" ? PREPAY_DISCOUNT : 0;
+   *
+   * which knew about the prepay saving and NOTHING else. So a customer could type a
+   * valid code, be told "SAVE15 applied — ₦10,200 off" in the box, and watch the total
+   * beside it not move. The coupon was not broken: `priceOrder()` added the resolved
+   * promotion to the prepay discount and the order was charged less. The page was
+   * quoting a different number from the one it was about to be charged, which is worse
+   * than a coupon that does not work — it is a quote that lies.
+   *
+   * A live sitewide promotion was invisible here for the same reason, so the Christmas
+   * sale ran for weeks and the checkout total never mentioned it.
+   *
+   * WHAT IS IN IT NOW, AND WHY IT IS ADDED TO THE PREPAY FIGURE
+   *
+   * `priceOrder()` splits the discount into `promotional` (a sale OR a coupon, never
+   * both — `resolveDiscount` picks the better one) and `prepayDiscount` (₦2,000 for
+   * paying early), then sums them. These two are on different axes — one is a price
+   * reduction, the other a reward for a payment method — so they legitimately combine,
+   * and this mirrors that arithmetic exactly rather than inventing a rule of its own.
+   *
+   * The promotional figure is the SERVER's, from `/api/discount`. Never computed here:
+   * a discount the browser can change in devtools is not a discount, and `/api/orders`
+   * recomputes it anyway when the order is written.
+   */
+  const shownPromotional = discount.amountOff;
+  const shownPrepay = payment === "prepay" ? Math.min(PREPAY_DISCOUNT, subtotal() + shownShippingFee) : 0;
+  const shownDiscount = shownPromotional + shownPrepay;
   const shownTotal = zone ? Math.max(subtotal() + shownShippingFee - shownDiscount, 0) : null;
 
   const itemCount = count();
   const cartSubtotal = subtotal();
+
+  /**
+   * THE BASKET, AS A STABLE STRING, so the effect below depends on WHAT IS IN THE CART
+   * rather than on the identity of an array rebuilt every render.
+   */
+  const discountLines = useMemo(
+    () =>
+      items.map((item) => ({
+        // No category: `/api/discount` resolves it from the product slug, so a client
+        // cannot steer a category-scoped promotion somewhere it was not written for, and
+        // a cart saved before that field existed still works.
+        productSlug: item.productSlug,
+        categorySlug: "",
+        amount: item.unitPrice * item.qty,
+      })),
+    [items],
+  );
+  const discountCartKey = JSON.stringify(discountLines);
+
+  /**
+   * RE-PRICE THE BASKET, SO WHAT IS SHOWN IS WHAT WILL BE CHARGED.
+   *
+   * The coupon box reports the figure when a code is applied, but a sitewide sale needs
+   * no customer to type anything — and before this it was applied at the order and never
+   * shown on the checkout page at all.
+   *
+   * IT SENDS THE CODE, AND THAT IS THE POINT.
+   *
+   * An earlier version of this effect fetched WITHOUT the coupon, to avoid asking the
+   * same question twice when someone presses Apply. That left a real disagreement on
+   * screen: change the basket after applying a code and the total silently dropped the
+   * coupon while the box still read "SAVE15 is applied". One small extra request on
+   * Apply is a fair price for the page never claiming a discount it is not charging.
+   *
+   * WHICH IS ALSO WHY A CODE THAT STOPPS QUALIFYING IS CLEARED
+   *
+   * A ₦20,000-off code with an ₦80,000 minimum is legitimate on one basket and not on
+   * the next. The server is the only thing that can say so, so when it refuses a code
+   * this page was holding, the code is dropped — otherwise the box would keep
+   * announcing a discount the order will not get. The promotion still applies and is
+   * still shown, because that is what the server priced.
+   *
+   * `cancelled` guards the one case a naive version gets wrong: the customer edits the
+   * cart again before the first answer lands, and a slow early response overwrites a
+   * fast later one with a figure for a basket that no longer exists.
+   */
+  useEffect(() => {
+    if (!mounted || discountLines.length === 0) return;
+    let cancelled = false;
+    void fetch("/api/discount", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lines: discountLines, couponCode: coupon }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (body: { amountOff?: number; label?: string | null; couponAccepted?: boolean } | null) => {
+          if (cancelled || !body) return;
+          setDiscount({
+            amountOff: typeof body.amountOff === "number" ? body.amountOff : 0,
+            label: typeof body.label === "string" ? body.label : null,
+          });
+          if (coupon && body.couponAccepted === false) setCoupon(null);
+        },
+      )
+      .catch(() => {
+        // Nothing is said and nothing is shown. A failed preview leaves the previous
+        // figure in place, and `/api/orders` recomputes it from scratch anyway — so the
+        // worst case is a stale number on screen, never a wrong charge.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, discountCartKey, coupon]);
 
   // `checkout_start` (`cart-checkout` §12.2). Fired after rehydration so the
   // payload is the real cart, not the empty one.
@@ -274,11 +408,11 @@ export default function CheckoutView() {
     return (
       <div className="mx-auto max-w-2xl px-5 py-20 text-center">
         <h1 className="font-display text-2xl font-semibold">Nothing to check out yet</h1>
-        <p className="mt-2 text-muted">Add something to your cart first.</p>
+        <p className="mt-2 text-fg-muted">Add something to your cart first.</p>
         {/* §6.13 / requirement 9.5: the fit finder, not a dead end. */}
         <div className="mt-6 flex flex-col flex-wrap items-center justify-center gap-3 sm:flex-row">
           <Button onClick={() => router.push("/fit-finder")}>Find your car&apos;s mats</Button>
-          <Link href="/shop" className="text-sm text-gold hover:underline">
+          <Link href="/shop" className="text-sm text-accent hover:underline">
             or browse the shop
           </Link>
         </div>
@@ -317,6 +451,7 @@ export default function CheckoutView() {
       // not sent: §3.1 says the payload carries identity, and there is no field
       // here for a price to land in.
       lines: items.map(identityOf),
+      couponCode: coupon,
     });
 
     if (!result.ok) {
@@ -521,7 +656,7 @@ export default function CheckoutView() {
         <h1 className="font-display text-2xl font-semibold">
           Your order is priced and ready to send
         </h1>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-sm text-fg-muted">
           These figures were priced on our server, not in your browser. Send the message on WhatsApp and we
           will pick it up from there.
         </p>
@@ -532,7 +667,7 @@ export default function CheckoutView() {
         {shownTotal !== null && shownTotal !== response.total && (
           <p
             role="alert"
-            className="mt-4 rounded-xl border border-[#FF6B35] bg-panel px-4 py-3 text-sm"
+            className="mt-4 rounded-xl border border-[#FF6B35] bg-surface px-4 py-3 text-sm"
           >
             The total has changed from {fmtNaira(shownTotal)} to{" "}
             <strong>{fmtNaira(response.total)}</strong> — we recalculate when you submit. The figure below
@@ -543,7 +678,7 @@ export default function CheckoutView() {
         {/* Requirement 1.2: a blocked popup says so, offers an explicit
             alternative, and shows no sent state. */}
         {blocked && (
-          <p role="alert" className="mt-4 rounded-xl border border-line bg-panel px-4 py-3 text-sm">
+          <p role="alert" className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm">
             Your browser blocked the WhatsApp window. Tap <strong>Open WhatsApp</strong> below, or copy the
             message and send it yourself. Your cart is still here either way.
           </p>
@@ -553,35 +688,40 @@ export default function CheckoutView() {
             and the reference will not open a receipt page — so say that rather
             than let the customer discover it later. */}
         {!response.persisted && (
-          <p role="alert" className="mt-4 rounded-xl border border-line bg-panel px-4 py-3 text-sm">
+          <p role="alert" className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm">
             We could not save a copy of this order on our side just now, so the reference below will not open
             a receipt page. The WhatsApp message is the record — please send it so we can confirm.
           </p>
         )}
 
-        <div className="mt-5 space-y-2 rounded-xl border border-line bg-panel p-5">
+        <div className="mt-5 space-y-2 rounded-xl border border-border bg-surface p-5">
           <div className="flex items-baseline justify-between">
-            <span className="text-[11px] uppercase tracking-wide text-muted">Reference</span>
+            <span className="text-[11px] uppercase tracking-wide text-fg-muted">Reference</span>
             <button
               type="button"
               onClick={() => void copyText(response.reference, setRefCopied)}
-              className="rounded-lg border border-line px-3 py-1.5 font-mono text-sm text-gold hover:border-gold"
+              className="rounded-lg border border-border px-3 py-1.5 font-mono text-sm text-accent hover:border-accent"
             >
               {response.reference}
-              <span className="ml-2 text-xs text-muted">{refCopied ? "copied" : "tap to copy"}</span>
+              <span className="ml-2 text-xs text-fg-muted">{refCopied ? "copied" : "tap to copy"}</span>
             </button>
           </div>
           {response.lines.map((line) => (
             <div key={line.key} className="flex justify-between text-sm">
               <span>
-                {line.qty}x {line.productName} — {line.year} {line.brand} {line.model}
+                {line.qty}x {line.productName}
+                {/* The layer on the receipt. A Floor Mats order that does not say which
+                    layer is a receipt for half a description, and the price beside it
+                    is one of two. */}
+                {optionLabel(line.variationSlug) ? ` (${optionLabel(line.variationSlug)})` : ""} —{" "}
+                {line.year} {line.brand} {line.model}
                 {line.rows ? ` (${line.rows}-Row)` : ""}
               </span>
-              <span className="font-mono text-gold">{fmtNaira(line.lineTotal)}</span>
+              <span className="font-mono text-accent">{fmtNaira(line.lineTotal)}</span>
             </div>
           ))}
-          <div className="flex justify-between border-t border-dashed border-white/15 pt-2 text-sm">
-            <span className="text-muted">
+          <div className="flex justify-between border-t border-dashed border-fg-muted/25 pt-2 text-sm">
+            <span className="text-fg-muted">
               Delivery ({response.location.name})
               {response.locationEta ? ` — ${response.locationEta}` : ""}
             </span>
@@ -590,20 +730,20 @@ export default function CheckoutView() {
             </span>
           </div>
           {response.discount > 0 && (
-            <div className="flex justify-between text-sm text-gold">
+            <div className="flex justify-between text-sm text-accent">
               <span>Prepay discount</span>
               <span className="font-mono">-{fmtNaira(response.discount)}</span>
             </div>
           )}
-          <div className="flex justify-between border-t border-dashed border-white/15 pt-2 text-base font-semibold">
+          <div className="flex justify-between border-t border-dashed border-fg-muted/25 pt-2 text-base font-semibold">
             <span>Total</span>
-            <span className="font-mono text-gold">{fmtNaira(response.total)}</span>
+            <span className="font-mono text-accent">{fmtNaira(response.total)}</span>
           </div>
         </div>
 
         {/* Requirement 1.3: the site cannot observe WhatsApp. Say so, and never
             claim the message was sent. */}
-        <p className="mt-5 text-sm text-muted">
+        <p className="mt-5 text-sm text-fg-muted">
           We cannot see your WhatsApp from here. Once you have sent it, tap the button below and we will
           take it from there.
         </p>
@@ -623,7 +763,7 @@ export default function CheckoutView() {
                 location: "prepared_resend",
               })
             }
-            className="block w-full rounded-xl border border-white/25 px-5 py-3.5 text-center text-sm font-semibold hover:border-gold hover:text-gold"
+            className="block w-full rounded-xl border border-fg-muted/40 px-5 py-3.5 text-center text-sm font-semibold hover:border-accent hover:text-accent"
           >
             {blocked ? "Open WhatsApp" : "Resend the message"}
           </a>
@@ -633,9 +773,9 @@ export default function CheckoutView() {
           </Button>
         </div>
 
-        <div className="mt-6 rounded-xl border border-line bg-panel/60 p-4">
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">The message to send</p>
-          <pre className="whitespace-pre-wrap font-mono text-xs text-white/90">
+        <div className="mt-6 rounded-xl border border-border bg-surface/60 p-4">
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-fg-muted">The message to send</p>
+          <pre className="whitespace-pre-wrap font-mono text-xs text-fg/90">
             {response.whatsappMessage}
           </pre>
         </div>
@@ -649,7 +789,7 @@ export default function CheckoutView() {
   return (
     <div className="mx-auto max-w-2xl px-5 py-12">
       <h1 className="font-display text-2xl font-semibold">Almost done</h1>
-      <p className="mt-1 text-sm text-muted">
+      <p className="mt-1 text-sm text-fg-muted">
         We&apos;ll send this straight to WhatsApp for dispatch verification
       </p>
 
@@ -657,13 +797,13 @@ export default function CheckoutView() {
           response. It is attached to no field because no field is at fault, and
           it carries the retry and the manual fallback. */}
       {errors.request && (
-        <div role="alert" className="mt-4 rounded-xl border border-[#FF6B35] bg-panel px-4 py-3 text-sm">
+        <div role="alert" className="mt-4 rounded-xl border border-[#FF6B35] bg-surface px-4 py-3 text-sm">
           <p>{errors.request}</p>
           {offline && (
             <>
               <p className="mt-2">
                 This reference was made in your browser and is not stored on our side:{" "}
-                <span className="font-mono text-gold">{offline.reference}</span>
+                <span className="font-mono text-accent">{offline.reference}</span>
               </p>
               <a
                 href={whatsappLink(offline.message)}
@@ -675,7 +815,7 @@ export default function CheckoutView() {
                     location: "checkout_offline_fallback",
                   })
                 }
-                className="mt-2 block w-full rounded-xl border border-white/25 px-4 py-2.5 text-center text-xs font-semibold hover:border-gold hover:text-gold"
+                className="mt-2 block w-full rounded-xl border border-fg-muted/40 px-4 py-2.5 text-center text-xs font-semibold hover:border-accent hover:text-accent"
               >
                 Open WhatsApp with the message
               </a>
@@ -691,7 +831,7 @@ export default function CheckoutView() {
           not (a phone of "12345", a quantity of 500). */}
       <form className="mt-6 space-y-4" onSubmit={submit}>
         <div>
-          <label htmlFor="co-name" className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+          <label htmlFor="co-name" className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted">
             Full name
           </label>
           <input
@@ -707,7 +847,7 @@ export default function CheckoutView() {
             aria-invalid={Boolean(fieldError("name"))}
             aria-describedby={fieldError("name") ? "co-name-error" : undefined}
             placeholder="e.g. Chidinma Okafor"
-            className={`w-full rounded-xl border bg-panel px-4 py-3.5 text-sm focus:outline-none ${fieldError("name") ? "border-[#FF6B35]" : "border-white/15 focus:border-gold"}`}
+            className={`w-full rounded-xl border bg-surface px-4 py-3.5 text-sm focus:outline-none ${fieldError("name") ? "border-[#FF6B35]" : "border-fg-muted/25 focus:border-accent"}`}
           />
           {fieldError("name") && (
             <p id="co-name-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
@@ -717,7 +857,7 @@ export default function CheckoutView() {
         </div>
 
         <div>
-          <label htmlFor="co-phone" className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+          <label htmlFor="co-phone" className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted">
             WhatsApp number
           </label>
           <input
@@ -735,7 +875,7 @@ export default function CheckoutView() {
             aria-invalid={Boolean(fieldError("phone"))}
             aria-describedby={fieldError("phone") ? "co-phone-error" : undefined}
             placeholder="e.g. 0704 962 1694"
-            className={`w-full rounded-xl border bg-panel px-4 py-3.5 text-sm focus:outline-none ${fieldError("phone") ? "border-[#FF6B35]" : "border-white/15 focus:border-gold"}`}
+            className={`w-full rounded-xl border bg-surface px-4 py-3.5 text-sm focus:outline-none ${fieldError("phone") ? "border-[#FF6B35]" : "border-fg-muted/25 focus:border-accent"}`}
           />
           {fieldError("phone") && (
             <p id="co-phone-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
@@ -745,7 +885,7 @@ export default function CheckoutView() {
         </div>
 
         <div>
-          <label htmlFor="co-address" className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+          <label htmlFor="co-address" className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted">
             Delivery address
           </label>
           <textarea
@@ -762,7 +902,7 @@ export default function CheckoutView() {
             aria-describedby={fieldError("address") ? "co-address-error" : undefined}
             rows={2}
             placeholder="Street, estate/landmark, nearest bus stop"
-            className={`w-full rounded-xl border bg-panel px-4 py-3.5 text-sm focus:outline-none ${fieldError("address") ? "border-[#FF6B35]" : "border-white/15 focus:border-gold"}`}
+            className={`w-full rounded-xl border bg-surface px-4 py-3.5 text-sm focus:outline-none ${fieldError("address") ? "border-[#FF6B35]" : "border-fg-muted/25 focus:border-accent"}`}
           />
           {fieldError("address") && (
             <p id="co-address-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
@@ -772,7 +912,7 @@ export default function CheckoutView() {
         </div>
 
         <div>
-          <label htmlFor="co-location" className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+          <label htmlFor="co-location" className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted">
             Delivery zone
           </label>
           <select
@@ -786,7 +926,7 @@ export default function CheckoutView() {
             }}
             aria-invalid={Boolean(fieldError("location"))}
             aria-describedby={fieldError("location") ? "co-location-error" : undefined}
-            className="w-full rounded-xl border border-white/15 bg-panel px-4 py-3.5 text-sm focus:border-gold focus:outline-none"
+            className="w-full rounded-xl border border-fg-muted/25 bg-surface px-4 py-3.5 text-sm focus:border-accent focus:outline-none"
           >
             {/* No default. Defaulting to `LOCATIONS[0]` quoted every non-Lagos
                 customer 24–48 h against a real 5–7 days (§6.7). */}
@@ -802,7 +942,7 @@ export default function CheckoutView() {
           {/* §6.8: the ETA beside the control, not only inside the <option> text
               where it vanishes the moment one is chosen. */}
           {zone && (
-            <p className="mt-1 text-xs text-muted">Estimated arrival: {zone.eta} after confirmation.</p>
+            <p className="mt-1 text-xs text-fg-muted">Estimated arrival: {zone.eta} after confirmation.</p>
           )}
           {fieldError("location") && (
             <p id="co-location-error" role="alert" className="mt-1 text-xs text-[#FF6B35]">
@@ -812,7 +952,7 @@ export default function CheckoutView() {
         </div>
 
         <fieldset>
-          <legend className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">
+          <legend className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted">
             Payment method
           </legend>
           <div className="space-y-2">
@@ -823,12 +963,12 @@ export default function CheckoutView() {
               aria-pressed={payment === "pod"}
               className={`w-full rounded-xl border px-4 py-3.5 text-left text-sm ${
                 payment === "pod"
-                  ? "border-gold bg-panel-2 shadow-[0_0_0_1px_var(--gold)_inset]"
-                  : "border-white/15 bg-panel"
+                  ? "border-accent bg-surface-2 shadow-[0_0_0_1px_var(--gold)_inset]"
+                  : "border-fg-muted/25 bg-surface"
               }`}
             >
               <span className="font-semibold">Pay on Delivery</span>
-              <span className="mt-0.5 block text-xs text-muted">
+              <span className="mt-0.5 block text-xs text-fg-muted">
                 The rider collects cash or a transfer when your order arrives — nothing to pay now.
               </span>
             </button>
@@ -839,8 +979,8 @@ export default function CheckoutView() {
                 aria-pressed={payment === "prepay"}
                 className={`w-full rounded-xl border px-4 py-3.5 text-left text-sm ${
                   payment === "prepay"
-                    ? "border-gold bg-panel-2 shadow-[0_0_0_1px_var(--gold)_inset]"
-                    : "border-white/15 bg-panel"
+                    ? "border-accent bg-surface-2 shadow-[0_0_0_1px_var(--gold)_inset]"
+                    : "border-fg-muted/25 bg-surface"
                 }`}
               >
                 <span className="font-semibold">
@@ -849,12 +989,12 @@ export default function CheckoutView() {
                       not a static badge — and never more than the order is worth
                       (requirement 8.7). */}
                   {zone && cartSubtotal > 0 && (
-                    <span className="ml-1 rounded-full border border-line px-2 py-0.5 font-mono text-[10px] text-gold">
+                    <span className="ml-1 rounded-full border border-border px-2 py-0.5 font-mono text-[10px] text-accent">
                       Save {fmtNaira(Math.min(zone.fee + PREPAY_DISCOUNT, cartSubtotal + zone.fee))}
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block text-xs text-muted">
+                <span className="mt-0.5 block text-xs text-fg-muted">
                   We send the account details on WhatsApp, and the discount applies once your transfer is
                   received.
                 </span>
@@ -868,13 +1008,55 @@ export default function CheckoutView() {
           )}
         </fieldset>
 
-        <div className="flex items-baseline justify-between border-t border-dashed border-white/15 pt-4">
-          <span className="text-sm text-muted">Total due</span>
-          <span className="font-mono text-2xl font-bold text-gold">
+        {items.length > 0 && (
+          <div className="mt-4">
+            <CouponBox
+              lines={discountLines}
+              onApplied={setCoupon}
+              /* The box knows what the server charged; the total has to be told, or the
+                 page quotes a figure the order is not going to use. */
+              onPriced={setDiscount}
+              appliedLabel={coupon}
+            />
+          </div>
+        )}
+
+        {/* ── The discount, before the total ───────────────────────────────────
+            *
+            * The ORDER of these lines is the whole point. A customer sees their items,
+            * then a named discount, then a total that is arithmetically the two
+            * subtracted — and if the total changes, `shownTotal !== response.total`
+            * below explains that the server's figures won. Showing the total first and
+            * the saving after would make the saving look like something extra rather
+            * than something already taken off.
+            */}
+        {shownDiscount > 0 && (
+          <div className="flex items-baseline justify-between border-t border-dashed border-fg-muted/25 pt-3">
+            <span className="text-sm text-fg-muted">
+              {/*
+                NAMED, because an unlabelled saving is the half of this bug. When the box
+                says "SAVE15 applied" and the line under it says "Discount", nobody has
+                been shown which discount moved the total — and with a promotion AND a
+                coupon AND a prepay reward in play there can be up to two of them.
+              */}
+              {discount.label ?? (shownPrepay > 0 ? "Prepay saving" : "Discount")}
+              {shownPrepay > 0 && shownPromotional > 0 && (
+                <span className="ml-1 text-fg-muted">+ prepay saving</span>
+              )}
+            </span>
+            <span className="tabular font-mono text-sm text-accent">
+              −{fmtNaira(shownDiscount)}
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-baseline justify-between border-t border-dashed border-fg-muted/25 pt-4">
+          <span className="text-sm text-fg-muted">Total due</span>
+          <span className="tabular font-mono text-2xl font-bold text-accent">
             {shownTotal !== null ? fmtNaira(shownTotal) : "—"}
           </span>
         </div>
-        {!zone && <p className="text-xs text-muted">Choose a delivery zone to see the total.</p>}
+        {!zone && <p className="text-xs text-fg-muted">Choose a delivery zone to see the total.</p>}
 
         {/* The trust block immediately above the submit button
             (`trust-and-policies` §9.4) — the guarantee, the fee band and the
@@ -893,7 +1075,7 @@ export default function CheckoutView() {
             `/delivery` defect; those files belong to another agent this round and
             are reported rather than edited. */}
         <div>
-          <label className="flex items-start gap-3 text-xs text-muted">
+          <label className="flex items-start gap-3 text-xs text-fg-muted">
             <input
               id="co-consent"
               name="consent"
@@ -910,7 +1092,7 @@ export default function CheckoutView() {
             />
             <span>
               I agree to the{" "}
-              <Link href="/policies/privacy" className="text-gold hover:underline">
+              <Link href="/policies/privacy" className="text-accent hover:underline">
                 privacy policy
               </Link>
               . My name, number and address are used to deliver this order and are never sent to Meta or
@@ -934,26 +1116,26 @@ export default function CheckoutView() {
         {/* A WhatsApp hand-off is the only route out today, so a blocked popup or
             an app-less phone would strand the order. `tel:` and the manual
             contact route make it survivable (§9.5, §7.2). */}
-        <p className="text-center text-xs text-muted">
+        <p className="text-center text-xs text-fg-muted">
           WhatsApp not working?{" "}
-          <a href={contact.tel} className="text-gold hover:underline">
+          <a href={contact.tel} className="text-accent hover:underline">
             Call {contact.whatsappNumber}
           </a>{" "}
           and read the message below to us.
         </p>
 
-        <div className="rounded-xl border border-line bg-panel/60 p-4">
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Pre-filled WhatsApp message</p>
-          <pre className="whitespace-pre-wrap font-mono text-xs text-white/90">{preview}</pre>
+        <div className="rounded-xl border border-border bg-surface/60 p-4">
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-fg-muted">Pre-filled WhatsApp message</p>
+          <pre className="whitespace-pre-wrap font-mono text-xs text-fg/90">{preview}</pre>
         </div>
 
-        <p className="text-center text-xs text-muted">
+        <p className="text-center text-xs text-fg-muted">
           We confirm every order on WhatsApp before dispatch. Delivery is {delivery.range()} depending on
           your zone — nothing is charged now.
         </p>
 
         {/* §5.7: safe precisely because the draft is persisted (§6.1). */}
-        <Link href="/fit-finder" className="block text-center text-sm text-muted hover:text-white">
+        <Link href="/fit-finder" className="block text-center text-sm text-fg-muted hover:text-fg">
           ← Back to your fit
         </Link>
       </form>
@@ -970,6 +1152,12 @@ export default function CheckoutView() {
 function identityOf(item: CartItem) {
   return {
     productSlug: item.productSlug,
+    // WHICH LAYER. Sent because the server prices a named option from that option's
+    // figures, and Floor Mats is one product in two layers at two prices. Omitting it
+    // would order a double-layer set at the single-layer figure while the page above
+    // shows the double-layer price — a receipt that disagrees with the screen it was
+    // bought from.
+    variationSlug: item.variationSlug ?? null,
     brand: item.brand,
     model: item.model,
     year: item.year,
@@ -989,6 +1177,10 @@ function serverLineToCartItem(line: OrderLineResponse): CartItem {
   return {
     id: line.key,
     productSlug: line.productSlug,
+    // Carried across so the local record still says which layer the customer chose.
+    // `id` is `line.key`, which already encodes the option, so a cart rebuilt without
+    // it would hold a line whose key names a layer its own fields do not.
+    variationSlug: line.variationSlug ?? null,
     productName: line.productName,
     brand: line.brand,
     model: line.model,

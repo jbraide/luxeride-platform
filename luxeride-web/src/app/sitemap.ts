@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { MetadataRoute } from "next";
-import { CATEGORIES, PRODUCTS } from "@/data/products";
+import { listCategories, listProducts } from "@/lib/catalogue";
 import { absoluteUrl } from "@/lib/site";
 
 // The sitemap. Every URL is built from SITE_URL so it can never disagree with
@@ -30,8 +30,17 @@ function newestMtime(files: string[]): Date | undefined {
 
 const SRC = path.join(process.cwd(), "src");
 
-export default function sitemap(): MetadataRoute.Sitemap {
+/**
+ * Dynamic, like every other catalogue surface. A sitemap built from a compile-time
+ * array would keep listing a product after it was deleted and would never list one
+ * created in `/admin/products` — which is the worse of the two errors, because a
+ * sitemap pointing at a 404 trains a crawler to stop trusting it.
+ */
+export const dynamic = "force-dynamic";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const routes: MetadataRoute.Sitemap = [];
+  const [PRODUCTS, CATEGORIES] = await Promise.all([listProducts(), listCategories()]);
 
   routes.push({
     url: absoluteUrl("/"),
@@ -39,7 +48,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 1,
     lastModified: newestMtime([
       path.join(SRC, "app", "page.tsx"),
-      path.join(SRC, "data", "products.ts"),
+      path.join(SRC, "app", "admin", "(console)", "products", "page.tsx"),
     ]),
   });
 
@@ -61,7 +70,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
       lastModified: newestMtime([
         path.join(SRC, "app", "shop", "[category]", "page.tsx"),
-        path.join(SRC, "data", "products.ts"),
+        // NOT `src/data/products.ts` any more. That file no longer determines what
+        // this page renders — the `Category` row does — so its mtime would tell a
+        // crawler a category page changed when only an unrelated product's copy was
+        // edited. The admin screen is included because editing a category in
+        // `/admin/categories` is now the thing that genuinely changes it.
+        path.join(SRC, "app", "admin", "(console)", "categories", "page.tsx"),
       ]),
     });
   }
@@ -72,8 +86,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 0.7,
       lastModified: newestMtime([
-        path.join(SRC, "data", "products.ts"),
         path.join(SRC, "app", "products", "[slug]", "page.tsx"),
+        path.join(SRC, "app", "admin", "(console)", "products", "[id]", "page.tsx"),
       ]),
     });
   }

@@ -6,6 +6,11 @@ import { fmtNaira } from "./pricing";
 import { ZERO_FEE_LABEL } from "./order-pricing";
 import { WHATSAPP_NUMBER } from "@/data/locations";
 
+// The customer-facing phone normalisation lives in an import-free module so it can be
+// unit-tested (`scripts/phone.test.mjs`); re-exported here so callers keep one import
+// site for WhatsApp links.
+export { whatsappNumber, customerThreadLink } from "./phone";
+
 export interface OrderMessageInput {
   name: string;
   phone: string;
@@ -16,6 +21,14 @@ export interface OrderMessageInput {
   subtotal: number;
   shippingFee: number;
   discount: number;
+  /**
+   * What the discount was CALLED — "Black Friday", or the coupon code.
+   *
+   * Optional because the discount can be the prepay saving, which has no name. When
+   * it is a promotion or a coupon this is set from `priceOrder`'s `discountLabel`, so
+   * the customer reads "less ₦24,000 Black Friday" rather than a bare subtraction.
+   */
+  discountLabel?: string | null;
   total: number;
   /**
    * The order reference, and from M6.8 it is the one the SERVER minted and
@@ -62,10 +75,28 @@ export function buildOrderMessage(input: OrderMessageInput, preview = false): st
   // §3.4: the prepay branch shows the pre-discount subtotal and the discount as
   // its own line, so the customer can see where the saving came from instead of
   // being handed a smaller total and a promise.
+  // §3.4: the prepay branch shows the pre-discount subtotal and the discount as
+  // its own line, so the customer can see where the saving came from instead of
+  // being handed a smaller total and a promise.
+  //
+  // THE SAME IS NOW TRUE OF PAY ON DELIVERY, and it was not until a promotion could
+  // apply to one. A POD customer with 20% off saw their itemised lines sum to
+  // ₦120,000 and a total of ₦96,000 with nothing between them — which reads as an
+  // error, and is the kind of thing a customer stops trusting a shop over rather than
+  // a promotion they enjoy. So the discount is named on BOTH branches, with what it
+  // was called, because "less ₦24,000 Black Friday" is a sentence and "less ₦24,000"
+  // is a rounding error.
+  const discountNote =
+    input.discount > 0
+      ? `, subtotal ${fmtNaira(input.subtotal)} less ${fmtNaira(input.discount)}${
+          input.discountLabel ? ` ${input.discountLabel}` : " discount"
+        }`
+      : "";
+
   const paymentLine =
     input.paymentMethod === "prepay"
-      ? `Prepay by Transfer — ${fmtNaira(input.total)} (delivery ${ZERO_FEE_LABEL}, subtotal ${fmtNaira(input.subtotal)} less ${fmtNaira(input.discount)} discount)`
-      : `Pay on Delivery — ${fmtNaira(input.total)} (incl. ${deliveryCost} delivery)`;
+      ? `Prepay by Transfer — ${fmtNaira(input.total)} (delivery ${ZERO_FEE_LABEL}${discountNote})`
+      : `Pay on Delivery — ${fmtNaira(input.total)} (incl. ${deliveryCost} delivery${discountNote})`;
 
   const eta = input.locationEta ? ` (${input.locationEta} after confirmation)` : "";
 
@@ -84,6 +115,7 @@ export function buildOrderMessage(input: OrderMessageInput, preview = false): st
 export function whatsappLink(message: string): string {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
+
 
 /**
  * A refusal, built from the register rather than restated (`fit-finder` §7.6).

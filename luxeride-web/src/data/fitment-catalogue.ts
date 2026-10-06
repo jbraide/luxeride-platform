@@ -51,12 +51,96 @@ import type {
  * depend on the shape of the footwell, so a layout has no business claiming them.
  * The `kind` union in `LayoutVariant` says the same thing.
  */
+/**
+ * THE TWO MAT TYPES, and what the Fit Finder offers (owner's instruction, 2026-10-05).
+ *
+ * "Single and double layer are types of mats and should not be its own category" —
+ * which is how the shop is already built: `single-layer-mats` and `double-layer-mats`
+ * are PRODUCTS inside the `floor-mats` CATEGORY, and the category page lists them
+ * together. What was wrong was the FIT FINDER, which presented all four floor-pan
+ * products as four separate things to choose between, so a customer arriving to buy
+ * "mats for my car" was asked to pick a product before they were asked anything else.
+ *
+ * So the Fit Finder is now **mats only**, and presents the two TYPES:
+ *
+ *   - Both are cut for this car  → one "Mats" choice, and the customer picks the
+ *                                  layer on the next step
+ *   - Only single is cut         → single offered, and only single
+ *   - Only double is cut         → double offered, and only double
+ *
+ * That last distinction is real data and not a filter: `LayoutVariant` rows are what a
+ * floor pan actually offers, so a car with a single-layer variant and no double-layer
+ * one IS a single-layer-only car. See `matTypesForCar()`.
+ *
+ * `cargo-liner` and `full-bundle` remain in the catalogue and on their own pages —
+ * they are sold, just not through the Fit Finder yet.
+ */
+export const MAT_TYPE_KINDS = ["single_layer", "double_layer"] as const;
+export type MatTypeKind = (typeof MAT_TYPE_KINDS)[number];
+
+/**
+ * THE PRODUCT THE MATS ARE, and the OPTION each layer is.
+ *
+ * The layer stopped being a product on 2026-10-05 — see the header above. One product
+ * ("floor-mats") is offered by every floor pan, twice: once per layer, and each of those
+ * two offers is a `LayoutVariant` with a `variationId` naming the option. So "which
+ * layer is this?" is a question about the OPTION, and the product is the same either way.
+ *
+ * `FLOOR_PAN_PRODUCTS` therefore lists each product ONCE, with the kinds it is offered
+ * under. The two mat kinds belong to `floor-mats`; the boot liner and the bundle are
+ * still products of their own, because they are different objects rather than types of
+ * the same one.
+ */
 const FLOOR_PAN_PRODUCTS = [
-  { kind: "single_layer", slug: "single-layer-mats" },
-  { kind: "double_layer", slug: "double-layer-mats" },
-  { kind: "boot_liner", slug: "cargo-liner" },
-  { kind: "full_set", slug: "full-bundle" },
-] as const satisfies ReadonlyArray<{ kind: LayoutVariant["kind"]; slug: FitProductSlug }>;
+  { kind: "single_layer", slug: "floor-mats", variationSlug: "single-layer" },
+  { kind: "double_layer", slug: "floor-mats", variationSlug: "double-layer" },
+  { kind: "boot_liner", slug: "cargo-liner", variationSlug: "cargo-liner" },
+  { kind: "full_set", slug: "full-bundle", variationSlug: "full-bundle" },
+] as const satisfies ReadonlyArray<{
+  kind: LayoutVariant["kind"];
+  slug: FitProductSlug;
+  variationSlug: string;
+}>;
+
+/** The product the mats are sold as. One product, two layers. */
+export const MATS_PRODUCT_SLUG: FitProductSlug = "floor-mats";
+
+/**
+ * The OPTION slug a mat type is sold under.
+ *
+ * Not a product slug, and the difference is the whole 2026-10-05 change: the customer
+ * picks a layer, the product never changes, and `LayoutVariant.variationId` is what says
+ * which layer a given floor pan is cut for.
+ */
+export const MAT_TYPE_VARIATION: Record<MatTypeKind, string> = {
+  single_layer: "single-layer",
+  double_layer: "double-layer",
+};
+
+/** What a mat type is CALLED on the store. */
+export const MAT_TYPE_LABEL: Record<MatTypeKind, string> = {
+  single_layer: "Single layer",
+  double_layer: "Double layer",
+};
+
+/**
+ * THE INVERSE of `MAT_TYPE_VARIATION`: an option slug back to the layer it is.
+ *
+ * It exists because an OFFER carries an option slug and the customer is holding a
+ * layer, and translating between them in both directions at each call site is how
+ * two of them end up disagreeing. Built from the map rather than written out, so a
+ * third layer cannot be added to one and forgotten in the other.
+ *
+ * A slug that is not a mat layer — the boot liner's, the bundle's — returns null,
+ * which is correct: those are not layers and the layer choice does not apply to them.
+ */
+export function matTypeForVariation(variationSlug: string | null | undefined): MatTypeKind | null {
+  if (!variationSlug) return null;
+  const found = (Object.keys(MAT_TYPE_VARIATION) as MatTypeKind[]).find(
+    (kind) => MAT_TYPE_VARIATION[kind] === variationSlug,
+  );
+  return found ?? null;
+}
 
 /**
  * The year span every unverified row carries.
@@ -100,18 +184,35 @@ export function tickerFor(model: string, make: string): string {
   return `${alnum}${makeInitial}`.padEnd(2, "X").slice(0, 3);
 }
 
-/** The catalogue price for this product at this brand's tier. */
-function priceFor(slugValue: FitProductSlug, brandTier: "regular" | "premium"): number {
+/**
+ * The catalogue price for one offer, at this brand's tier.
+ *
+ * THE OPTION'S PRICE, not the product's, and that changed on 2026-10-05. Floor Mats is
+ * one product whose `regular` is the single-layer figure, so reading the product here
+ * gave both layers the same price and a double-layer pan started from ₦45,000. A
+ * variation exists to carry its own price — that is the entire reason the table exists
+ * — and the fallback to the product is only for a product with no options named.
+ */
+function priceFor(
+  slugValue: FitProductSlug,
+  variationSlug: string,
+  brandTier: "regular" | "premium",
+): number {
   const product = PRODUCTS.find((p) => p.slug === slugValue);
   if (!product) throw new Error(`fitment-catalogue: no catalogue product "${slugValue}".`);
-  return brandTier === "premium" ? product.premium : product.regular;
+  const option = product.variations?.find((candidate) => candidate.slug === variationSlug);
+  return option ? option[brandTier] : product[brandTier];
 }
 
 function variantsFor(brandTier: "regular" | "premium"): LayoutVariant[] {
-  return FLOOR_PAN_PRODUCTS.map(({ kind, slug: productSlug }) => ({
+  return FLOOR_PAN_PRODUCTS.map(({ kind, slug: productSlug, variationSlug }) => ({
     productSlug,
+    // The option this offer is. `LayoutVariant` carries it as an id in the database; in
+    // the compile-time catalogue the slug is the handle the storefront matches on, which
+    // is the same handle `MAT_TYPE_VARIATION` names and the cart stores.
+    variationSlug,
     kind,
-    priceFrom: priceFor(productSlug, brandTier),
+    priceFrom: priceFor(productSlug, variationSlug, brandTier),
     // "made to order" is the only stock state anyone can honestly claim: nothing
     // in this repository establishes stock for a specific car.
     stockState: "made_to_order" as const,
@@ -153,6 +254,10 @@ export const CATALOGUE_LAYOUTS: Layout[] = FLAT_CARS.map(({ brand, model }) => {
     bodyType: "unknown",
     driveSide: "unknown",
     kind: "footwell",
+    // "mixed" = "ask the customer". `cars.ts` carries no seating data, and inferring
+    // "GX 460 is a 3-row" from the model name would be an assertion with nothing
+    // behind it. The owner sets this per car in the admin once they have checked.
+    seatRows: "mixed",
     status: "inferred",
     evidenceNote:
       "Preloaded from the car catalogue. No floor pan has been measured or confirmed for this vehicle yet.",

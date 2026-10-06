@@ -23,7 +23,7 @@ export default function SocialLinks({ className = "" }: { className?: string }) 
             href={profile.url}
             target="_blank"
             rel="noreferrer"
-            className="text-sm text-muted hover:text-gold"
+            className="text-sm text-fg-muted hover:text-accent"
           >
             {profile.platform}
           </a>

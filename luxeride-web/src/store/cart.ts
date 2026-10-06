@@ -38,6 +38,22 @@ import { MAX_LINE_QTY } from "../lib/pricing.ts";
 export interface CartItem {
   id: string;
   productSlug: string;
+  /**
+   * WHICH OPTION of the product, when the product has more than one.
+   *
+   * Added 2026-10-05, when single layer and double layer stopped being two products
+   * and became two options of one. It is part of the line's IDENTITY rather than
+   * decoration, and `lineKey()` already includes it: two layers of the same mats for
+   * the same car are two different things at two different prices, so they are two
+   * lines. Without this field on the cart, adding a double-layer set after a
+   * single-layer one would merge into the first and halve the order.
+   *
+   * `null`/absent means "the product, option unspecified", which is what it meant
+   * before `ProductVariation` existed and is still right for every product with one
+   * option. It is not the same as the product's floor price — the server prices a
+   * named option from that option's figures.
+   */
+  variationSlug?: string | null;
   productName: string;
   brand: string;
   model: string;
@@ -92,6 +108,20 @@ export function clampQty(qty: number): number {
 /** `null` for anything that is not a finite number, which is what gets dropped. */
 function normaliseQty(raw: unknown): number | null {
   return typeof raw === "number" && Number.isFinite(raw) ? clampQty(raw) : null;
+}
+
+/**
+ * An option slug, or `null` for a line that names none.
+ *
+ * Kept OPTIONAL rather than required in the persisted shape: a cart written before
+ * 2026-10-05 carries no such key on any line, and rehydrating one must not drop every
+ * line in it. Absent and empty both mean "no option named", which is exactly what an
+ * old line meant.
+ */
+function optionSlug(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 /** A non-empty trimmed string, or `null` for the fields that must be present. */
@@ -212,12 +242,27 @@ export function sanitiseCartItems(raw: unknown): CartItem[] {
       continue;
     }
     if (!(candidate.rows === null || candidate.rows === "2" || candidate.rows === "3")) continue;
+    const option = optionSlug(candidate.variationSlug);
 
     const line: CartItem = {
       // The line key doubles as the fallback id: it is already unique per line
       // and it is stable across re-renders, which a random id would not be.
-      id: text(candidate.id) ?? lineKey({ productSlug, brand, model, year, rows: candidate.rows, qty }),
+      id:
+        text(candidate.id) ??
+        lineKey({
+          productSlug,
+          // The key MUST be rebuilt from the option the line actually carries, or a
+          // cart written by an older build gets ids keyed without it and a line added
+          // afterwards finds no match for itself.
+          variationSlug: option,
+          brand,
+          model,
+          year,
+          rows: candidate.rows,
+          qty,
+        }),
       productSlug,
+      variationSlug: option,
       productName: text(candidate.productName) ?? productSlug,
       brand,
       model,

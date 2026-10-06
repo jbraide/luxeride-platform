@@ -21,30 +21,30 @@ export default function Error({ error, retry }: { error: Error & { digest?: stri
 
   return (
     <div className="mx-auto max-w-lg px-5 py-20 text-center">
-      <p className="font-mono text-xs uppercase tracking-widest text-gold-dim">Something went wrong</p>
+      <p className="font-mono text-xs uppercase tracking-widest text-accent-dim">Something went wrong</p>
       <h1 className="font-display mt-3 text-2xl font-semibold">This page didn&apos;t load</h1>
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 text-sm text-fg-muted">
         The problem is on our side. Your cart is saved in this browser, so nothing you picked is lost.
       </p>
-      {error.digest && <p className="mt-2 font-mono text-[11px] text-muted">Reference: {error.digest}</p>}
+      {error.digest && <p className="mt-2 font-mono text-[11px] text-fg-muted">Reference: {error.digest}</p>}
 
       <div className="mt-8 space-y-3">
         <button
           onClick={() => retry()}
-          className="w-full rounded-xl bg-gold px-5 py-3 text-center text-sm font-semibold text-ink"
+          className="w-full rounded-xl bg-accent px-5 py-3 text-center text-sm font-semibold text-on-accent"
         >
           Try again
         </button>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link
             href="/cart"
-            className="flex-1 rounded-xl border border-white/25 px-5 py-3 text-center text-sm font-semibold hover:border-gold"
+            className="flex-1 rounded-xl border border-fg-muted/40 px-5 py-3 text-center text-sm font-semibold hover:border-accent"
           >
             View my cart
           </Link>
           <Link
             href="/"
-            className="flex-1 rounded-xl border border-white/25 px-5 py-3 text-center text-sm font-semibold hover:border-gold"
+            className="flex-1 rounded-xl border border-fg-muted/40 px-5 py-3 text-center text-sm font-semibold hover:border-accent"
           >
             Back to home
           </Link>

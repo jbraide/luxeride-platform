@@ -20,13 +20,13 @@ import { delivery, guarantee, prepay } from "@/lib/copy";
 export function TrustStrip({ variant = "cta" }: { variant?: "cta" | "summary" }) {
   if (variant === "summary") {
     return (
-      <div className="rounded-xl border border-line bg-panel/60 px-4 py-3 text-xs text-muted">
+      <div className="rounded-xl border border-border bg-surface/60 px-4 py-3 text-xs text-fg-muted">
         <p>
-          <span aria-hidden className="mr-1 text-gold">
+          <span aria-hidden className="mr-1 text-accent">
             🛡️
           </span>
           {guarantee}{" "}
-          <Link href="/policies/returns" className="text-gold hover:underline">
+          <Link href="/policies/returns" className="text-accent hover:underline">
             How it works
           </Link>
         </p>
@@ -39,31 +39,31 @@ export function TrustStrip({ variant = "cta" }: { variant?: "cta" | "summary" })
   }
 
   return (
-    <div className="rounded-xl border border-line bg-panel/60 px-4 py-3">
-      <ul className="space-y-1.5 text-xs text-muted">
+    <div className="rounded-xl border border-border bg-surface/60 px-4 py-3">
+      <ul className="space-y-1.5 text-xs text-fg-muted">
         <li className="flex gap-2">
-          <span aria-hidden className="text-gold">
+          <span aria-hidden className="text-accent">
             🛡️
           </span>
           <span>
-            <Link href="/policies/returns" className="text-gold hover:underline">
+            <Link href="/policies/returns" className="text-accent hover:underline">
               {guarantee}
             </Link>
           </span>
         </li>
         <li className="flex gap-2">
-          <span aria-hidden className="text-gold">
+          <span aria-hidden className="text-accent">
             🚚
           </span>
           <span>
             {delivery.range()} delivery depending on your zone.{" "}
-            <Link href="/policies/delivery" className="text-gold hover:underline">
+            <Link href="/policies/delivery" className="text-accent hover:underline">
               See the zones
             </Link>
           </span>
         </li>
         <li className="flex gap-2">
-          <span aria-hidden className="text-gold">
+          <span aria-hidden className="text-accent">
             💳
           </span>
           <span>{prepay.label} when you prepay by bank transfer — or pay the rider on delivery.</span>

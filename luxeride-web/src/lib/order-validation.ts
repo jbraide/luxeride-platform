@@ -125,7 +125,14 @@ export const YEAR_MIN = 1900;
 export const YEAR_MAX = 2100;
 
 /** The per-line fields that can carry their own error, for `lines.N.<field>`. */
-export type OrderLineField = "productSlug" | "brand" | "model" | "year" | "rows" | "qty";
+export type OrderLineField =
+  | "productSlug"
+  | "variationSlug"
+  | "brand"
+  | "model"
+  | "year"
+  | "rows"
+  | "qty";
 
 /**
  * A dotted path to the control that failed, so `/checkout` can render per-field
@@ -163,6 +170,20 @@ export type OrderFieldErrors = Partial<Record<OrderFieldPath, string>>;
 
 export interface ValidatedOrderLine {
   productSlug: string;
+  /**
+   * WHICH OPTION of that product, or null when none was chosen. Added 2026-10-05.
+   *
+   * It is carried all the way to `OrderItem.variationId` because the layer IS the
+   * product as far as this order is concerned: Floor Mats is one product sold in two
+   * layers, and a line that reached the price engine without saying which one would be
+   * priced from the product's floor \u2014 a double-layer set quoted at the single-layer
+   * figure, silently, on every order.
+   *
+   * Optional rather than required because most products have exactly one option and no
+   * line will name it. It is NEVER defaulted: an absent option means "the product,
+   * unspecified option", which is what a single-option product means.
+   */
+  variationSlug: string | null;
   brand: string;
   model: string;
   /**
@@ -184,6 +205,21 @@ export interface ValidatedOrderSubmission {
   zone: ResolvedZone;
   paymentMethod: PaymentMethod;
   lines: ValidatedOrderLine[];
+  /**
+   * The code the customer typed, or null.
+   *
+   * OPTIONAL AND SANITISED AT THE EDGE. A missing code is not an error — most orders
+   * have none — but the value is normalised (trimmed, uppercased, and stripped of
+   * anything that is not a letter, digit, dash or underscore, then length-capped) before
+   * it reaches the database. `normalizeCouponCode` in `src/lib/discounts.ts` does the
+   * casing; the character strip is here because this is the only place a string from a
+   * request body passes into the pricing path.
+   *
+   * A code that does not exist is NOT rejected at this stage. It is resolved later and
+   * answered with "we do not recognise that code" — a customer who mistypes must see
+   * that, not a generic 422 about a field they did not know existed.
+   */
+  couponCode: string | null;
 }
 
 export type ValidateOrderResult =
@@ -427,6 +463,18 @@ export function validateOrderSubmission(
         push("productSlug", "Choose a product for this line.");
       }
 
+      // OPTIONAL, and null rather than absent so the line's meaning is explicit.
+      // Bounded like every other slug; an over-long one is a request that did not come
+      // from this cart, and it is refused rather than truncated into a slug that might
+      // name a real option.
+      const variationSlug =
+        raw.variationSlug === undefined || raw.variationSlug === null
+          ? null
+          : boundedText(raw.variationSlug, SLUG_MAX_LENGTH);
+      if (raw.variationSlug !== undefined && raw.variationSlug !== null && variationSlug === null) {
+        push("variationSlug", "That option is not valid.");
+      }
+
       const brand = boundedText(raw.brand, BRAND_MAX_LENGTH);
       if (brand === null) {
         push("brand", "Choose the make of the car this is for.");
@@ -460,7 +508,15 @@ export function validateOrderSubmission(
         return;
       }
 
-      lines.push({ productSlug, brand, model, year: year.value, rows: rows.value, qty: qty.value });
+      lines.push({
+        productSlug,
+        variationSlug,
+        brand,
+        model,
+        year: year.value,
+        rows: rows.value,
+        qty: qty.value,
+      });
     });
   }
 
@@ -482,6 +538,31 @@ export function validateOrderSubmission(
       zone: zone.value,
       paymentMethod: paymentMethod.value,
       lines,
+      couponCode: sanitizeCouponCode(input.couponCode),
     },
   };
+}
+
+/**
+ * A customer-typed coupon code, normalised at the edge of the system.
+ *
+ * The character strip is the point. This is the ONLY place a string from a request body
+ * reaches the pricing path, so anything that is not a letter, digit, dash or underscore
+ * is removed here rather than being carried into a database lookup. An absent, empty or
+ * wholly-stripped value is `null` — most orders carry no code, and "no code" is not an
+ * error.
+ *
+ * NOT REJECTED WHEN UNKNOWN. A code that does not exist resolves to "we do not
+ * recognise that code" later, which is a sentence the customer can act on. Refusing the
+ * submission here would be a generic validation error about a field they were not told
+ * existed, and they would retry the whole form for a typo.
+ */
+export function sanitizeCouponCode(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, 31);
+  return cleaned === "" ? null : cleaned;
 }

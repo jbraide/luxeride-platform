@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
-import { PRODUCTS, getCategoryBySlug, getProductBySlug, priceRange } from "@/data/products";
+import { getCategory, getProduct } from "@/lib/catalogue";
+import { priceRange } from "@/data/products";
 import { fmtNairaAscii } from "@/lib/pricing";
 import { absoluteUrl } from "@/lib/site";
 
@@ -17,9 +18,13 @@ import { absoluteUrl } from "@/lib/site";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export function generateStaticParams() {
-  return PRODUCTS.map((p) => ({ slug: p.slug }));
-}
+/**
+ * `generateStaticParams` is GONE, for the same reason it is gone from the PDP it
+ * belongs to: the catalogue is a database, and a product created in
+ * `/admin/products` does not exist at build time. See the header of
+ * `src/app/products/[slug]/page.tsx`.
+ */
+export const dynamic = "force-dynamic";
 
 export const alt = "LuxeRide product";
 
@@ -29,8 +34,8 @@ export default async function ProductOpengraphImage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = getProductBySlug(slug);
-  const category = product ? getCategoryBySlug(product.categorySlug) : undefined;
+  const product = await getProduct(slug);
+  const category = product ? await getCategory(product.categorySlug) : undefined;
   const name = product?.name ?? "LuxeRide";
   // "NGN" rather than "₦": see fmtNairaAscii — the bundled ImageResponse font
   // has no naira glyph, so the symbol renders as an empty box on the card.

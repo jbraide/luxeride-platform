@@ -3,13 +3,20 @@ import { logRefusal } from "@/lib/demand-log";
 /**
  * `POST /api/demand` — records a refused fit check.
  *
- * A refusal is a sale, and capturing it must work before any database exists,
- * so this writes an NDJSON line to a file outside the repository rather than
- * inserting a row. Locked decision 2's consequence.
+ * A refusal is a sale, so this inserts a `DemandLog` row. It used to append a
+ * line of NDJSON to a file outside the repository instead, on the grounds that
+ * locked decision 2 requires the refusal path to work before any database
+ * exists; the database exists now, and `/admin/demand` reads the table, so the
+ * file only meant the refusal was invisible to the one reader it has. See
+ * `src/lib/demand-log.ts` for the argument and for why nothing was lost.
  *
  * It never returns a 4xx the client would have to handle: a failed log write is
  * not the visitor's problem, and they are already being shown a WhatsApp link.
  * It always answers 202, and the client's only obligation is not to block on it.
+ *
+ * The `logged` field in that 202 says whether the row landed, rather than
+ * asserting it. Nothing in the client reads it yet — it is here so a future
+ * caller, or a human reading the network tab, sees the truth.
  */
 
 export async function POST(request: Request): Promise<Response> {
@@ -34,13 +41,17 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // Awaited: `logRefusal` reads the confirmed-layout count from the database
-    // (§6.10) and then appends the line. Not awaiting it would put the write after
+    // (§6.10) and then inserts the row. Not awaiting it would put the write after
     // the response, which is the fire-and-forget loss the log's own header warns
     // about.
-    await logRefusal({ make, model, year, outcome, reason, phone });
-  } catch (error) {
-    console.error("demand: could not record the refusal:", error);
-  }
+    const capture = await logRefusal({ make, model, year, outcome, reason, phone });
 
-  return Response.json({ logged: true }, { status: 202 });
+    return Response.json({ logged: capture.logged }, { status: 202 });
+  } catch (error) {
+    // A throw before the insert — a malformed body, or a database that is down.
+    // Logged rather than swallowed, and still a 202: the visitor's next step is a
+    // WhatsApp message, not an error they can do anything about.
+    console.error("demand: could not record the refusal:", error);
+    return Response.json({ logged: false }, { status: 202 });
+  }
 }

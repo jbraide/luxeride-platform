@@ -1,10 +1,20 @@
-import { PRODUCTS } from "@/data/products";
+// RELATIVE, WITH EXPLICIT `.ts` EXTENSIONS, ON PURPOSE.
+//
+// `src/data/fitment-catalogue.ts` already imports its siblings this way, and its
+// header says why: Node's type stripping does not implement tsconfig path
+// resolution, so a `@/` specifier in this graph makes `scripts/fitment-report.mjs`
+// and `scripts/confirm-guard.test.mjs` unrunnable. Those two scripts reach this
+// file transitively through `INTERNAL_CODE_PATTERN`, so the whole chain has to be
+// alias-free. The mixed style inside one module is deliberate: these three are the
+// only imports, and breaking the alias here is what makes the gate testable
+// without a running server.
+import { PRODUCTS } from "./products.ts";
 import {
   CATALOGUE_LAYOUTS,
   CATALOGUE_MAPPINGS,
   CATALOGUE_VEHICLES,
-} from "@/data/fitment-catalogue";
-import { CONFIRMED, EXCLUSIONS as REVIEWED_EXCLUSIONS } from "@/data/fitment-review";
+} from "./fitment-catalogue.ts";
+import { CONFIRMED, EXCLUSIONS as REVIEWED_EXCLUSIONS } from "./fitment-review.ts";
 
 /**
  * The fitment table — the single source of truth for "do we actually make this
@@ -39,8 +49,7 @@ export type EvidenceSource = "physical-fitting" | "supplier-confirmation" | "oem
  * This union makes it a build error instead.
  */
 export type FitProductSlug =
-  | "single-layer-mats"
-  | "double-layer-mats"
+  | "floor-mats"
   | "seat-covers"
   | "full-bundle"
   | "cargo-liner"
@@ -57,14 +66,51 @@ export interface ImageSetEntry {
   alt: string;
 }
 
+/** What one YEAR RANGE costs for one offered variant. See `RangePrice` in the schema. */
+export interface RangePriceEntry {
+  priceFrom: number;
+  rowsSurcharge?: number;
+  stockState?: LayoutVariant["stockState"];
+}
+
 export interface LayoutVariant {
   /** Keyed to the catalogue, not a parallel list that can drift from it. */
   productSlug: FitProductSlug;
+  /**
+   * WHICH OPTION of that product this offer is. Added 2026-10-05, when single layer and
+   * double layer stopped being two products and became two options of Floor Mats.
+   *
+   * It is optional rather than required because most products have exactly one option,
+   * and "no option named" has to keep meaning "the product's single default option" —
+   * the same rule `LayoutVariant.variationId` carries in the schema. Where it matters it
+   * is filled in: the two mat options are named by `MAT_TYPE_VARIATION`, and a fit
+   * result's offer carries it so the storefront can price the layer the customer chose
+   * rather than the layer it assumed.
+   */
+  variationSlug?: string;
   kind: "single_layer" | "double_layer" | "boot_liner" | "full_set";
+  /**
+   * The layout-level DEFAULT, not the quote. Added by the per-year pricing change
+   * on 2026-10-04, when `priceFrom` stopped being what a customer is charged and
+   * became what a newly added year range starts from.
+   *
+   * It was the price before that date, and the compile-time tables have no ranges
+   * to split it across, so here it stays the only price there is.
+   */
   priceFrom: number;
   stockState: "in_stock" | "made_to_order" | "out_of_stock";
   /** Only where the same floor pan covers both row counts. */
   rowsSurcharge?: number;
+  /**
+   * `Vehicle.vehicleId` -> what that YEAR RANGE costs. Present only on the
+   * database path; the compile-time tables have no ranges to key it by.
+   *
+   * A variant whose map has no entry for the range a visitor's year resolved to is
+   * not quotable, and `checkFitLive` refuses rather than falling back to
+   * `priceFrom`. That is deliberate: falling back is exactly the "one price for
+   * every year of the car" behaviour this replaced.
+   */
+  rangePrices?: Record<string, RangePriceEntry>;
 }
 
 export interface Layout {
@@ -91,8 +137,16 @@ export interface Layout {
   confirmationNote?: string;
   /** Mandatory when status === "confirmed" — ISO date. */
   confirmedOn?: string;
-  /** "2–3 days" */
+  /** "2–3 days". Empty falls back to `DEFAULT_LEAD_TIME` in the copy register. */
   leadTime: string;
+  /**
+   * How many rows of seats this car has: "2" | "3" | "mixed".
+   *
+   * "mixed" means "ask the customer", and is the honest default — it is the only
+   * value that is true before anyone has checked. "2" or "3" tells the Fit Finder the
+   * answer so it can skip the question and apply the right surcharge itself.
+   */
+  seatRows: "2" | "3" | "mixed";
   notes?: string;
   variants: LayoutVariant[];
   images: ImageSetEntry[];
@@ -272,22 +326,31 @@ export function assertLiveLayouts(layouts: Layout[]): LiveLayout[] {
     }
     seenCodes.add(layout.internalCode);
 
-    if (isBlank(layout.evidence)) {
-      throw new Error(`fitment: confirmed layout ${label} has no evidence.`);
-    }
-    if (isBlank(layout.confirmationNote)) {
-      throw new Error(`fitment: confirmed layout ${label} has no confirmationNote.`);
-    }
-    if (isBlank(layout.confirmedOn)) {
-      throw new Error(`fitment: confirmed layout ${label} has no confirmedOn date.`);
-    }
+    // EVIDENCE AND THE NOTE ARE OPTIONAL (owner decision, 2026-10-04).
+    //
+    // Both were refused here and in `validateLiveLayout` until the same date. The
+    // reasoning was "a wrong yes costs more than a hundred honest no's" — but the
+    // refusal path already carries that, we do not sell what we do not have, and a
+    // note nobody chose is not better than no note. Generating one would put a
+    // sentence in the audit log that no person ever picked.
+    //
+    // `confirmedOn` is NO LONGER REQUIRED (2026-10-05), and this is the second place
+    // that changed with it.
+    //
+    // It was required because "we checked this on the 3rd" is a different fact from
+    // "we checked this", and that reasoning is still true. What was wrong was making it
+    // a GATE: every seeded layout has none, so the gate refused all 212 cars and the
+    // shop could sell two of them. It stays on the row as a record the admin can fill
+    // in; `Layout.active` is what decides whether a car is offered.
+    //
+    // `leadTime` was removed from this list on 2026-10-04. It is now
+    // `DEFAULT_LEAD_TIME` in `src/lib/copy.ts` — a lead time is how long WE take, not
+    // a property of a car, so requiring it per layout made 212 people-typeable rows
+    // out of one constant. `checkFitLive` resolves the fallback at the offer.
     if (isBlank(layout.makeId)) {
       throw new Error(
         `fitment: confirmed layout ${label} has no makeId. Locked decision 4 requires exactly one make per layout — a cross-brand fit is two layouts.`,
       );
-    }
-    if (isBlank(layout.leadTime)) {
-      throw new Error(`fitment: confirmed layout ${label} has no leadTime.`);
     }
     if (layout.variants.length === 0) {
       throw new Error(`fitment: confirmed layout ${label} offers no variants, so it can never be FITTED.`);
@@ -368,6 +431,16 @@ export type FitResult =
       layoutId: string;
       customerName: string;
       leadTime: string;
+      /**
+       * How many rows of seats this car has. "mixed" means the Fit Finder should ASK,
+       * which is the honest default and the only value true before anyone has checked
+       * a car. "2" or "3" means it already knows, and skips the question — and applies
+       * the matching surcharge on its own, so a 3-row-only car is never quoted the
+       * 2-row price.
+       */
+      seatRows: "2" | "3" | "mixed";
+      /** The mat types this car has. See `MAT_TYPE_KINDS` in fitment-catalogue.ts. */
+      matTypes: ("single_layer" | "double_layer")[];
       confidenceNote?: string;
       variants: FitVariantOffer[];
     }
@@ -504,6 +577,10 @@ export function checkFit({ make, model, year }: FitRequest): FitResult {
     .map((v) => ({
       productSlug: v.productSlug,
       productName: resolveVariantProduct(v.productSlug).name,
+      variationSlug: v.variationSlug,
+      // Which layer this offer is, so `matTypes` below can be read off the offers that
+      // PRICED rather than off every variant the pan has.
+      kind: v.kind,
       priceFrom: v.priceFrom,
       priceDisplay: `₦${v.priceFrom.toLocaleString("en-NG")}`,
       stockState: v.stockState,
@@ -521,7 +598,15 @@ export function checkFit({ make, model, year }: FitRequest): FitResult {
     internalCode: layout.internalCode,
     layoutId: layout.layoutId,
     customerName: layout.customerName,
+    seatRows: layout.seatRows,
     leadTime: layout.leadTime,
+    // Read off the OFFERS THAT PRICED, not off the layout, for the same reason the
+    // database path does it there: a mat type with no per-year price is not a mat type
+    // this car can be sold.
+    matTypes: [
+      ...(variants.some((v) => v.kind === "single_layer") ? (["single_layer"] as const) : []),
+      ...(variants.some((v) => v.kind === "double_layer") ? (["double_layer"] as const) : []),
+    ],
     confidenceNote: mapping.evidenceNote,
     variants,
   };

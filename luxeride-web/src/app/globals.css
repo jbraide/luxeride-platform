@@ -1,31 +1,301 @@
 @import "tailwindcss";
 
-:root {
-  --ink: #0a0a0a;
-  --panel: #141210;
-  --panel-2: #1c1916;
-  --gold: #d4af37;
-  --gold-dim: #8c7853;
-  --line: rgba(212, 175, 55, 0.22);
-  --muted: rgba(255, 255, 255, 0.55);
+/**
+ * THE DESIGN TOKENS.
+ *
+ * Rewritten 2026-10-04 for two reasons the owner asked for: a LIGHT MODE, and a less
+ * "robotic / techy" feel.
+ *
+ * WHY SEMANTIC NAMES AND NOT PALETTE NAMES
+ *
+ * The old tokens were named after what they looked like (`--ink`, `--gold`), which is
+ * exactly why light mode was impossible: `--ink` is a colour, not a job, and a light
+ * theme would have had to keep a dark value under a light-sounding name. These are
+ * named after what they DO — `--bg`, `--surface`, `--fg`, `--accent`, `--border` — so
+ * both themes are one `:root` block plus a `[data-theme]` override, with no component
+ * knowing which theme it is in.
+ *
+ * THE COLOURS ARE WARMER AND LESS HARSH THAN BEFORE
+ *
+ * The old palette was `#0a0a0a` with pure `#ffffff` text and a `#d4af37` gold. Pure
+ * white on pure black at small sizes is the highest-contrast pairing there is, and it
+ * is also the most glaring — it is a large part of what made the site read as a tool
+ * rather than a shop. Off-black, warm off-white and a slightly muted gold give the same
+ * legibility with far less glare.
+ */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0c0b0a;
+  --surface: #15130f;
+  --surface-2: #1e1a15;
+  --fg: #f4f1ea;
+  --fg-muted: rgb(244 241 234 / 0.62);
+  --accent: #d8b45c;
+  --accent-dim: #9c8250;
+  --border: rgb(216 180 92 / 0.2);
+  /* The accent is a LIGHT gold here, so text on it has to be dark. */
+  --on-accent: #16130d;
+  --shadow: 0 18px 40px -24px rgb(0 0 0 / 0.9);
+}
+
+/**
+ * LIGHT MODE.
+ *
+ * `[data-theme="light"]` on `<html>`, set before first paint by the inline script in
+ * the root layout — a theme that flashes dark on every load is worse than no light mode
+ * at all, so the choice is applied synchronously rather than in an effect.
+ *
+ * THE ACCENT IS DARKER HERE, AND THAT IS NOT COSMETIC. `#d8b45c` on `#faf8f5` is about
+ * 1.9:1, which fails WCAG AA for text and would make every price and label on the page
+ * unreadable in daylight — which is exactly where this site gets read. `#8a6d18` is the
+ * same hue stepped down until it clears 4.5:1. A brand colour that cannot be read is
+ * not a brand colour.
+ */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #faf8f5;
+  --surface: #ffffff;
+  --surface-2: #f2ede5;
+  --fg: #191612;
+  --fg-muted: rgb(25 22 18 / 0.6);
+  --accent: #8a6d18;
+  --accent-dim: #6d5612;
+  --border: rgb(25 22 18 / 0.14);
+  /* The accent is a DARK gold here, so text on it has to be light. */
+  --on-accent: #fdfbf7;
+  --shadow: 0 18px 40px -28px rgb(25 22 18 / 0.35);
 }
 
 @theme inline {
-  --color-ink: var(--ink);
-  --color-panel: var(--panel);
-  --color-panel-2: var(--panel-2);
-  --color-gold: var(--gold);
-  --color-gold-dim: var(--gold-dim);
-  --color-line: var(--line);
-  --color-muted: var(--muted);
-  --font-display: var(--font-oswald);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-on-accent: var(--on-accent);
+  --color-border: var(--border);
+
+  /*
+   * THE HERO LAYOUT SWITCH.
+   *
+   * A plain custom property rather than a Tailwind class, because the hero is the ONE
+   * place on the site whose layout is an editorial decision rather than a style: the
+   * owner's instruction was "side or full-width, the way top brands are", so it has to
+   * be settable without editing a component.
+   *
+   * One place to change it: `data-hero` on `<html>`, written from `/admin`.
+   *
+   * AND THE PROPERTY ITSELF IS NOW GONE — that is the fix, not a tidy-up.
+   *
+   * This block used to declare `--hero-layout` here, set it again from
+   * `[data-hero="full"]` and `[data-hero="side"]`, and then have NOTHING read it. Every
+   * rule that actually laid out the hero selected `.hero-shell`/`.hero-copy`/`.hero-art`
+   * directly. So the token was a description of an intent nothing acted on: setting the
+   * hero layout from the admin changed the number in devtools and nothing else, which
+   * is precisely how a control comes to look like it works. The switch now lives only in
+   * `data-hero` and only in the rules below, so there is nothing left to keep in step.
+   */
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+   *
+   * `--font-display` moved OFF Oswald. Oswald is a condensed grotesque — a signage
+   * face, built to be squeezed into a billboard — and at heading sizes on a screen it
+   * reads as software. Fraunces is a variable serif with optical sizing: warm,
+   * editorial, and the sort of thing a premium accessories brand sets a price in.
+   *
+   * `--font-mono` now resolves to the SANS, not JetBrains Mono. That is the single
+   * biggest change to the "robotic" feeling: 195 elements across the app were
+   * rendering every price, label and statistic in a code font, which is why the
+   * numbers looked like a terminal readout rather than a shop. `--font-code` keeps
+   * JetBrains for the few places that genuinely ARE codes — `internalCode`, `LR-`
+   * references, SKUs — where the monospace is carrying meaning rather than style.
+   */
+  --font-display: var(--font-fraunces);
   --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains);
+  --font-mono: var(--font-inter);
+  --font-code: var(--font-jetbrains);
+}
+
+/*
+ * THE `--on-accent` TOKEN, and why it exists at all.
+ *
+ * The gold token is a BACKGROUND, and its readable partner flips with the theme: a
+ * light gold needs dark text, a dark gold needs light text. Before this token, buttons
+ * said `text-ink`, which happened to mean "dark text" in the one theme that existed.
+ * When the theme was split, the sweep rewrote it to `text-fg` — the page's foreground —
+ * and every gold button went light-on-light in dark mode and DARK-ON-DARK in light
+ * mode. Invisible in both, and only visible by looking.
+ *
+ * So `--on-accent` is its own token and is never `text-fg`. If you find a gold
+ * background, this is what goes on it.
+ */
+
+/*
+ * The three hero layouts.
+ *
+ * They are plain rules on `.hero-*` classes rather than Tailwind variants, because the
+ * choice is editorial and belongs in one place.
+ *
+ * `data-hero` LIVES ON `<html>`, and that is load-bearing. It used to be set on the
+ * `<section class="hero-shell">` itself while every rule below was written as
+ * `[data-hero="side"] .hero-shell` — a DESCENDANT selector, which an element can never
+ * satisfy for itself. So `side` and `full` matched nothing and the hero rendered as the
+ * same single column whatever the setting said. The attribute is now on `<html>`
+ * (`src/app/layout.tsx`), where the descendant selectors are actually true, and the
+ * homepage no longer sets it a second time on the section.
+ */
+.hero-shell {
+  display: grid;
+  align-items: center;
+  gap: 2rem;
+}
+
+/*
+ * COPY FIRST ON A PHONE, ART SECOND.
+ *
+ * `split` is a grid on every width, so `order` decides the visual order, and it was the
+ * wrong way round: the photograph came first on every phone, so the top of the screen
+ * was an image and the words were below the fold on the device most people buy on.
+ * The owner reported it as "img is above the text".
+ *
+ * This is the rule that fixes that, and it is UNSCOPED on purpose: `split` is the
+ * default, so it has to hold with no `data-hero` present at all, and it has to hold
+ * before the attribute exists. `side` inherits it and re-asserts the same order above
+ * `lg`. `full` is `display: block` and layers the copy over the art, so `order` does not
+ * apply to it at all.
+ */
+.hero-copy {
+  order: 1;
+}
+.hero-art {
+  order: 2;
+}
+
+/*
+ * THE DESKTOP GRIDS. Both only above `lg`; below it every layout is one column, copy
+ * first, because two columns on a phone is the reason this was unreadable.
+ *
+ * `split` — two EQUAL columns. The balanced hero, and the default: what a hero has
+ * looked like here, and the safest of the three.
+ *
+ * `side` — a narrower copy column beside a wider photograph. The art-forward answer,
+ * and visibly a different choice from `split` rather than a synonym for it, which is
+ * what the two rules used to be: `side` named a `grid-template-columns` that could
+ * never apply, so choosing it changed nothing at all.
+ */
+@media (min-width: 1024px) {
+  [data-hero="split"] .hero-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  [data-hero="side"] .hero-shell {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 3rem;
+  }
+  [data-hero="side"] .hero-copy {
+    order: 1;
+  }
+  [data-hero="side"] .hero-art {
+    order: 2;
+  }
+}
+
+/*
+ * FULL: the photograph runs the WHOLE width of the viewport, edge to edge, with the
+ * copy laid over it. That is what "the way top brands are" means, and it is why the
+ * container padding moves from the grid onto the copy block — otherwise the image
+ * would stop short of the screen edge and read as a banner in a box.
+ *
+ * `display: block` and an absolutely positioned `.hero-art` is the whole mechanism, and
+ * it is also why `order` does nothing here: both children are out of grid flow
+ * conceptually, so this layout is copy-over-image by construction and not by ordering.
+ *
+ * `margin-inline: auto` is stated rather than inherited because the copy carries
+ * `mx-auto max-w-6xl` from the component. The max-width below is what actually narrows
+ * it to a readable column, and leaving the two to fight over specificity would make
+ * the measure depend on which stylesheet loaded last.
+ */
+[data-hero="full"] .hero-shell {
+  position: relative;
+  display: block;
+  padding: 0;
+}
+[data-hero="full"] .hero-art {
+  position: absolute;
+  inset: 0;
+}
+[data-hero="full"] .hero-art > * {
+  height: 100%;
+  border-radius: 0;
+}
+[data-hero="full"] .hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 40rem;
+  margin-inline: auto;
+  padding: 4rem 1.25rem;
+}
+/* A scrim, because copy over a photograph is unreadable without one. The gradient is
+   directional — dark under the copy column, clearing toward the image — rather than a
+   flat wash, so the photograph stays visible on the half with nothing written on it.
+   `100deg` rather than `90deg` so it falls off vertically as well as horizontally,
+   which is what stops the top and bottom edges of the art reading as a hard banner
+   edge where the copy block ends. */
+[data-hero="full"] .hero-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--bg) 96%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 82%, transparent) 42%,
+    color-mix(in srgb, var(--bg) 25%, transparent) 72%,
+    transparent 100%
+  );
 }
 
 body {
-  background: var(--ink);
-  color: #ffffff;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * Tabular figures.
+ *
+ * Prices and statistics used to need a mono font precisely because proportional digits
+ * do not line up in a column. Tabular numerals do the same job in the body face, which
+ * is why dropping the mono font for prices was safe.
+ */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/*
+ * A transition on the theme switch ONLY.
+ *
+ * Scoped to the handful of elements that change colour, and never to `*` — a blanket
+ * transition animates the entire page repainting and reads as a flash. The
+ * `prefers-reduced-motion` opt-out is not decoration: a theme change is not an
+ * animation, and someone who has asked for less movement should not get a page-wide
+ * cross-fade for clicking a button.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-theme] body,
+  [data-theme] header,
+  [data-theme] main,
+  [data-theme] footer,
+  [data-theme] section,
+  [data-theme] article {
+    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -33,7 +303,7 @@ body {
   width: 6px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--gold-dim);
+  background: var(--accent-dim);
   border-radius: 2px;
 }
 

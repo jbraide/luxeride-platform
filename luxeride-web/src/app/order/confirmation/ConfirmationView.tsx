@@ -11,6 +11,7 @@ import { LinkButton } from "@/components/Button";
 import { track } from "@/lib/analytics";
 import { readAttribution } from "@/lib/analytics/attribution";
 import { whatsappLink, recoveryMessage } from "@/lib/whatsapp";
+import { optionLabel } from "@/lib/select-variation";
 
 /**
  * The thank-you screen (`ad-landing-and-tracking` §9, `cart-checkout` §7.1–7.8).
@@ -91,11 +92,11 @@ export default function ConfirmationView() {
     return (
       <div className="mx-auto max-w-xl px-5 py-14 text-center">
         <h1 className="font-display text-2xl font-semibold">Your order is safe on WhatsApp</h1>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-fg-muted">
           This browser no longer holds a copy of the order, but the message you sent us does. Quote the
           reference below and we will find it.
         </p>
-        <p className="mt-4 rounded-xl border border-line bg-panel px-4 py-3 font-mono text-lg text-gold">
+        <p className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 font-mono text-lg text-accent">
           {ref}
         </p>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -106,7 +107,7 @@ export default function ConfirmationView() {
             onClick={() =>
               track("whatsapp_cta_clicked", { ctaType: "checkout_order", location: "recovery" })
             }
-            className="inline-flex w-full items-center justify-center rounded-xl bg-gold px-5 py-3.5 text-sm font-semibold text-ink sm:w-auto sm:px-8"
+            className="inline-flex w-full items-center justify-center rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-on-accent sm:w-auto sm:px-8"
           >
             Look It Up on WhatsApp
           </a>
@@ -114,7 +115,7 @@ export default function ConfirmationView() {
             Start a New Order
           </LinkButton>
         </div>
-        <Link href="/" className="mt-6 inline-block text-sm text-muted hover:text-white">
+        <Link href="/" className="mt-6 inline-block text-sm text-fg-muted hover:text-fg">
           Back to Home
         </Link>
       </div>
@@ -126,7 +127,7 @@ export default function ConfirmationView() {
     return (
       <div className="mx-auto max-w-xl px-5 py-16 text-center">
         <h1 className="font-display text-2xl font-semibold">No order to show here</h1>
-        <p className="mt-2 text-muted">
+        <p className="mt-2 text-fg-muted">
           If you just ordered, your message is already with us on WhatsApp. Otherwise, start a new order,
           message us, or hand us a reference to look up.
         </p>
@@ -141,7 +142,7 @@ export default function ConfirmationView() {
             onClick={() =>
               track("whatsapp_cta_clicked", { ctaType: "checkout_order", location: "confirmation_empty" })
             }
-            className="inline-flex w-full items-center justify-center rounded-xl border border-white/25 px-5 py-3.5 text-sm font-semibold hover:border-gold hover:text-gold sm:w-auto sm:px-8"
+            className="inline-flex w-full items-center justify-center rounded-xl border border-fg-muted/40 px-5 py-3.5 text-sm font-semibold hover:border-accent hover:text-accent sm:w-auto sm:px-8"
           >
             Ask on WhatsApp
           </a>
@@ -168,7 +169,7 @@ export default function ConfirmationView() {
           and nowhere else, and a checkmark for it is exactly the unearned
           promise this screen was rebuilt to remove. */}
       {order.persisted && (
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gold text-2xl text-gold">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-accent text-2xl text-accent">
           ✓
         </div>
       )}
@@ -179,7 +180,7 @@ export default function ConfirmationView() {
       </h1>
       {/* Requirement 1.1: prepared and handed off. Never received, confirmed,
           accepted or dispatched — the site cannot observe any of those. */}
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 text-sm text-fg-muted">
         {order.persisted
           ? "We hold the record and will confirm on WhatsApp before dispatch. Keep this reference:"
           : "We could not save a copy on our side, so the WhatsApp message is the only record. Keep this reference:"}
@@ -187,40 +188,42 @@ export default function ConfirmationView() {
       <button
         type="button"
         onClick={copyRef}
-        className="mt-3 rounded-xl border border-line bg-panel px-4 py-2.5 font-mono text-base text-gold hover:border-gold"
+        className="mt-3 rounded-xl border border-border bg-surface px-4 py-2.5 font-mono text-base text-accent hover:border-accent"
       >
         {order.ref}
-        <span className="ml-2 text-xs text-muted">{copied ? "copied ✓" : "tap to copy"}</span>
+        <span className="ml-2 text-xs text-fg-muted">{copied ? "copied ✓" : "tap to copy"}</span>
       </button>
-      <p className="mt-2 text-xs text-muted">
+      <p className="mt-2 text-xs text-fg-muted">
         This page is a copy held in your browser. WhatsApp is the record that counts — keep that message.
       </p>
 
-      <div className="mt-6 space-y-2 rounded-xl border border-line bg-panel p-5 text-left">
+      <div className="mt-6 space-y-2 rounded-xl border border-border bg-surface p-5 text-left">
         {order.items.map((item) => (
           <div key={item.id} className="flex justify-between text-sm">
             <span>
-              {item.qty}x {item.productName} — {item.brand} {item.model}
+              {item.qty}x {item.productName}
+              {optionLabel(item.variationSlug) ? ` (${optionLabel(item.variationSlug)})` : ""} —{" "}
+              {item.brand} {item.model}
             </span>
-            <span className="font-mono text-gold">{fmtNaira(item.unitPrice * item.qty)}</span>
+            <span className="font-mono text-accent">{fmtNaira(item.unitPrice * item.qty)}</span>
           </div>
         ))}
-        <div className="flex justify-between border-t border-dashed border-white/15 pt-2 text-sm">
-          <span className="text-muted">
+        <div className="flex justify-between border-t border-dashed border-fg-muted/25 pt-2 text-sm">
+          <span className="text-fg-muted">
             Delivery ({order.location})
             {order.locationEta ? ` — ${order.locationEta}` : ""}
           </span>
           <span className="font-mono">{order.shippingFee ? fmtNaira(order.shippingFee) : "Free"}</span>
         </div>
         {order.discount > 0 && (
-          <div className="flex justify-between text-sm text-gold">
+          <div className="flex justify-between text-sm text-accent">
             <span>Prepay discount</span>
             <span className="font-mono">-{fmtNaira(order.discount)}</span>
           </div>
         )}
-        <div className="flex justify-between border-t border-dashed border-white/15 pt-2 text-base font-semibold">
+        <div className="flex justify-between border-t border-dashed border-fg-muted/25 pt-2 text-base font-semibold">
           <span>Total</span>
-          <span className="font-mono text-gold">{fmtNaira(order.total)}</span>
+          <span className="font-mono text-accent">{fmtNaira(order.total)}</span>
         </div>
       </div>
 
@@ -235,7 +238,7 @@ export default function ConfirmationView() {
           onClick={() =>
             track("whatsapp_cta_clicked", { ctaType: "checkout_order", location: "confirmation_resend" })
           }
-          className="inline-flex w-full items-center justify-center rounded-xl border border-white/25 px-5 py-3.5 text-sm font-semibold hover:border-gold hover:text-gold sm:w-auto sm:px-8"
+          className="inline-flex w-full items-center justify-center rounded-xl border border-fg-muted/40 px-5 py-3.5 text-sm font-semibold hover:border-accent hover:text-accent sm:w-auto sm:px-8"
         >
           Re-send on WhatsApp
         </a>
@@ -243,7 +246,7 @@ export default function ConfirmationView() {
           Continue Shopping
         </LinkButton>
       </div>
-      <Link href="/" className="mt-6 inline-block text-sm text-muted hover:text-white">
+      <Link href="/" className="mt-6 inline-block text-sm text-fg-muted hover:text-fg">
         Back to Home
       </Link>
     </div>

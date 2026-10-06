@@ -22,7 +22,7 @@ import type { ResolvedLanding } from "@/data/landing";
 function renderHeadline(headline: string) {
   return headline.split("{em}").map((part, index) =>
     index % 2 === 1 ? (
-      <span key={index} className="text-gold">
+      <span key={index} className="text-accent">
         {part}
       </span>
     ) : (
@@ -46,10 +46,10 @@ export default function LandingHero({ landing }: { landing: ResolvedLanding | nu
       <h1 className="font-display text-3xl font-semibold leading-tight">
         {renderHeadline(landing.headline)}
       </h1>
-      <p className="mx-auto mt-3 max-w-md text-sm text-white/70">{landing.sub}</p>
+      <p className="mx-auto mt-3 max-w-md text-sm text-fg/70">{landing.sub}</p>
 
       {landing.offer && (
-        <p className="mx-auto mt-3 inline-block rounded-full border border-gold/50 bg-gold/10 px-4 py-1.5 font-mono text-[11px] uppercase tracking-wide text-gold">
+        <p className="mx-auto mt-3 inline-block rounded-full border border-accent/50 bg-accent/10 px-4 py-1.5 font-mono text-[11px] uppercase tracking-wide text-accent">
           {landing.offer}
         </p>
       )}
@@ -58,15 +58,15 @@ export default function LandingHero({ landing }: { landing: ResolvedLanding | nu
         {["LASER-MEASURED", "100% WATERPROOF", "PAY ON DELIVERY"].map((badge) => (
           <span
             key={badge}
-            className="rounded-full border border-line px-3 py-1 font-mono text-[11px] text-gold"
+            className="rounded-full border border-border px-3 py-1 font-mono text-[11px] text-accent"
           >
             {badge}
           </span>
         ))}
       </div>
 
-      <p className="mt-5 font-mono text-[11px] uppercase tracking-wide text-gold-dim">
-        <Link href="/shop" className="hover:text-gold">
+      <p className="mt-5 font-mono text-[11px] uppercase tracking-wide text-accent-dim">
+        <Link href="/shop" className="hover:text-accent">
           Browse everything instead →
         </Link>
       </p>

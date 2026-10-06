@@ -19,16 +19,30 @@ import { resolveMedia } from "@/lib/media-manifest";
  * Renders nothing at all when `relatedProducts()` returns `[]` (the Full Bundle
  * PDP, which has no same-category sibling and no other bundle to point at).
  */
-export default function RelatedProducts({ product }: { product: Product }) {
-  const related = relatedProducts(product);
+/**
+ * `products` is passed in rather than read here.
+ *
+ * This is a Server Component, so it COULD import the catalogue module directly — but
+ * it is rendered by the PDP, which has already loaded the whole catalogue for the
+ * related strip. Reading it a second time would be a second round trip per page view
+ * for a list the PDP is already holding.
+ */
+export default async function RelatedProducts({
+  product,
+  products,
+}: {
+  product: Product;
+  products: Product[];
+}) {
+  const related = await relatedProducts(product, products);
   if (related.length === 0) return null;
 
   return (
-    <section aria-labelledby="related-heading" className="mt-14 border-t border-line pt-8">
+    <section aria-labelledby="related-heading" className="mt-14 border-t border-border pt-8">
       <h2 id="related-heading" className="font-display text-xl font-semibold">
         Also in the catalogue
       </h2>
-      <p className="mt-1 text-xs text-muted">
+      <p className="mt-1 text-xs text-fg-muted">
         None of these has been checked against your car. Everything here is made to order, and the fit is
         confirmed on WhatsApp before dispatch.
       </p>

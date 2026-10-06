@@ -86,7 +86,7 @@ function unknown(validationReason: string): Response {
  * `logRefusal` never throws (§5.4), so this cannot turn a refusal into a 500.
  *
  * Async since §6.10: `logRefusal` reads the confirmed-layout count from the
- * database before it appends, and every caller awaits it so the line is written
+ * database before it appends, and every caller awaits it so the row is written
  * before the response goes out.
  */
 async function refuse(
@@ -94,11 +94,16 @@ async function refuse(
   car: { make: string; model: string; year: number },
   reason: string,
 ): Promise<Response> {
-  await logRefusal({ ...car, outcome, reason });
+  const capture = await logRefusal({ ...car, outcome, reason });
   // `demandLogged` makes the capture observable from the response (§5.6), which
   // is the assertion that would have caught §5.5 going undone. The car is passed
   // through so the refusal names it (§3.4) rather than saying "your car".
-  return respond({ state: outcome, reason, demandLogged: true }, `${car.make} ${car.model}`);
+  //
+  // It reports what `logRefusal` actually did. It used to be hard-coded `true`
+  // here, which meant the field asserted a capture nothing had checked — the one
+  // thing a "did we save the sale?" signal must never do. A false here means the
+  // row is missing and the server log says why.
+  return respond({ state: outcome, reason, demandLogged: capture.logged }, `${car.make} ${car.model}`);
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -148,6 +153,8 @@ export async function POST(request: Request): Promise<Response> {
           internalCode: result.internalCode,
           customerName: result.customerName,
           leadTime: result.leadTime,
+          seatRows: result.seatRows,
+          matTypes: result.matTypes,
           // Every product the confirmed car can be quoted for
           // (`fit-finder` §2.7). The client uses this to tell a locked-product
           // MISS from a plain refusal — an advertised product that is not in

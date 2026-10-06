@@ -29,19 +29,26 @@ import { PRODUCTS } from "@/data/products";
  * the point: the two cannot drift silently.
  */
 export type ProductSlug =
-  | "single-layer-mats"
-  | "double-layer-mats"
+  | "floor-mats"
   | "seat-covers"
+  | "seat-covers-3d"
   | "full-bundle"
   | "cargo-liner"
   | "mud-flaps"
   | "sun-shade";
 
-/** The same seven, as a value — for iteration, validation and the seed. */
+/**
+ * The same seven, as a value — for iteration, validation and the seed.
+ *
+ * `floor-mats` REPLACED `single-layer-mats` and `double-layer-mats` on 2026-10-05.
+ * The two layers stopped being products and became two OPTIONS of one, which removed
+ * two slugs and added one: they were never options on a product that existed, so the
+ * list shrank by one without anything being renamed under a URL that still resolved.
+ */
 export const PRODUCT_SLUGS = [
-  "single-layer-mats",
-  "double-layer-mats",
+  "floor-mats",
   "seat-covers",
+  "seat-covers-3d",
   "full-bundle",
   "cargo-liner",
   "mud-flaps",

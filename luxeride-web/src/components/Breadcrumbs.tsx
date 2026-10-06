@@ -19,22 +19,22 @@ export interface Crumb {
 export default function Breadcrumbs({ trail }: { trail: Crumb[] }) {
   return (
     <nav aria-label="Breadcrumb" className="mb-6">
-      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] uppercase tracking-wider text-muted">
+      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {trail.map((crumb, index) => {
           const isLast = index === trail.length - 1;
 
           return (
             <li key={crumb.path} className="flex items-center gap-2">
               {isLast ? (
-                <span aria-current="page" className="text-gold">
+                <span aria-current="page" className="text-accent">
                   {crumb.name}
                 </span>
               ) : (
                 <>
-                  <Link href={crumb.path} className="hover:text-gold">
+                  <Link href={crumb.path} className="hover:text-accent">
                     {crumb.name}
                   </Link>
-                  <span aria-hidden className="text-gold-dim">
+                  <span aria-hidden className="text-accent-dim">
                     /
                   </span>
                 </>

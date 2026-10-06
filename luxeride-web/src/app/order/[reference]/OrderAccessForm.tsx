@@ -36,7 +36,7 @@ export default function OrderAccessForm({ reference }: { reference: string }) {
       <div>
         <label
           htmlFor="order-access-phone"
-          className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted"
+          className="mb-1.5 block text-[11px] uppercase tracking-wide text-fg-muted"
         >
           WhatsApp number on the order
         </label>
@@ -50,7 +50,7 @@ export default function OrderAccessForm({ reference }: { reference: string }) {
           autoComplete="tel"
           placeholder="e.g. 0704 962 1694"
           aria-invalid={state.verified === false && state.error === true}
-          className="w-full rounded-xl border border-white/15 bg-panel px-4 py-3.5 text-sm focus:border-gold focus:outline-none"
+          className="w-full rounded-xl border border-fg-muted/25 bg-surface px-4 py-3.5 text-sm focus:border-accent focus:outline-none"
         />
       </div>
 
@@ -63,7 +63,7 @@ export default function OrderAccessForm({ reference }: { reference: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-xl bg-gold px-5 py-3.5 text-sm font-semibold text-ink disabled:opacity-60"
+        className="w-full rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-on-accent disabled:opacity-60"
       >
         {pending ? "Checking…" : "Show my order"}
       </button>

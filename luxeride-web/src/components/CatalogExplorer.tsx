@@ -57,7 +57,11 @@ export default function CatalogExplorer({
           return (
             product.name.toLowerCase().includes(needle) ||
             product.note.toLowerCase().includes(needle) ||
-            product.materials.toLowerCase().includes(needle) ||
+            // `materials` is optional from 2026-10-04 — a product created in the
+            // admin has no PDP copy. Searching for "mats" still finds it by name and
+            // note; searching for its material finds nothing, which is honest, and
+            // calling `.toLowerCase()` on undefined would take the whole page down.
+            (product.materials ?? "").toLowerCase().includes(needle) ||
             (category?.name.toLowerCase().includes(needle) ?? false)
           );
         })
@@ -88,7 +92,7 @@ export default function CatalogExplorer({
         <div className="flex-1">
           <label
             htmlFor="catalog-search"
-            className="block font-mono text-[11px] uppercase tracking-widest text-gold-dim"
+            className="block font-mono text-[11px] uppercase tracking-widest text-accent-dim"
           >
             Search products
           </label>
@@ -98,14 +102,14 @@ export default function CatalogExplorer({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="mats, seat covers, waterproof…"
-            className="mt-2 w-full rounded-lg border border-line bg-panel px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-gold focus:outline-none"
+            className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
           />
         </div>
 
         <div>
           <label
             htmlFor="catalog-sort"
-            className="block font-mono text-[11px] uppercase tracking-widest text-gold-dim"
+            className="block font-mono text-[11px] uppercase tracking-widest text-accent-dim"
           >
             Sort
           </label>
@@ -113,10 +117,10 @@ export default function CatalogExplorer({
             id="catalog-sort"
             value={sort}
             onChange={(event) => setSort(event.target.value as SortKey)}
-            className="mt-2 w-full rounded-lg border border-line bg-panel px-3 py-2.5 text-sm text-white focus:border-gold focus:outline-none sm:w-auto"
+            className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-fg focus:border-accent focus:outline-none sm:w-auto"
           >
             {SORT_LABELS.map((option) => (
-              <option key={option.value} value={option.value} className="bg-panel">
+              <option key={option.value} value={option.value} className="bg-surface">
                 {option.label}
               </option>
             ))}
@@ -126,8 +130,8 @@ export default function CatalogExplorer({
 
       {/* Both consumers of the count: visible copy, and the polite live region
           that announces a change to a screen reader. */}
-      <p className="mt-5 text-xs text-muted">
-        Showing <span className="font-mono text-white">{count}</span> of {total}{" "}
+      <p className="mt-5 text-xs text-fg-muted">
+        Showing <span className="font-mono text-fg">{count}</span> of {total}{" "}
         {total === 1 ? "product" : "products"}
         {query.trim() ? ` for “${query.trim()}”` : ""}
       </p>
@@ -137,15 +141,15 @@ export default function CatalogExplorer({
       </p>
 
       {count === 0 ? (
-        <div className="mt-6 rounded-xl border border-line bg-panel/60 px-5 py-8 text-center">
-          <p className="text-sm text-muted">
+        <div className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-8 text-center">
+          <p className="text-sm text-fg-muted">
             Nothing matches “{query.trim()}”. We may still be able to make it for your car — ask
             us and we will check.
           </p>
           <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <button
               onClick={() => setQuery("")}
-              className="rounded-xl bg-gold px-5 py-3.5 text-center text-sm font-semibold text-ink"
+              className="rounded-xl bg-accent px-5 py-3.5 text-center text-sm font-semibold text-on-accent"
             >
               Clear the search
             </button>
@@ -153,7 +157,7 @@ export default function CatalogExplorer({
               href={whatsappLink(
                 `Hi! I couldn't find "${query.trim()}" on your site. Do you make something like that for my car?`,
               )}
-              className="rounded-xl border border-line px-5 py-3.5 text-center text-sm font-semibold text-white/80 hover:border-gold hover:text-gold"
+              className="rounded-xl border border-border px-5 py-3.5 text-center text-sm font-semibold text-fg/80 hover:border-accent hover:text-accent"
             >
               Ask us on WhatsApp
             </a>

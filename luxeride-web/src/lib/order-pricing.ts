@@ -93,6 +93,27 @@ export interface PriceableProduct {
   premium: number;
   rowApplicable: boolean;
   threeRowSurcharge?: number | null;
+  /**
+   * THE OPTIONS ON THIS PRODUCT, when it has any. Added 2026-10-05.
+   *
+   * Present because Floor Mats is one product sold in two layers, and this engine
+   * prices from the product's own two figures. Without the options a double-layer
+   * order would be priced from the single-layer figure — \u20a645,000 instead of \u20a668,000,
+   * silently, on every order, while the customer was shown the right one.
+   *
+   * Optional because most products have one option or none, and neither changes the
+   * arithmetic.
+   */
+  variations?: PriceableVariation[];
+}
+
+/** One option of a product, as the price engine needs it. */
+export interface PriceableVariation {
+  slug: string;
+  regular: number;
+  premium: number;
+  rowApplicable: boolean;
+  threeRowSurcharge?: number | null;
 }
 
 /**
@@ -115,6 +136,15 @@ export interface ResolvedZone {
 /** The identity half of a cart line: what the customer chose, never a price. */
 export interface OrderLineIdentity {
   productSlug: string;
+  /**
+   * WHICH OPTION, when the customer chose one. Added 2026-10-05.
+   *
+   * It is part of the line's IDENTITY, not decoration: two layers of the same mats for
+   * the same car are two different things at two different prices, so they are two lines.
+   * `lineKey` includes it, which is what keeps a customer who bought both from watching
+   * the second add silently merge into the first and halve their order.
+   */
+  variationSlug?: string | null;
   brand: string;
   model: string;
   year: string;
@@ -153,7 +183,26 @@ export interface PricedOrder {
   subtotal: number;
   /** The zone fee as charged: 0 on prepay, `Location.fee` on pay-on-delivery. */
   shippingFee: number;
+  /**
+   * A promotion or coupon, already resolved by the caller.
+   *
+   * NOT resolved here. This module is a pure function over plain data and has its own
+   * `node --test` suite (`scripts/pricing.test.mjs`); making it read Postgres would
+   * make the money arithmetic untestable without a database. The caller loads the
+   * applicable rules and hands in the one number, which `resolveDiscount` in
+   * `src/lib/discounts.ts` computed.
+   *
+   * Defaulted to 0 so every existing caller and every existing test keeps its current
+   * behaviour with no edit.
+   */
+  promotionalDiscount?: number;
+  /** What the resolved promotion or coupon was called. Null when there was none. */
+  discountLabel?: string | null;
+  /** The promotion/coupon amount as applied. 0 when none. */
+  promotional: number;
   /** The prepay discount as applied. 0 on pay-on-delivery. */
+  prepayDiscount: number;
+  /** `promotional + prepay`, capped so the total cannot go negative. */
   discount: number;
   /** What is owed. Never negative. */
   total: number;
@@ -194,7 +243,16 @@ export type PriceOrderResult =
  * rather than left empty so the key has a fixed five-field shape.
  */
 export function lineKey(line: OrderLineIdentity): string {
-  return [line.productSlug, line.brand, line.model, line.year, line.rows ?? "none"].join("::");
+  return [
+    line.productSlug,
+    // `none` rather than an empty segment, so a line with no option and a line whose
+    // option slug was empty cannot collide with each other by accident.
+    line.variationSlug ?? "none",
+    line.brand,
+    line.model,
+    line.year,
+    line.rows ?? "none",
+  ].join("::");
 }
 
 /** Naira are integers. A price that is not one is a data fault, not a rounding job. */
@@ -209,7 +267,7 @@ function isTier(value: unknown): value is Tier {
 /**
  * The unit price for one line — `productBase()`, verbatim.
  *
- * Two things it does that are easy to get wrong, and both are the spec's words:
+ * Three things it does that are easy to get wrong, and all three are the spec's words:
  *
  * - the tier selects the **product's** `premium` or `regular` figure; it never
  *   multiplies or applies a percentage.
@@ -217,11 +275,36 @@ function isTier(value: unknown): value is Tier {
  *   AND three rows were chosen. A row selection supplied for a non-row product
  *   is ignored and charges nothing (`commerce-backend` § Error Handling), which
  *   is what `productBase()` does today rather than a surcharge invented here.
+ * - the OPTION'S price wins when one is named (2026-10-05). Floor Mats is one product
+ *   with two layers at two prices, and reading the product would quote the double
+ *   layer at the single layer's figure.
+ *
+ * An option that is not on the product falls back to the product rather than refusing:
+ * the caller has already resolved the slug against the database, so a mismatch here is
+ * a fault in that lookup rather than in the customer's cart, and refusing here would
+ * turn an internal mistake into a customer-facing error with no explanation.
  */
-function unitPriceFor(product: PriceableProduct, tier: Tier, rows: RowSelection): number {
-  const base = tier === "premium" ? product.premium : product.regular;
-  if (product.rowApplicable && rows === "3") {
-    return base + (product.threeRowSurcharge ?? 0);
+function unitPriceFor(
+  product: PriceableProduct,
+  tier: Tier,
+  rows: RowSelection,
+  variationSlug?: string | null,
+): number {
+  const option = variationSlug
+    ? product.variations?.find((candidate) => candidate.slug === variationSlug)
+    : undefined;
+  const base = option
+    ? tier === "premium"
+      ? option.premium
+      : option.regular
+    : tier === "premium"
+      ? product.premium
+      : product.regular;
+  const rowApplicable = option ? option.rowApplicable : product.rowApplicable;
+  const surcharge = option ? option.threeRowSurcharge : product.threeRowSurcharge;
+
+  if (rowApplicable && rows === "3") {
+    return base + (surcharge ?? 0);
   }
   return base;
 }
@@ -245,6 +328,9 @@ export function priceOrder(input: {
   lines: readonly OrderLineToPrice[];
   zone: ResolvedZone;
   paymentMethod: PaymentMethod;
+  /** Resolved by the caller from `Promotion` / `Coupon`. See `PricedOrder`. */
+  promotionalDiscount?: number;
+  discountLabel?: string | null;
 }): PriceOrderResult {
   const { lines, zone, paymentMethod } = input;
   const errors: LineResolutionError[] = [];
@@ -300,7 +386,7 @@ export function priceOrder(input: {
     let unitPrice = 0;
     let lineTotal = 0;
     if (problems.length === 0) {
-      unitPrice = unitPriceFor(line.product, line.tier, line.rows);
+      unitPrice = unitPriceFor(line.product, line.tier, line.rows, line.variationSlug);
       if (!isNairaAmount(unitPrice)) {
         fail("unitPrice", `Product "${line.product.slug}" does not price to a whole naira amount.`);
       } else {
@@ -324,6 +410,10 @@ export function priceOrder(input: {
       index,
       key: lineKey(line),
       productSlug: line.productSlug,
+      // Kept on the priced line so the write path can record `OrderItem.variationId`
+      // and the WhatsApp message can name the layer. Without it the order says "Floor
+      // Mats" and the customer is left guessing which layer they just bought.
+      variationSlug: line.variationSlug ?? null,
       productName: line.product.name,
       brand: line.brand,
       model: line.model,
@@ -339,13 +429,34 @@ export function priceOrder(input: {
   if (errors.length > 0) return { ok: false, errors };
 
   const shippingFee = paymentMethod === "prepay" ? 0 : zone.fee;
-  // Never more than the order is worth, so `total` below cannot go negative and
-  // the four money columns always reconcile. See the header note on D2-era maths.
-  const discount = paymentMethod === "prepay" ? Math.min(PREPAY_DISCOUNT, subtotal + shippingFee) : 0;
+
+  // THE TWO DISCOUNTS, AND WHY THEY ADD UP.
+  //
+  // `promotional` is a sale or a coupon — one of them, chosen by `resolveDiscount`,
+  // never both (that is the owner's no-stacking decision, and it is already made
+  // upstream of here). `prepayDiscount` is a different axis entirely: it is the
+  // reward for paying before delivery, not a price reduction, so it is not competing
+  // with the sale for the same money and the two legitimately combine.
+  //
+  // A promotion is capped at what it was resolved against, and the SUM is capped at
+  // the order's worth, so `total` below can never go negative and the money columns
+  // always reconcile: subtotal + shippingFee - discount === total, exactly.
+  const promotional = Math.max(0, Math.min(Math.round(input.promotionalDiscount ?? 0), subtotal));
+  const prepayDiscount = paymentMethod === "prepay" ? Math.min(PREPAY_DISCOUNT, subtotal + shippingFee) : 0;
+  const discount = Math.min(promotional + prepayDiscount, subtotal + shippingFee);
   const total = subtotal + shippingFee - discount;
 
   return {
     ok: true,
-    order: { lines: priced, subtotal, shippingFee, discount, total },
+    order: {
+      lines: priced,
+      subtotal,
+      shippingFee,
+      promotional,
+      prepayDiscount,
+      discount,
+      total,
+      discountLabel: discount > 0 ? (input.discountLabel ?? null) : null,
+    },
   };
 }

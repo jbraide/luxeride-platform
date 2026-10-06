@@ -49,9 +49,9 @@ function readableNumber(e164: string): string {
 /** One row of the contact card. */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 border-t border-line py-3 sm:flex-row sm:gap-4">
-      <dt className="w-44 flex-shrink-0 text-[11px] uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="text-sm text-white/85">{children}</dd>
+    <div className="flex flex-col gap-0.5 border-t border-border py-3 sm:flex-row sm:gap-4">
+      <dt className="w-44 flex-shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">{label}</dt>
+      <dd className="text-sm text-fg/85">{children}</dd>
     </div>
   );
 }
@@ -69,7 +69,7 @@ export default function ContactPage() {
   return (
     <article className="mx-auto max-w-3xl px-5 py-12">
       <h1 className="font-display text-3xl font-semibold">Contact us</h1>
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 text-sm text-fg-muted">
         WhatsApp is the fastest route and the one we answer. Everything about an order happens there.
       </p>
 
@@ -78,62 +78,62 @@ export default function ContactPage() {
           href={whatsappLink("Hi! I have a question about LuxeRide.")}
           target="_blank"
           rel="noreferrer"
-          className="rounded-xl bg-gold px-5 py-3.5 text-center text-sm font-semibold text-ink"
+          className="rounded-xl bg-accent px-5 py-3.5 text-center text-sm font-semibold text-on-accent"
         >
           Message us on WhatsApp
         </a>
         <a
           href={contact.tel}
-          className="rounded-xl border border-white/25 px-5 py-3.5 text-center text-sm font-semibold hover:border-gold"
+          className="rounded-xl border border-fg-muted/40 px-5 py-3.5 text-center text-sm font-semibold hover:border-accent"
         >
           Call {readableNumber(WHATSAPP_NUMBER)}
         </a>
       </div>
 
-      <dl className="mt-8 rounded-xl border border-line bg-panel/60 px-5 py-2">
+      <dl className="mt-8 rounded-xl border border-border bg-surface/60 px-5 py-2">
         <Row label="Business name">{contact.businessName}</Row>
         <Row label="Registered name">
           {legalName ?? (
-            <span className="text-muted">
+            <span className="text-fg-muted">
               Ask us on WhatsApp and we will send the certificate details directly.
             </span>
           )}
         </Row>
         <Row label="Registration number">
           {registrationNumber ?? (
-            <span className="text-muted">Available on request — ask us and we will send it.</span>
+            <span className="text-fg-muted">Available on request — ask us and we will send it.</span>
           )}
         </Row>
         <Row label="WhatsApp">
-          <a href={whatsappLink("Hi! I have a question about LuxeRide.")} target="_blank" rel="noreferrer" className="font-mono text-gold">
+          <a href={whatsappLink("Hi! I have a question about LuxeRide.")} target="_blank" rel="noreferrer" className="font-mono text-accent">
             {readableNumber(WHATSAPP_NUMBER)}
           </a>
         </Row>
         <Row label="Phone">
-          <a href={contact.tel} className="font-mono text-gold">
+          <a href={contact.tel} className="font-mono text-accent">
             {readableNumber(WHATSAPP_NUMBER)}
           </a>
         </Row>
         <Row label="Email">
           {contact.email ? (
-            <a href={`mailto:${contact.email}`} className="text-gold">
+            <a href={`mailto:${contact.email}`} className="text-accent">
               {contact.email}
             </a>
           ) : (
             // No address is on record anywhere in this repository, so none is
             // invented. Saying why is more useful than a `mailto:` that bounces.
-            <span className="text-muted">
+            <span className="text-fg-muted">
               We do not publish an email address yet — WhatsApp and the phone number above both reach a
               person.
             </span>
           )}
         </Row>
         <Row label="Hours">
-          {hours ?? <span className="text-muted">Ask us and we will tell you when we are around.</span>}
+          {hours ?? <span className="text-fg-muted">Ask us and we will tell you when we are around.</span>}
         </Row>
         <Row label="How fast we reply">
           {responseExpectation ?? (
-            <span className="text-muted">We aim to reply the same working day.</span>
+            <span className="text-fg-muted">We aim to reply the same working day.</span>
           )}
         </Row>
         <Row label="We deliver to">
@@ -147,11 +147,11 @@ export default function ContactPage() {
 
       <section className="mt-10">
         <h2 className="font-display text-xl font-semibold">Before you buy: we check the fit first</h2>
-        <p className="mt-2 text-sm leading-relaxed text-white/80">
+        <p className="mt-2 text-sm leading-relaxed text-fg/80">
           {refusals["NOT STOCKED"].body} We only say a part fits a car once somebody has confirmed that
           floor pan — physically, in writing from the supplier, or against a verified OEM match.
         </p>
-        <p className="mt-2 text-sm leading-relaxed text-white/80">
+        <p className="mt-2 text-sm leading-relaxed text-fg/80">
           If we have not confirmed your car yet, we will tell you so and take your number, rather than
           guess. {guarantee}
         </p>
