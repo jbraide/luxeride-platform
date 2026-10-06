@@ -3,7 +3,92 @@
 ## Status
 
 **BLOCKED on owner inputs — but further along than the ticks below suggest: M0, M1, M2, most of M3,
-and the unblocked half of M4 are built.** Last updated 2026-10-03.
+and the unblocked half of M4 are built.** Last updated 2026-10-03. **Owner decision recorded 2026-10-05:**
+the single-layer / double-layer merge (`floor-mats` as one product with two `ProductVariation` options)
+is the owner's deliberate choice, supersedes the two-old-products design, and is load-bearing for the
+media pipeline (`public/products/floor-mats/photo.jpg`), the cart (`lineKey()` includes `variationSlug`),
+the checkout (`OrderItem.variationId`), and the admin photo form (`LayoutVariant.variationId`).
+
+**What's genuinely done (verified by file/code inspection, 2026-10-05):**
+- `storefront-catalog`: 80% (93/116 items) — M0/M1/M3/M4 surfaces built, photo pipeline verified against real footage.
+- `fitment-engine`: 27% (34/126) — Phase 0 table loaded (212 layouts, 0 Confirmed), year spans applied (`20261006090000`), `fitment-live.ts` connects DB to storefront, `fitment-catalogue.ts` defines `floor-mats` as one product with two variants; M2.2 (Confirmed layouts entry) blocked D-03.
+- `commerce-backend`: 16% (13/79) — M0.2 build fix done; schema reconciled; first migration applied; seed imports catalogue.
+- `cart-checkout`: 15% (14/96) — M6.4 pricing/validation modules built; M6.7-M6.14 untouched (needs D-02 decision: Route Handler at `/api/orders` vs Server Action).
+- `ad-landing-and-tracking`: ~62% — analytics core, attribution, campaign landing, landing data (`landing.ts`) built; M3.12/M3.15/M3.16 open.
+- `fit-finder`: ~45% — fabricated `FIT ✓` removed; real `/api/fit-check` returns `FITTED`/`NOT_STOCKED`/`UNKNOWN`; anything requiring Confirmed layout blocked.
+- `trust-and-policies`: ~35% — copy register (`copy.ts`), footer, policies shell (`/policies/[slug]`), announcement bar, honesty-floor scanner (`check:placeholders`) built; M4.3/M4.4/M4.5 policy slots blocked D-07/D-08/D-11.
+- `payments-paystack`: ~11% — only sections 2/3 (prepay copy); M7 untouched.
+- `whatsapp-engine`: ~5% — NOT STARTED (6 verifications of absence only); templates not submitted; `fitment-live.ts` uses `liveLayoutCountLive()` now; `wa.me` remains production path.
+- `admin-console`: ~10% — 7 verifications only; console screens (`/admin`) partially built; M9.3 10/11 tasks done (§8.4 grouping blocked on D-03 conflict rule).
+- `master-build-plan`: M0-M4 built (with M5 at 0/12 untouched), M6-M10 mostly untouched; D-02 (route vs Server Action) is the first open decision before M6 can proceed.
+
+> **This pass: single and double layer became two OPTIONS of one product, and every car got its real
+> production years — which closed the defect the year work existed to fix.** Both halves were proved
+> against a running server, not against the code.
+>
+> **The layers are one product now.** `floor-mats` is one product with a `single-layer` and a
+> `double-layer` `ProductVariation`; the two old products, their category and their URLs are gone.
+> `/products/single-layer-mats` and `/products/double-layer-mats` answer **307** — not 301, because the
+> target is a query parameter and the choice of layer is still the visitor's — to
+> `/products/floor-mats?variation=…`, verified on the production server. The option is threaded end to
+> end as `variationSlug`: PDP picker → Fit Finder (where the layer is `matType` state feeding the ONE
+> product, not a product swap) → cart line → checkout → `OrderItem.variationId` → receipt, and the
+> idempotent replay of a stored order echoes the OPTION back rather than the product's floor price.
+> `lineKey()` includes `variationSlug`, so two layers for one car are two cart lines — which is the
+> point: they are two things at two prices.
+>
+> **Two defects came out of it, and both were silent.** (1) The PDP's per-option price overlay set the
+> option's prices but left the product's `variations` array in place; `priceRange()` reads `variations`
+> and ignores `regular`/`premium`, so choosing Double Layer printed the whole ₦45,000–₦94,000 band. The
+> overlay now drops `variations` entirely — the double-layer page reads *Double Layer · ₦68,000 –
+> ₦94,000*, the single-layer page *Single Layer · ₦45,000 – ₦68,000*, and a bogus option falls back to
+> the product band. (2) The admin's per-range photo form posted `LayoutVariant.id` where `addRangeImage`
+> checks `LayoutVariant.variationId` — so EVERY photo would have been refused, silently, the moment the
+> two layers became two offers. It now renders one photo block and one add-photo form per option, each
+> posting the `ProductVariation` id. Proved with a real form POST: the same `driver` shot was accepted
+> for BOTH layers of one range, the repeat was refused (`e=angle~duplicateAngle`), an unoffered option
+> was refused (`e=variationId~variationNotOffered`), and `/api/fit-check` then returned each layer with
+> its own photograph.
+>
+> **The years, and the defect they fix.** 212 of 224 `Vehicle` rows carried `yearFrom`/`yearTo` as NULL
+> because the catalogue they came from has no year dimension at all, and `fitment-live.ts` will not
+> refuse on a null span — *"a null must not refuse a customer"*. The measured consequence: a **1960
+> Camry and a 2030 Camry both answered `FITTED`, with a confirmed-fit badge**, because the only gate
+> left was `Layout.active`. `prisma/migrations/20261006090000_vehicle_production_years` applies 209
+> spans across 32 makes from `scripts/vehicle-years.data.mjs`. The Corolla, Highlander and Matrix are
+> deliberately NOT in that table: a generation split is a statement about which floor pan covers which
+> years, and it belongs to whoever measured the car. Three span-less duplicates — a second Corolla,
+> Highlander and Matrix — are deleted under two guards, one of which refuses if any of them carries an
+> order, a measured floor pan or a photograph. **24 spans close before 2026**, so a 2020 Cruze, a 2019
+> Focus, a 2020 Freelander and a 2016 Matrix are refused BY NAME, with the covered span in the sentence.
+>
+> **The migration failed twice before it ran, and both causes are worth keeping.** First P3018 /
+> Postgres `42703`: the `UPDATE` set `"updatedAt"`, and `Vehicle` has only `createdAt` — a row's own
+> timestamps are not something this table keeps. Then the guard asserting "nothing is left span-less"
+> fired on the very three duplicates the NEXT statement deletes: the guard was stricter than its own
+> comment said. Both were found by RUNNING it, not by reading it. Recovery is the shadow-DB-free path
+> already recorded — the role lacks `CREATEDB`, so `migrate dev` cannot be used here at all:
+> `migrate resolve --rolled-back <name>`, then `db:deploy`. Final state: **221 vehicles, 0 span-less,
+> the 12 generation rows untouched**, plus an `AuditEntry` per vehicle so "where did this car's years
+> come from" is answerable from the database rather than from a git checkout of a data file.
+>
+> **`scripts/vehicle-years-check.mjs` now judges the EFFECTIVE span** — what a row will actually
+> answer, reading the table where `yearFrom` is still NULL — so it means something on BOTH sides of the
+> migration instead of only before it. It reports 221 / 221 spanned, 209 supplied, 12 generation rows,
+> 24 closed spans, and exits 0. Re-verified live on a rebuilt server at `:3111`: Camry 1960 and 2030 →
+> `NOT_STOCKED` naming 2001–2026; Camry 2015, Matrix 2010, Cruze 2015 → `FITTED`; Cruze 2020, Focus
+> 2019, Freelander 2020, Matrix 2016 → `NOT_STOCKED`. The Fit Finder renders `fit.reason` verbatim, so
+> the span sentence is what the visitor reads. `npm test` **188/188**; `npm run verify` **exit 0**.
+>
+> **One thing clarified rather than changed, because it kept being misread:** `Mapping.confidence` and
+> `Layout.status` no longer gate anything on the live path — `active` is the only switch, which is the
+> owner's 2026-10-05 call to assume the whole catalogue is supplyable and turn off by hand. The module
+> header of `fitment-live.ts` still described the OLD contract (*"the query asks only for `status:
+> 'confirmed'` layouts and `confidence: 'confirmed'` mappings"*), which is false now and is exactly
+> what makes the 9-vs-218 confirmed-mapping number look like a gate; it has been rewritten to state
+> what the two queries actually do. `src/data/fitment.ts`'s static `checkFit` still checks
+> `confidence === "confirmed"`, but no customer path reaches it any more — `/api/fit-check` imports
+> `checkFitLive`.
 
 > **This pass: the fitment database became load-bearing and the admin console went up (M9.1, M9.2, M9.3, M9.10).** The
 > Prisma fitment tables exist and are migrated, the whole catalogue is loaded as **inferred** rows, admin
@@ -23,7 +108,23 @@ and the unblocked half of M4 are built.** Last updated 2026-10-03.
 > rule. **Running the production build also caught two defects that no amount of page-rendering would have:**
 > `/admin` and `/admin/demand` were being prerendered as static, so in production the launch metric would
 > have been a build-day snapshot and the demand log would have silently omitted every refusal captured after
-> a deploy. Both are now `force-dynamic`. **M9.4/M9.5 are the remainder**, and M5 — the pre-spend gate — is
+> a deploy. Both are now `force-dynamic`. **§8.7's missing half has since landed: the demand log is a table
+> again.** `src/lib/demand-log.ts` used to append NDJSON to a file outside the repository — because locked
+> decision 2 requires the refusal path to work before a database exists — which left `/admin/demand` ranking
+> a file while the `DemandLog` table beside it stayed empty. It now inserts a row, and the file, the
+> duplicated path resolution and the `LUXERIDE_DEMAND_LOG` override are gone. Nothing was lost in the move:
+> the file had never been written, and since §6.10 the lookup itself needs Postgres, so the file no longer
+> bought survival of a database outage — only survival of a migration. Two honesty fixes came with it:
+> `demandLogged` reports what the insert actually did instead of asserting `true`, and the build's only
+> warning — Turbopack tracing the whole project because of a `readFileSync` on a computed path — is gone.
+> Proved live: three refusals produced three rows and a populated ranking, then the rows were deleted and
+> the baseline re-proved. **The admin gate also changed, at the owner's request: `/admin` now has a sign-in
+> page instead of a browser dialog** (`fitment-engine` §7.8). HTTP Basic Auth's prompt belongs to the browser,
+> so a dismissed prompt and a wrong password both render the same plain-text `401` — which made a fully
+> working six-screen console read as "no UI". A `307` to `/admin/login` for a browser navigation, a signed
+> 12-hour httpOnly cookie for the session, a real Sign out button, and the flat `401` kept for anything that
+> is not a page load. **Locked decision 1 is untouched: still one operator, no roles.** Basic Auth still
+> works on every route, and still no new dependency — `node:crypto` only. **M9.4/M9.5 are the remainder**, and M5 — the pre-spend gate — is
 > still untouched.
 
 > **This pass: analytics + attribution (M3.5, M3.7–M3.11), campaign landing (M3.6), and the trust
@@ -478,7 +579,7 @@ laptop (M10.3).
 
   - [ ] M9.1. → `fitment-engine/tasks.md` **§6.1–6.9** — the Prisma fitment models, delivered as an **additive migration through `commerce-backend`**: `Layout`, `Vehicle`, `Mapping` (with `confidence`, `evidenceNote`, `confirmedBy`, `date`), `Variant`, `ImageSet`, `Exclusion`, `DemandLog`. `LayoutVariant` keys to the catalogue `productSlug` published in M6.13, which is why `Product` had to ship in the initial migration. _Requirements: 3.4_ _(P1)_
   - [ ] M9.2. → `fitment-engine/tasks.md` **§7.1–7.7** — admin authentication with **exactly one operator**: no roles, no permission matrix, no second editor seat, per locked decision 1. _Requirements: 3.3_ _(P1)_
-  - [~] M9.3. → `fitment-engine/tasks.md` **§8.1–8.11** — the six admin screens: vehicles list, grouping view, layout detail, exclusions, demand log, audit log. _Requirements: 3.3_ _(P1)_ **TEN OF THE ELEVEN TASKS ARE DONE AND VERIFIED LIVE; §8.4 (grouping) IS BLOCKED ON A DECISION, AND IT IS THE ONE THAT MATTERS MOST.** Built and verified: the console shell (§8.1), the dashboard (§8.2), the vehicles list (§8.3), the layout detail screen with the confirmation form (§8.5 — partial), exclusions (§8.6), the demand screen (§8.7 — partial), the audit log (§8.8), the Server Actions (§8.9), styling (§8.10) and console undiscoverability (§8.11). `/admin` and all six routes return 200 through the auth gate; `npm run verify`'s build step is green. **The confirmation path was proved end to end, not read:** the rendered `$ACTION_ID_…` and every field were POSTed to `/admin/layouts/layout-toyota-corolla` exactly as a browser sends them, the action answered `303 → ?saved=confirmed`, the layout became `confirmed`, its mapping was raised from `inferred`, the verified span was written onto the Vehicle, 8 `AuditEntry` rows recorded every before/after — and `/api/fit-check` then returned **`FITTED`** with four priced variants for a car that had refused hours earlier. All of it was reverted and the baseline re-proved at `confirmed 0`. **The build also caught a defect no amount of page-rendering would have: `/admin` and `/admin/demand` were being prerendered as static (`○`), because reading Postgres and reading a file are not dynamic APIs as far as Next is concerned. In production the launch metric would have been a build-day snapshot and the demand log would have silently omitted every refusal captured after deploy. Both are now `dynamic = "force-dynamic"`, with the reasoning in the files.** **§8.4 grouping is not built and cannot be built honestly yet** — §9.3 as written treats `inferred` layouts as conflicting, and all 212 seeded layouts are `inferred`, so create-Layout would refuse every possible selection and the console would stay at one confirmation per car (212 of them) instead of one per floor pan. **This is the same shape as the §9.11 `boot_liner` blocker and needs the same kind of answer.** Two further gaps recorded rather than hidden: the confirm form cannot author `customerName`, so a car confirmed as 2009–2013 still answers `FITTED` as *"Toyota Corolla"* (§8.5a), and nothing writes the `DemandLog` table at all (§8.7).
+  - [~] M9.3. → `fitment-engine/tasks.md` **§8.1–8.11** — the six admin screens: vehicles list, grouping view, layout detail, exclusions, demand log, audit log. _Requirements: 3.3_ _(P1)_ **TEN OF THE ELEVEN TASKS ARE DONE AND VERIFIED LIVE; §8.4 (grouping) IS BLOCKED ON A DECISION, AND IT IS THE ONE THAT MATTERS MOST.** Built and verified: the console shell (§8.1), the dashboard (§8.2), the vehicles list (§8.3), the layout detail screen with the confirmation form (§8.5 — partial), exclusions (§8.6), the demand screen (§8.7 — partial), the audit log (§8.8), the Server Actions (§8.9), styling (§8.10) and console undiscoverability (§8.11). `/admin` and all six routes return 200 through the auth gate; `npm run verify`'s build step is green. **The confirmation path was proved end to end, not read:** the rendered `$ACTION_ID_…` and every field were POSTed to `/admin/layouts/layout-toyota-corolla` exactly as a browser sends them, the action answered `303 → ?saved=confirmed`, the layout became `confirmed`, its mapping was raised from `inferred`, the verified span was written onto the Vehicle, 8 `AuditEntry` rows recorded every before/after — and `/api/fit-check` then returned **`FITTED`** with four priced variants for a car that had refused hours earlier. All of it was reverted and the baseline re-proved at `confirmed 0`. **The build also caught a defect no amount of page-rendering would have: `/admin` and `/admin/demand` were being prerendered as static (`○`), because reading Postgres and reading a file are not dynamic APIs as far as Next is concerned. In production the launch metric would have been a build-day snapshot and the demand log would have silently omitted every refusal captured after deploy. Both are now `dynamic = "force-dynamic"`, with the reasoning in the files.** **§8.4 grouping is not built and cannot be built honestly yet** — §9.3 as written treats `inferred` layouts as conflicting, and all 212 seeded layouts are `inferred`, so create-Layout would refuse every possible selection and the console would stay at one confirmation per car (212 of them) instead of one per floor pan. **This is the same shape as the §9.11 `boot_liner` blocker and needs the same kind of answer.** Two further gaps recorded rather than hidden: the confirm form cannot author `customerName`, so a car confirmed as 2009–2013 still answers `FITTED` as *"Toyota Corolla"* (§8.5a), and ~~nothing writes the `DemandLog` table at all (§8.7)~~ — **the DemandLog writer has since landed and §8.7 is no longer partial.** `src/lib/demand-log.ts` now inserts a row instead of appending NDJSON (the database is the only source, the file is gone, `demandLogged` reports what the insert actually did rather than asserting it), which also deleted the only `Dynamic filesystem access` tracing warning the build used to emit. Proved live: three refusals produced three rows and a populated ranking, then the test rows were deleted and the baseline re-proved. One gap remains: the confirm form cannot author `customerName`, so a car confirmed as 2009–2013 still answers `FITTED` as *"Toyota Corolla"* (§8.5a).
   - [ ] M9.4. → `fitment-engine/tasks.md` **§9.1–9.11** — grouping, the conflict guard refusing to merge vehicles already on different live layouts, and **split as a first-class action**. Answers `fitment-engine` OQ 7: a split child starts `draft` and needs fresh evidence, because the parent's evidence covered the parent's span. _Requirements: 3.3, 6.3_ _(P1)_
   - [ ] M9.5. → `fitment-engine/tasks.md` **§10.1–10.6** — the audit log and amendment history. One person editing means a fat-fingered status change is the whole risk, which is exactly why the Confirmed gate requires the mandatory short note. _Requirements: 3.3_ _(P1)_
   - [ ] M9.6. → `commerce-backend/tasks.md` **§8.3–8.5** — the second migration adding the **nullable only** layout references plus `Vehicle.aliases` / `generation` / `bodyType` / `facelift`, which must exist before this module's data is imported. _Requirements: 3.3_ _(P1)_

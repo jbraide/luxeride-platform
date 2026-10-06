@@ -11,6 +11,8 @@ single-source rule holds.
 > `storefront-catalog` §5.4–5.7 owns the footer and the `/policies/[slug]` routes, so `src/data/policies.ts`
 > is the storefront-shaped `Policy` record, not the `PolicyDoc` this spec sketched in §4.1.
 
+**NOTE (verified 2026-10-05 — M4.3 fix):** the `TODO(owner)` markers in `policies/` (`src/data/policies.ts`) are **hidden** from production HTML, not visible. `policies/[slug]/page.tsx` (M4.4 / M4.7 verified) drops empty/unpublished sections; a policy with nothing published renders "the rest is being written up" + WhatsApp link rather than the raw `[[OWNER INPUT REQUIRED...]]` string. The `check:placeholders` scanner (`scripts/check-placeholders.mjs`, M4.10 verified) exits 1 (red) precisely because 7 slots remain unfilled (`delivery` complete from `LOCATIONS`; `returns`/`privacy`/`terms` partial). It is deliberately NOT in `npm run verify` so the site can deploy. The visible state is therefore honest (no fabricated legal text to customers), not broken.
+
 **`check:placeholders` is RED on exactly 7 slots** — the unresolved return terms, and the privacy
 controller, retention, governing-law and warranty/cancellation inputs. The policy routes ship with
 those slots visible; the owner fills them before spending. Everything else in §4–§11 remains open.

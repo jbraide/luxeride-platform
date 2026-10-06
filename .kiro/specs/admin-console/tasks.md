@@ -2,7 +2,7 @@
 
 ## Status
 
-**NOT STARTED — 7 done, 63 remaining.**
+**PARTIAL — M9.3: 10/11 tasks verified (console shell `/admin`, dashboard, vehicles, exclusions, audit partial, server actions, layouts detail with confirmation form `§8.5`, categories, products; M9.10 `fitment-live.ts` connects storefront to DB; `fitment-catalogue.ts` defines `floor-mats` as one product with two `ProductVariation` options per owner's 2026-10-05 decision, requiring new `image_set_option` migration `20261005221939`). §8.4 grouping BLOCKED D-03 / §9.3 conflict rule; M9.4 (grouping/split) untouched. M9.2 auth fully built (`/admin/login`, session cookie 12h, `admin-auth.ts` Basic Auth, `proxy.ts` with matcher, rate limit `admin-ratelimit.ts`, `robots.ts` disallow, `confirm-guard.ts`, `catalogue-guard.ts`). M9.10 (`fitment-live`) ADDED 2026-10-03 — no original task line existed; storefront now reads DB (`liveLayoutCountLive()` = 0, `confirmedCustomerNamesLive()` = `[]`). Everything past M9.5 deferred. Seven verification items (§1 audit) remain the only `[x]` marks — the console is substantially further than this header suggests; the status reflects task counts (`63 remaining`) rather than built surface.** Updated 2026-10-05.
 
 Seven items are complete because they are *verifications* of existing code and existing absence that
 this spec depends on, not new work; each carries the file that proves it. Everything else is

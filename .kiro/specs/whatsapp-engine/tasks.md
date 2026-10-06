@@ -7,6 +7,8 @@ checked sub-tasks under section 1 record what was verified by reading the code i
 describe today's behaviour, not a built feature. There is no Cloud API send, no template, no webhook,
 no server-side order record, no ref code in the message, no cron and no delivery receipts.
 
+**NOTE (verified 2026-10-05): M5.11 deferred** — Paystack/WhatsApp multi-day clocks not started; `whatsapp-templates/*.txt` does NOT exist (`glob` confirms absence; M2.9 deferred to run clock early); `wa.me` remains production path (`src/lib/whatsapp.ts` line 51: single `wa.me` builder, no Cloud API call); `fitment-live.ts` uses `liveLayoutCountLive()` (line 634) rather than deprecated `liveLayoutCount()` (line 627); order reference `LR-` format exists (`orderRef.ts`) but checkout (`CheckoutView.tsx` line 152) creates its own adapter rather than the server-minted `crypto.randomUUID()` from M6.8; `cron` installed (`E5` verified 2026-10-02: one-minute probe fired; `crontab -l` shows nightly `02:17`); backup `db-backup.sh` exists; ZERO restore rehearsals performed (`docs/launch-metrics.md` does not reference restored DB — M10.2 gate still open). No webhook (`/api/whatsapp/webhook` MISSING); no `X-Hub-Signature-256` handler; no delivery receipt; no 12-hour follow-up trigger (`whatsapp-engine` M8.7 deferred to M8).
+
 Two things are on the critical path and neither is code: **template approval** (Meta documents "up to
 24 hours", no SLA) and **a server-side order record** (`commerce-backend`). Section 2 submits the
 templates before anything depends on them; section 3 keeps the existing `wa.me` path working

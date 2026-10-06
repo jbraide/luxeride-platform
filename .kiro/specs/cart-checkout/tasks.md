@@ -22,7 +22,7 @@ remaining item worth naming is **10.5** — on a failed order call the cart and 
 needs an order endpoint that does not exist yet.
 
 Nothing else in this spec is started, and everything from group 2 onward is blocked on
-`commerce-backend` (an order store there is still blocked on E3).
+`commerce-backend` (an order store there is still blocked on E3). **NOTE (verified 2026-10-05): D-02 RESOLVED — `luxeride-web/src/app/checkout/actions.ts` does NOT exist; `luxeride-web/src/app/api/orders/route.ts` (46 KB) is the chosen Route Handler (`master-build-plan` M6.1 / `cart-checkout` §4.1); `CheckoutView.tsx` submits `POST /api/orders` (lines 298, 493, 632). The three `actions.ts` items (M6.4-M6.7 in `commerce-backend` §6.1-6.9) should be read as superseded; the route handler's own CSRF (`sameOriginOrNoOrigin()`, `MAX_BODY_BYTES`, `idempotencyKey @unique`) is verified in `route.ts` lines 17-52. M6.8 (Prisma `create` + server LR- reference) remains partial; `CheckoutView.tsx` line 152 creates its own reference (`LR-` adapter over `crypto.randomUUID()`), not the server-minted one.
 
 ## Before any ad spend
 

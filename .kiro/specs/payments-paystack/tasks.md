@@ -22,7 +22,7 @@ is the record that counts until a server stores the order, but it still leads wi
 WhatsApp", because there is still no status for it to report.
 
 Nothing else in this spec is started. **D-09** (Paystack account, test key, business-verification lead
-time) is still unanswered, and it is a multi-day external lead time — see M5.11.
+time) is still unanswered, and it is a multi-day external lead time — see M5.11. **NOTE (verified 2026-10-05):** `.env.local` contains no `PAYSTACK_SECRET_KEY`; `CheckoutView.tsx` renders prepay behind `PREPAY_AVAILABLE = false` (`src/lib/payment-options.ts`); M5 deferred both Paystack clock and WhatsApp template submission (`whatsapp-templates/*.txt` MISSING — M2.9 deferred). The site trades with `wa.me` + POD only.
 
 Blockers outside this spec: the production build fails
 (`prisma/seed.ts` cannot resolve `./data/products`, `_CONTEXT.md` §3), and no Paystack account or key
