@@ -32,7 +32,6 @@ export default async function ExclusionsPage({
 
   const failures = readFailures(query);
   const echo = readEcho(query);
-  const saved = typeof query.saved === "string" ? query.saved : "";
 
   const [exclusions, layouts] = await Promise.all([
     prisma.exclusion.findMany({
@@ -42,9 +41,9 @@ export default async function ExclusionsPage({
     prisma.layout.findMany({ select: { id: true, internalCode: true }, orderBy: { internalCode: "asc" } }),
   ]);
 
-  const label = "block text-xs uppercase tracking-widest text-gold-dim";
+  const label = "block text-xs uppercase tracking-widest text-accent-dim";
   const input =
-    "mt-1 w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-white placeholder:text-muted focus:border-gold focus:outline-none";
+    "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none";
   const fieldFailed = (field: string) => (failures.has(field) ? "border-[#FF6B35]" : "");
 
   const refusal = (field: string) => {
@@ -60,27 +59,21 @@ export default async function ExclusionsPage({
   return (
     <div>
       <h2 className="font-display text-lg font-semibold">Exclusions</h2>
-      <p className="mt-1 text-xs leading-relaxed text-muted">
+      <p className="mt-1 text-xs leading-relaxed text-fg-muted">
         Cars somebody specifically looked at and knows we cannot fit. Each one short-circuits{" "}
-        <code className="font-mono text-gold-dim">checkFitLive</code> before any layout is considered.
+        <code className="font-mono text-accent-dim">checkFitLive</code> before any layout is considered.
       </p>
 
-      {saved !== "" && (
-        <p className="mt-4 rounded-xl border border-line bg-panel/60 px-4 py-3 text-sm text-muted">
-          {saved === "exclusion" && "Recorded. The refusal will be read before any layout is considered."}
-          {saved === "removed" && "Removed, and the removal is in the audit log."}
-        </p>
-      )}
 
       {failures.size > 0 && (
         <div className="mt-4 rounded-xl border border-[#FF6B35] px-4 py-3 text-sm">
           <p className="text-[#FF6B35]">
             Not saved. {failures.size} field{failures.size === 1 ? "" : "s"} refused:
           </p>
-          <ul className="mt-2 space-y-1 text-xs text-muted">
+          <ul className="mt-2 space-y-1 text-xs text-fg-muted">
             {[...failures].map(([field, code]) => (
               <li key={field}>
-                <span className="font-mono text-white/80">{field}</span> — {messageFor(code)}
+                <span className="font-mono text-fg/80">{field}</span> — {messageFor(code)}
               </li>
             ))}
           </ul>
@@ -89,11 +82,11 @@ export default async function ExclusionsPage({
 
       <section className="mt-8">
         <h3 className="font-display text-base font-semibold">
-          Recorded refusals <span className="font-mono text-xs text-gold-dim">{exclusions.length}</span>
+          Recorded refusals <span className="font-mono text-xs text-accent-dim">{exclusions.length}</span>
         </h3>
 
         {exclusions.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-line bg-panel/60 px-5 py-6 text-sm text-muted">
+          <p className="mt-3 rounded-xl border border-border bg-surface/60 px-5 py-6 text-sm text-fg-muted">
             No exclusions recorded. That is not the same as everything fitting: it means nobody has
             written one down. A refusal that lives only in the owner&apos;s head is a car we will quote
             by accident.
@@ -101,33 +94,33 @@ export default async function ExclusionsPage({
         ) : (
           <ul className="mt-3 space-y-3">
             {exclusions.map((exclusion) => (
-              <li key={exclusion.id} className="rounded-xl border border-line bg-panel/60 px-4 py-3">
+              <li key={exclusion.id} className="rounded-xl border border-border bg-surface/60 px-4 py-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <span className="text-sm text-white/80">
+                  <span className="text-sm text-fg/80">
                     {exclusion.make} {exclusion.model}{" "}
-                    <span className="font-mono text-[11px] text-gold-dim">
+                    <span className="font-mono text-[11px] text-accent-dim">
                       {exclusion.yearFrom}-{exclusion.yearTo}
                     </span>
                     {exclusion.trim && (
-                      <span className="ml-2 font-mono text-[11px] text-gold-dim">{exclusion.trim}</span>
+                      <span className="ml-2 font-mono text-[11px] text-accent-dim">{exclusion.trim}</span>
                     )}
                   </span>
                   <form method="post" action={deleteExclusion}>
                     <input type="hidden" name="exclusionId" value={exclusion.id} />
                     <button
                       type="submit"
-                      className="rounded-lg border border-line px-3 py-1 text-xs text-muted hover:border-gold hover:text-gold"
+                      className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent"
                     >
                       Remove
                     </button>
                   </form>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{exclusion.reason}</p>
-                <p className="mt-1 font-mono text-[11px] text-gold-dim">
+                <p className="mt-2 text-sm leading-relaxed text-fg-muted">{exclusion.reason}</p>
+                <p className="mt-1 font-mono text-[11px] text-accent-dim">
                   {exclusion.layout ? (
                     <Link
                       href={`/admin/layouts/${encodeURIComponent(exclusion.layout.id)}`}
-                      className="text-gold underline-offset-4 hover:underline"
+                      className="text-accent underline-offset-4 hover:underline"
                     >
                       written against {exclusion.layout.internalCode}
                     </Link>
@@ -143,9 +136,9 @@ export default async function ExclusionsPage({
 
       <section className="mt-10">
         <h3 className="font-display text-base font-semibold">Record one</h3>
-        <p className="mt-1 text-xs leading-relaxed text-muted">
+        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
           An exclusion is often about a car with no{" "}
-          <code className="font-mono text-gold-dim">Vehicle</code> row at all — a hybrid variant, a
+          <code className="font-mono text-accent-dim">Vehicle</code> row at all — a hybrid variant, a
           3rd-row derivative, a 7-seat against a 5-seat floor pan — which is why this is named as make
           and model rather than as a vehicle id. Inventing a vehicle to hang a refusal on would be
           manufacturing a catalogue claim to record a refusal.
@@ -263,7 +256,7 @@ export default async function ExclusionsPage({
               className={`${input} ${fieldFailed("reason")}`}
             />
             {refusal("reason")}
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-xs text-fg-muted">
               This sentence is what the customer reads instead of the generic refusal. Write it so you
               would be willing to defend it.
             </p>
@@ -271,7 +264,7 @@ export default async function ExclusionsPage({
 
           <button
             type="submit"
-            className="rounded-lg border border-gold bg-gold px-5 py-2 text-sm font-semibold text-ink"
+            className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
           >
             Record the exclusion
           </button>

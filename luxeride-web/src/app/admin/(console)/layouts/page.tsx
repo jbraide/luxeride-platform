@@ -60,7 +60,7 @@ export default async function LayoutsPage({
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="font-display text-lg font-semibold">Layouts</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-dim">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
           {layouts.length} shown of {all} · {confirmed} confirmed
         </span>
       </div>
@@ -72,7 +72,7 @@ export default async function LayoutsPage({
             href={statusHref(value)}
             aria-current={value === status ? "page" : undefined}
             className={`font-mono text-xs uppercase tracking-widest ${
-              value === status ? "text-gold" : "text-muted hover:text-gold"
+              value === status ? "text-accent" : "text-fg-muted hover:text-accent"
             }`}
           >
             {value || "all"}
@@ -88,24 +88,24 @@ export default async function LayoutsPage({
           defaultValue={rawQuery}
           placeholder="Search code, name or make"
           aria-label="Search code, name or make"
-          className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-white placeholder:text-muted focus:border-gold focus:outline-none"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
         />
         <button
           type="submit"
-          className="rounded-lg border border-line px-4 py-2 text-sm text-white hover:border-gold"
+          className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
         >
           Search
         </button>
       </form>
 
       {layouts.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-line bg-panel/60 px-5 py-6 text-sm text-muted">
+        <p className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-6 text-sm text-fg-muted">
           Nothing matches this filter.
         </p>
       ) : (
         <table className="mt-6 w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-line font-mono text-[11px] uppercase tracking-widest text-gold-dim">
+            <tr className="border-b border-border font-mono text-[11px] uppercase tracking-widest text-accent-dim">
               <th className="py-2 pr-4 font-normal">Code</th>
               <th className="py-2 pr-4 font-normal">Customer name</th>
               <th className="py-2 pr-4 font-normal">Status</th>
@@ -114,23 +114,23 @@ export default async function LayoutsPage({
           </thead>
           <tbody>
             {layouts.map((layout) => (
-              <tr key={layout.id} className="border-t border-line align-top">
+              <tr key={layout.id} className="border-t border-border align-top">
                 <td className="py-2 pr-4 font-mono text-xs">
                   <Link
                     href={`/admin/layouts/${encodeURIComponent(layout.id)}`}
-                    className="text-gold underline-offset-4 hover:underline"
+                    className="text-accent underline-offset-4 hover:underline"
                   >
                     {layout.internalCode}
                   </Link>
                 </td>
                 <td className="py-2 pr-4">
                   {layout.customerName}
-                  <span className="block text-[11px] text-muted">{layout.make.name}</span>
+                  <span className="block text-[11px] text-fg-muted">{layout.make.name}</span>
                 </td>
-                <td className="py-2 pr-4 font-mono text-[11px] uppercase text-muted">
+                <td className="py-2 pr-4 font-mono text-[11px] uppercase text-fg-muted">
                   {layout.status}
                 </td>
-                <td className="py-2 font-mono text-[11px] text-gold-dim">
+                <td className="py-2 font-mono text-[11px] text-accent-dim">
                   {layout._count.mappings} vehicle{layout._count.mappings === 1 ? "" : "s"} ·{" "}
                   {layout._count.variants} variants
                 </td>

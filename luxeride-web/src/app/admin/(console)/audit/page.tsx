@@ -72,9 +72,9 @@ function asText(value: Prisma.JsonValue | null): string {
 
 /** `confirm` is the action that matters, so it is the only one that gets the gold. */
 function actionClass(action: string): string {
-  if (action === "confirm") return "text-gold";
+  if (action === "confirm") return "text-accent";
   if (action === "delete" || action === "retire") return "text-[#FF6B35]";
-  return "text-muted";
+  return "text-fg-muted";
 }
 
 function entityHref(entity: string): string {
@@ -126,16 +126,16 @@ export default async function AuditPage({
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="font-display text-lg font-semibold">Audit log</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-dim">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
           {entries.length} shown of {total}
         </span>
       </div>
 
-      <p className="mt-2 max-w-3xl text-xs leading-relaxed text-muted">
+      <p className="mt-2 max-w-3xl text-xs leading-relaxed text-fg-muted">
         Every decision the console records, newest first. Rows are appended and never
         rewritten, so nothing here can be tidied up — including by you. There is no
         edit and no delete control on this page, and none in{" "}
-        <code className="font-mono text-gold-dim">actions.ts</code> either.
+        <code className="font-mono text-accent-dim">actions.ts</code> either.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -143,10 +143,10 @@ export default async function AuditPage({
           href="/admin/audit"
           aria-current={filter === "" ? "page" : undefined}
           className={`font-mono text-xs uppercase tracking-widest ${
-            filter === "" ? "text-gold" : "text-muted hover:text-gold"
+            filter === "" ? "text-accent" : "text-fg-muted hover:text-accent"
           }`}
         >
-          All <span className="text-gold-dim">{total}</span>
+          All <span className="text-accent-dim">{total}</span>
         </Link>
         {byEntity.map((row) => (
           <Link
@@ -154,16 +154,16 @@ export default async function AuditPage({
             href={entityHref(row.entity)}
             aria-current={filter === row.entity ? "page" : undefined}
             className={`font-mono text-xs uppercase tracking-widest ${
-              filter === row.entity ? "text-gold" : "text-muted hover:text-gold"
+              filter === row.entity ? "text-accent" : "text-fg-muted hover:text-accent"
             }`}
           >
-            {row.entity} <span className="text-gold-dim">{row._count._all}</span>
+            {row.entity} <span className="text-accent-dim">{row._count._all}</span>
           </Link>
         ))}
       </div>
 
       {entries.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-line bg-panel/60 px-5 py-6 text-sm leading-relaxed text-muted">
+        <p className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-6 text-sm leading-relaxed text-fg-muted">
           {total === 0
             ? "Nothing has been changed yet, and that is the correct reading of an empty log rather than a broken page — 212 layouts and 212 mappings are loaded as inferred rows and none has been confirmed, so no decision has been taken that would need recording."
             : `Nothing has been logged against ${filter}. The other entities are in the filter above.`}
@@ -171,7 +171,7 @@ export default async function AuditPage({
       ) : (
         <table className="mt-6 w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-line font-mono text-[11px] uppercase tracking-widest text-gold-dim">
+            <tr className="border-b border-border font-mono text-[11px] uppercase tracking-widest text-accent-dim">
               <th className="py-2 pr-4 font-normal">When</th>
               <th className="py-2 pr-4 font-normal">What</th>
               <th className="py-2 pr-4 font-normal">Field</th>
@@ -181,22 +181,22 @@ export default async function AuditPage({
           </thead>
           <tbody>
             {entries.map((entry) => (
-              <tr key={entry.id} className="border-t border-line align-top">
-                <td className="whitespace-nowrap py-2 pr-4 font-mono text-[11px] text-gold-dim">
+              <tr key={entry.id} className="border-t border-border align-top">
+                <td className="whitespace-nowrap py-2 pr-4 font-mono text-[11px] text-accent-dim">
                   {TIMESTAMP.format(entry.createdAt)}
                 </td>
                 <td className="py-2 pr-4">
                   <span className={`font-mono text-[11px] uppercase ${actionClass(entry.action)}`}>
                     {entry.action}
                   </span>
-                  <span className="block text-xs text-white/80">{entry.entity}</span>
+                  <span className="block text-xs text-fg/80">{entry.entity}</span>
                   {entry.who !== null && (
-                    <span className="block font-mono text-[11px] text-gold-dim">{entry.who}</span>
+                    <span className="block font-mono text-[11px] text-accent-dim">{entry.who}</span>
                   )}
                 </td>
-                <td className="py-2 pr-4 font-mono text-[11px] text-muted">{entry.field ?? "—"}</td>
-                <td className="py-2 pr-4 text-xs text-muted break-all">{asText(entry.before)}</td>
-                <td className="py-2 text-xs text-white/80 break-all">
+                <td className="py-2 pr-4 font-mono text-[11px] text-fg-muted">{entry.field ?? "—"}</td>
+                <td className="py-2 pr-4 text-xs text-fg-muted break-all">{asText(entry.before)}</td>
+                <td className="py-2 text-xs text-fg/80 break-all">
                   {asText(entry.after)}
                   {/*
                     The note carries the owner's own words verbatim — §10.2 requires
@@ -206,7 +206,7 @@ export default async function AuditPage({
                     sentence the whole log exists to preserve.
                   */}
                   {entry.note !== null && entry.note !== "" && (
-                    <span className="mt-1 block text-[11px] leading-relaxed text-gold-dim">
+                    <span className="mt-1 block text-[11px] leading-relaxed text-accent-dim">
                       {entry.note}
                     </span>
                   )}
@@ -217,7 +217,7 @@ export default async function AuditPage({
         </table>
       )}
 
-      <p className="mt-6 text-xs leading-relaxed text-muted">
+      <p className="mt-6 text-xs leading-relaxed text-fg-muted">
         Capped at the most recent 200 rows, and the filter above narrows within that
         cap rather than past it. That is a display limit and not a retention one —
         nothing prunes this table, and the oldest entry is still the oldest entry.

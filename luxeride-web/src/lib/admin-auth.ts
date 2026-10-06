@@ -1,5 +1,7 @@
 import { scryptSync, timingSafeEqual } from "node:crypto";
 
+import { sessionFromRequest, verifySession } from "@/lib/admin-session";
+
 /**
  * Admin authentication, with exactly one operator (`fitment-engine` §7).
  *
@@ -22,15 +24,13 @@ import { scryptSync, timingSafeEqual } from "node:crypto";
  *   that an action "is reachable to anyone who can send the same POST" — so a
  *   button that only renders for an admin is a UI convenience, not a boundary.
  *
- * WHY BASIC AUTH RATHER THAN A LOGIN PAGE
+ * WHY THERE IS STILL A PASSWORD CHECK HERE WHEN THERE IS A LOGIN PAGE
  *
- * `jose`, `iron-session` and `server-only` are all verified not installed, and this
- * project has a standing zero-new-dependency rule. A signed-cookie session would
- * mean a login page, a session module, a data-access layer, a logout route and a
- * secret — roughly five times the surface — for one user. Basic Auth costs about
- * sixty lines and `node:crypto` is built in. The cost is real and worth naming: the
- * browser caches the credentials until it closes, and the prompt is a browser
- * dialog rather than a page.
+ * This module owns the *credential*: the scrypt comparison against the hash in
+ * the environment. `/admin/login` is only a form that uses it. The page did not
+ * replace the check, it called it — and Basic Auth stays accepted on every route
+ * as well, so `curl -u` remains a way to prove a route works and the console has
+ * a credential path with no session machinery in it.
  *
  * NO PASSWORD IS STORED HERE, AND NONE IS STORED IN THE REPOSITORY. The environment
  * holds a `scrypt` hash; `scripts/hash-admin-password.mjs` produces one.
@@ -148,12 +148,23 @@ export function parseBasicAuth(header: string | null): { user: string; password:
  * check the result — the mistake of writing `await requireAdmin()` and ignoring it
  * is impossible, and the mistake of not calling it at all is what the Proxy layer
  * is there to make harder.
+ *
+ * TWO CREDENTIALS, AND THE POINT OF THIS FUNCTION IS THAT IT CHECKS BOTH
+ *
+ * Since the console grew a login page it can be reached two ways: a signed
+ * session cookie or HTTP Basic Auth. Both are accepted, and the session is checked
+ * first because it is what a browser sends. This function is the *secure* check,
+ * so it must not care which one arrived — a Server Action that trusted the cookie
+ * alone would be safe only for as long as nobody learned to send Basic Auth, and a
+ * Server Action that trusted Basic Auth alone would reject the browser entirely.
  */
 export function requireAdmin(request: Request): void {
+  if (verifySession(sessionFromRequest(request))) return;
+
   const credentials = parseBasicAuth(request.headers.get("authorization"));
-  if (!credentials || !verifyAdminCredentials(credentials.user, credentials.password)) {
-    throw new Error("Forbidden: admin credentials required.");
-  }
+  if (credentials && verifyAdminCredentials(credentials.user, credentials.password)) return;
+
+  throw new Error("Forbidden: admin credentials required.");
 }
 
 /** True when both variables are present and the hash is well-formed — a config check, not an auth check. */
