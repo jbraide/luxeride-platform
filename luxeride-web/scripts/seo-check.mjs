@@ -56,13 +56,36 @@ if (descriptions.length === 0) {
   process.exit(1);
 }
 
-for (const { slug, description } of descriptions) {
+/**
+ * The description band, as ONE function.
+ *
+ * It was an inline `for` loop, and the database pass below needed the same rule — so
+ * it is a function rather than a second copy. Two copies of a character band is how
+ * one of them ends up at 120–160 and the other at 120–170.
+ *
+ * The `where` label is part of the message on purpose: "this slug's description is
+ * the wrong length" is a much slower thing to debug when the same slug fails once
+ * from the seed file and once from the live row.
+ */
+function checkDescription(slug, description, where) {
   const length = description.length;
   if (length < DESCRIPTION_MIN || length > DESCRIPTION_MAX) {
     failures.push(
-      `${slug}: seoDescription is ${length} characters, outside the ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} band`,
+      `${slug} (${where}): seoDescription is ${length} characters, outside the ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} band`,
     );
   }
+}
+
+function checkTitle(slug, title, where) {
+  if (title.length > 60) {
+    failures.push(
+      `${slug} (${where}): seoTitle is ${title.length} characters, over the 60-character ceiling and will be truncated in search results`,
+    );
+  }
+}
+
+for (const { slug, description } of descriptions) {
+  checkDescription(slug, description, "src/data/products.ts");
 }
 
 // ── Category metadata ───────────────────────────────────────────────────────
@@ -80,17 +103,8 @@ while ((match = categoryRe.exec(source)) !== null) {
 }
 
 for (const { slug, title, description } of categories) {
-  if (title.length > 60) {
-    failures.push(
-      `${slug}: seoTitle is ${title.length} characters, over the 60-character ceiling and will be truncated in search results`,
-    );
-  }
-  const length = description.length;
-  if (length < DESCRIPTION_MIN || length > DESCRIPTION_MAX) {
-    failures.push(
-      `${slug}: seoDescription is ${length} characters, outside the ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} band`,
-    );
-  }
+  checkTitle(slug, title, "src/data/products.ts");
+  checkDescription(slug, description, "src/data/products.ts");
 }
 
 // ── No fabricated ratings, anywhere in the structured-data path ──────────────
@@ -110,6 +124,63 @@ for (const file of seoFiles) {
   }
 }
 
+// ── The rows the site ACTUALLY serves ────────────────────────────────────────
+//
+// Added 2026-10-04, and it exists because the check above quietly stopped covering
+// the thing it was written to protect.
+//
+// `src/data/products.ts` was the catalogue the storefront rendered, so asserting its
+// descriptions asserted what visitors get. It is now the SEED: the shop reads the
+// `Product` and `Category` rows, and that file is only copied into them by
+// `prisma/seed.mts`. Asserting the seed asserts that the seed is well-formed, which is
+// necessary and not sufficient — a description edited in the database, or a category
+// created in `/admin/categories` with a title nobody has checked, sails straight
+// past every assertion above.
+//
+// So this reads the live rows and checks the same band against them.
+//
+// IT IS SKIPPED, NOT FAILED, WITHOUT A DATABASE. `npm run verify` runs on a fresh
+// clone and in CI where `DATABASE_URL` is absent and no migration has been applied;
+// failing there would mean the check can never be run in the place it is most
+// convenient. The skip says so on stdout rather than passing silently, because a
+// check that silently does nothing is worse than no check.
+
+let databaseChecked = false;
+if (process.env.DATABASE_URL) {
+  try {
+    const { PrismaClient } = await import("@prisma/client");
+    const prisma = new PrismaClient();
+    try {
+      const [products, categories] = await Promise.all([
+        prisma.product.findMany({ select: { slug: true, seoDescription: true } }),
+        prisma.category.findMany({ select: { slug: true, seoTitle: true, seoDescription: true } }),
+      ]);
+
+      // A row with no description is NOT a failure: `seoDescription` is nullable
+      // precisely so a product created in the admin can exist without one, and
+      // `pageMetadata` falls back to the site's own description. Asserting it would
+      // forbid the thing the nullable column was added to permit.
+      for (const row of products) {
+        if (row.seoDescription === null || row.seoDescription === "") continue;
+        checkDescription(row.slug, row.seoDescription, "database");
+      }
+      for (const row of categories) {
+        // Same reasoning: `seoTitle` and `seoDescription` fall back to the category's
+        // own name, which is always written.
+        if (row.seoTitle !== null) checkTitle(row.slug, row.seoTitle, "database");
+        if (row.seoDescription !== null) checkDescription(row.slug, row.seoDescription, "database");
+      }
+      databaseChecked = true;
+    } finally {
+      await prisma.$disconnect();
+    }
+  } catch (error) {
+    failures.push(
+      `database rows could not be read (${error.message}). Either the database is unreachable or the copy-columns migration has not been applied — run \`npm run db:deploy\`.`,
+    );
+  }
+}
+
 // ── Report ───────────────────────────────────────────────────────────────────
 
 if (failures.length > 0) {
@@ -119,5 +190,12 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `seo-check: ${descriptions.length} product descriptions within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} characters, ${categories.length} category titles within 60 and descriptions within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}; no aggregateRating in the structured-data path.`,
+  [
+    `seo-check: ${descriptions.length} product descriptions within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX} characters, ${categories.length} category titles within 60 and descriptions within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}; no aggregateRating in the structured-data path.`,
+    // Stated, not silently skipped: a reader of this line needs to know whether the
+    // rows the site actually serves were covered.
+    databaseChecked
+      ? "  Also checked the live Product and Category rows."
+      : "  SKIPPED the live database rows — no DATABASE_URL, so the served copy is not covered by this run.",
+  ].join("\n"),
 );

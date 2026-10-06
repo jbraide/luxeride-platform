@@ -6,9 +6,9 @@
  *
  * WHAT IT REFUSES, AND WHY THAT IS THE WHOLE POINT
  *
- * Two `confirmed` Layouts for the same make whose vehicle year ranges overlap.
- * That is the conflict the admin's grouping view exists to prevent: a year would
- * resolve to two different floor pans, and "which one fits?" stops having an
+ * Two `confirmed` Layouts for the same make AND MODEL whose vehicle year ranges
+ * overlap. That is the conflict the admin's range list exists to prevent: a year
+ * would resolve to two different floor pans, and "which one fits?" stops having an
  * answer. The grouping spec is blunt about it — *"if two selected vehicles
  * already sit on different live layouts, do not merge silently — raise it. This
  * is precisely how a bad fit ships to a customer."* The admin will guard it on
@@ -102,22 +102,41 @@ async function main() {
     }
   }
 
-  // ── Overlapping spans for the same make ─────────────────────────────────────
+  // ── Overlapping spans for the same make AND MODEL ───────────────────────────
+  //
+  // Grouped by make+model, not by make alone. A year resolves to one Vehicle, and
+  // a Vehicle is a make+model — so a Corolla and a Camry both covering 2009-2013
+  // are answers to two different questions, not a conflict. Grouping by make alone
+  // would fail a correct database the moment the owner confirmed two different
+  // models of one brand, which is the ordinary case, not the edge case.
   const unmeasurable = [];
-  const byMake = new Map();
+  const byModel = new Map();
   for (const layout of layouts) {
-    const list = byMake.get(layout.make.name) ?? [];
-    list.push(layout);
-    byMake.set(layout.make.name, list);
+    // A layout is one car (one model), but it can in principle map several; each
+    // model it touches gets its own comparison group.
+    const models = new Set(layout.mappings.map((m) => m.vehicle.model));
+    for (const model of models) {
+      const key = `${layout.make.name}::${model}`;
+      const list = byModel.get(key) ?? [];
+      list.push(layout);
+      byModel.set(key, list);
+    }
   }
 
-  for (const [makeName, group] of byMake) {
+  for (const [key, group] of byModel) {
     if (group.length < 2) continue;
+    const separator = key.indexOf("::");
+    const makeName = key.slice(0, separator);
+    const modelName = key.slice(separator + 2);
     const measured = [];
     for (const layout of group) {
-      const coverage = coverageOf(layout.mappings.map((m) => m.vehicle));
+      // Coverage from THIS model's ranges only, so one layout mapping two models
+      // does not borrow the other model's years.
+      const coverage = coverageOf(
+        layout.mappings.map((m) => m.vehicle).filter((vehicle) => vehicle.model === modelName),
+      );
       if (!coverage) {
-        unmeasurable.push(`${layout.internalCode} (${layout.make.name} ${layout.customerName})`);
+        unmeasurable.push(`${layout.internalCode} (${makeName} ${modelName})`);
         continue;
       }
       measured.push({ layout, coverage });
@@ -129,7 +148,7 @@ async function main() {
         const b = measured[j];
         if (!overlaps(a.coverage, b.coverage)) continue;
         failures.push(
-          `${makeName}: confirmed layouts ${a.layout.internalCode} ` +
+          `${makeName} ${modelName}: confirmed layouts ${a.layout.internalCode} ` +
             `(${a.coverage.from}–${a.coverage.to}) and ${b.layout.internalCode} ` +
             `(${b.coverage.from}–${b.coverage.to}) cover overlapping years. Split one, ` +
             `or narrow its span.`,
@@ -161,7 +180,7 @@ async function main() {
     return;
   }
 
-  console.log("  OK — no two confirmed layouts cover the same make and years.");
+  console.log("  OK — no two confirmed layouts cover the same make, model and years.");
 }
 
 main()

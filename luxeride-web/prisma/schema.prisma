@@ -71,8 +71,30 @@ model Category {
   name      String
   /// Present in `src/data/products.ts` but had no column and was never seeded.
   blurb     String?
+
+  // ─── Category page copy, moved across on 2026-10-04 ─────────────────────────
+  //
+  // The same reason as the `Product` copy columns: `/shop/<slug>` is a real route
+  // that renders its own metadata, and a category created in `/admin/categories`
+  // would otherwise have a heading and nothing else — including no `metadata`, which
+  // `generateMetadata` reads to decide what a crawler is told.
+  //
+  // Nullable on purpose. An unfilled one is dropped rather than filled with a
+  // placeholder, and `pageMetadata` falls back to the site's own description rather
+  // than emitting a category page that claims to be about something it is not.
+  /// ≤60 characters, asserted by `scripts/seo-check.mjs`.
+  seoTitle       String?
+  /// 120–160 characters, asserted by `scripts/seo-check.mjs`.
+  seoDescription String?
+  /// The one line under the category heading.
+  heroLine       String?
+
   createdAt DateTime  @default(now())
   products  Product[]
+  /// Promotions scoped to this category. `Cascade`, because a promotion cannot
+  /// outlive the thing it discounts — a price reduction on a category that no longer
+  /// exists is a discount nobody can see and nobody has to remember to switch off.
+  promotions Promotion[]
 }
 
 model Product {
@@ -92,14 +114,264 @@ model Product {
   /// The honesty sentence. No row here claims stock for a specific car.
   availability      String?
 
-  category       Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  // ─── PDP copy, moved out of `src/data/products.ts` on 2026-10-04 ─────────────
+  //
+  // WHY THESE ARE COLUMNS AND NOT STILL A TypeScript OBJECT
+  //
+  // The owner's decision was that the DATABASE is the catalogue authority, so that a
+  // product could be added in `/admin/products` and reach the shop. That promise is
+  // only half-kept while the words on the product page live in a source file: a new
+  // product would appear with a name, a price and no description, because the
+  // description had nowhere to be written down.
+  //
+  // All of it was already written and is being carried across verbatim by
+  // `range_prices_and_copyschema`'s backfill — this is a MOVE, not new copy. Every
+  // column is nullable because an unfilled one is a real state: the storefront
+  // renders "we're writing this up" rather than inventing a sentence, which is the
+  // same rule `src/app/policies/[slug]` already follows for the owner-input slots.
+  //
+  /// What the set is made of.
+  materials      String?
+  /// What the customer receives. A list, because it is a list on the page.
+  inBox          String[] @default([])
+  /// What the product covers on the car.
+  coverage       String?
+  /// How it goes on.
+  install        String?
+  /// How it is cleaned.
+  care           String?
+  /// Only questions whose answer is on record. `Json` rather than a table: it is
+  /// read and written whole and never queried.
+  faq            Json?
+  /// 120–160 characters, asserted by `scripts/seo-check.mjs`. Authored rather than
+  /// composed — see the note in `src/data/products.ts` for the measured reason.
+  seoDescription String?
+
+  /// Does this item need a floor pan, or is it the same whatever car it goes in?
+  ///
+  /// THE LINE THAT SEPARATES A MAT FROM A GEAR COVER, and the reason the
+  /// Fit Finder and the shop are different surfaces rather than one surface with
+  /// a missing field. True for mats, cargo liners and bundles — they are cut to a
+  /// specific floor pan, so a claim about one implies a claim about a car. False
+  /// for gear covers, mud flaps and sun shades: a lever cover does not vary by
+  /// model, so gating its sale on a fitment check would refuse a sale that is
+  /// perfectly well-defined.
+  ///
+  /// It is a flag rather than an inference because nothing in the data can
+  /// derive it, and getting it wrong in either direction is expensive: `true` on
+  /// a generic product hides it from everyone who does not own a confirmed car,
+  /// and `false` on a mat is the "we sell this for your car" claim the whole
+  /// fitment engine exists to prevent. `Owner decision`, set per product in
+  /// `/admin/products`.
+  isCarSpecific Boolean @default(true)
+
+  category       Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   orderItems     OrderItem[]
   layoutVariants LayoutVariant[]
+  variations     ProductVariation[]
+  promotions     Promotion[]
+
+  /// Present ONLY when this product is a set of other products. Absent means "this
+  /// is a single thing", which is the overwhelming majority of the catalogue, so the
+  /// relation is one-to-one and nullable rather than a flag on every row.
+  bundle Bundle?
+
+  /// Every bundle this product is a PART of. The other side of `BundleItem.productId`,
+  /// and the reason a bundle can be priced from its parts rather than restating them.
+  partOf BundleItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([categoryId])
+  @@index([isCarSpecific])
+}
+
+/// A product that is a SET of other products — "tie things together", then take a
+/// discount off the total.
+///
+/// WHY A BUNDLE IS STILL A `Product` AND NOT A THIRD KIND OF THING
+///
+/// A bundle needs a URL, a product page, a cart line, an `OrderItem`, a
+/// `LayoutVariant` and a place in `Layout`'s four offered products. Every one of those
+/// is already a `Product` reference, and a parallel "bundle" entity would mean a
+/// second version of all of them plus a cart that has to understand which kind of thing
+/// it is holding. So a bundle IS a product; what this table adds is the one fact a
+/// product could not previously state — what it is made of.
+///
+/// ── THE PROBLEM THIS SOLVES ─────────────────────────────────────────────────
+///
+/// `full-bundle` was one hand-priced product row: regular 110,000 / premium 135,000,
+/// with `note: "Double layer mats + seat covers"` in prose. That is a bundle with
+/// exactly one possible composition, so a customer who wanted single layer mats with
+/// covers — the same two ideas, a cheaper mat — had nothing to buy, and a customer who
+/// wanted mats plus a boot liner had nothing to buy either. "A bundle" here meant "this
+/// one bundle", which is the sense the word was never meant in.
+///
+/// It is also why the bundle could not tie into the mats. Its price was a literal, so
+/// moving the double layer mats from 68,000 to 75,000 left a bundle that claimed to
+/// contain them and priced as though it did not. A bundle that states its parts is
+/// priced FROM them, so the two cannot disagree.
+///
+/// ── WHY THE DISCOUNT LIVES HERE AND NOT ON `Promotion` ───────────────────────
+///
+/// `Promotion` is a time-boxed, scoped, customer-facing reduction: a Black Friday, a
+/// coupon, "20% off seat covers this week". A bundle's discount is not that — it is
+/// the reason the bundle exists. It is permanent, it belongs to the product, it is
+/// quoted from, and it travels into the WhatsApp message. A bundle that had to have a
+/// `Promotion` row created for it would be undiscounted the moment the promotion
+/// expired.
+model Bundle {
+  /// One bundle per product. `@id` rather than a separate surrogate key, because the
+  /// product IS the bundle's identity — there is no such thing as a bundle row that
+  /// exists without one.
+  productId String  @id
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// "percent" | "fixed". A percent is 15 for 15%; a fixed is 15_000 naira off.
+  /// Closed union, enforced in the Server Action because Prisma cannot express a CHECK.
+  discountKind String @default("percent")
+
+  /// 15 when `percent`, or 15_000 when `fixed`. Zero means "no discount", which is a
+  /// legitimate value: a bundle may exist for the convenience of one delivery rather
+  /// than for a discount.
+  discountValue Int @default(0)
+
+  /// Whether saving this bundle REWRITES the product's two prices from its parts.
+  ///
+  /// `true` (the default) is what makes the bundle a bundle rather than a bundle with
+  /// a number typed next to it: the price becomes
+  /// `Σ(parts × qty) − discount`, computed for each tier, and written onto
+  /// `Product.regular` / `Product.premium` so every existing reader — the card, the
+  /// PDP, the cart, the Fit Finder's fallback, the order-pricing path — sees the
+  /// derived figure without any of them learning that bundles exist.
+  ///
+  /// Writing the derived value back onto columns rather than computing it at every
+  /// read site is a deliberate trade. A bundle price is then readable by the same
+  /// `priceRange()` call as everything else, and there is exactly ONE place in the app
+  /// that knows how a bundle is priced (`deriveBundlePrices` in
+  /// `src/lib/bundle-price.ts`). The cost is that the stored number can be stale, so
+  /// the admin screen recomputes and shows the derivation on every save and says so
+  /// plainly if the stored price no longer matches what the parts imply.
+  ///
+  /// `false` turns the derivation off and the product's prices are whatever the owner
+  /// typed. The parts are still recorded, so the PDP can still say what is inside.
+  derivePricing Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items BundleItem[]
+}
+
+/// ONE PART OF A BUNDLE.
+///
+/// A row rather than a string list, because the thing that has to be summed is a
+/// PRICE and prices belong to variations: a bundle of "the beaded-edge double layer"
+/// must follow that variation's price, not its product's list price, or the sum is of
+/// a number nobody sells. `variationId` is nullable for the common case — the bundle
+/// wants whichever option the part has — and the resolution order is documented on
+/// `BundleItemPrice` below.
+model BundleItem {
+  id       String @id @default(uuid())
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [productId], onDelete: Cascade)
+
+  /// The part. `Restrict`, like `OrderItem.productId`: a mats product somebody has put
+  /// in a bundle cannot be deleted out from under that bundle. The admin refuses the
+  /// delete and names the bundles instead.
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  /// A SPECIFIC option of that product, or null for "whichever option it has". Null is
+  /// not a weaker record: a bundle of "Seat Covers" with no colourway named is correct
+  /// and is the common case.
+  variationId String?
+  variation   ProductVariation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
+
+  /// How many of this part. One for everything in this catalogue today; two for
+  /// "a spare set of covers".
+  qty Int @default(1)
+
+  /// Manual ordering on the PDP's "what's in the box" list and in the admin.
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One row per (bundle, part, option). `variationId` is part of the key rather than
+  /// left out, because "two different options of one product in one bundle" is a real
+  /// bundle and the two rows are genuinely different lines.
+  @@unique([bundleId, productId, variationId])
+  @@index([productId])
+}
+
+/// An option ON a product — the level the owner asked for when they said the
+/// other categories need "variation per item, similar to the floor mats".
+///
+/// WHY THIS IS NOT A COLUMN ON `Product`
+///
+/// Because the variation is the thing that carries a price. A gear cover that
+/// fits a 5-speed stick is not the same object, and not the same price, as the
+/// same cover for an automatic. Making that a column means a second price
+/// column, then a third when the second needs one, and the storefront has to
+/// branch on which columns are populated. As a row it has an identity, so
+/// `OrderItem` and `RangePrice` can point at it.
+///
+/// WHY IT SEEDED WITH EXACTLY ONE VARIATION PER PRODUCT
+///
+/// The seven products that existed before this table had no options — "Double
+/// Layer Mats" was one thing at one price. Rather than rewrite them into
+/// variations (which would change every URL, every `FitProductSlug` and every
+/// stored `LayoutVariant`), each gets one default variation and the existing
+/// price moves there. The behaviour is identical; the capability is new. A
+/// product with more than one variation is one the owner creates in
+/// `/admin/products/[id]`.
+model ProductVariation {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Unique within the product, and the value a URL or a form field carries.
+  slug String
+  /// "Double Layer Mats — Beaded edge". Shown to the customer.
+  name String
+
+  /// The two prices, exactly as on `Product`: `regular` for a regular-tier
+  /// brand, `premium` for a premium-tier one. Copied from the parent at seed
+  /// time so a one-variation product prices identically to how it did before.
+  regular           Int
+  premium           Int
+  rowApplicable     Boolean  @default(false)
+  threeRowSurcharge Int?
+
+  /// Optional operator-facing code. Never shown to a customer and never the
+  /// WhatsApp reference — that is `Layout.internalCode`.
+  sku String?
+
+  /// "in_stock" | "made_to_order" | "out_of_stock". See the note on
+  /// `LayoutVariant.stockState`: nothing in this repository establishes stock
+  /// for a specific car, so "made_to_order" is the only value that is a fact.
+  stockState String @default("made_to_order")
+
+  /// Manual ordering in `/admin/products/[id]` and on the shop. Ties are broken
+  /// by name, so the list is stable without the owner numbering every row.
+  sortOrder Int @default(0)
+
+  orderItems     OrderItem[]
+  layoutVariants LayoutVariant[]
+  /// A bundle may name one specific option of this variation as a part — "the
+  /// beaded-edge one" — so a variation can belong to a bundle without belonging to
+  /// the product's own sale.
+  bundleItems BundleItem[]
+  /// Photographs of THIS option, cut for one year range. See `ImageSet`.
+  imageSets ImageSet[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, slug])
+  @@index([sortOrder])
 }
 
 // ─── Cars ─────────────────────────────────────────────────────────────────────
@@ -139,6 +411,23 @@ model Vehicle {
   facelift   Boolean  @default(false)
   /// The 8 `POPULAR_CARS` pairs, for ordering the Fit Finder's default list.
   isPopular  Boolean  @default(false)
+
+  /// THE PER-YEAR SWITCH, and the row it lives on is a YEAR RANGE, not a car.
+  ///
+  /// "Deactivate a year without deleting it" — owner's requirement, 2026-10-05. A
+  /// `Vehicle` row IS a span (`2009–2013`, `2014–2020`), so this is the control that
+  /// says "we have that generation, not this one": the Toyota Corolla keeps selling for
+  /// 2014–2020 with its prices and its photographs, and simply stops answering for
+  /// 2003–2008 when the floor pan for it is sold out.
+  ///
+  /// Deactivating rather than deleting is deliberate and is why this is a boolean and
+  /// not a DELETE button: the range carries its `RangePrice` rows, its `ImageSet`
+  /// photographs and its mapping history. Deleting loses all of that and cannot bring
+  /// it back; a switch can be thrown back the moment stock returns.
+  ///
+  /// `default(true)` for the same reason as `Layout.active`: assume we can supply it,
+  /// and switch off what we cannot.
+  active Boolean @default(true)
   /// "recognised" | "mapped" | "excluded".
   status     String   @default("recognised")
 
@@ -148,6 +437,12 @@ model Vehicle {
   /// "which floor pan" and "how sure are we" are different facts and only the
   /// owner may raise the second one — see `Mapping`.
   mappings   Mapping[]
+  /// Photographs that belong to a specific year range of a car. A `Vehicle` is
+  /// the range, so the shots for a Corolla 2009–2013 do not appear on the
+  /// Corolla 2014–2020 range of the same car — see `ImageSet.vehicleId`.
+  images     ImageSet[]
+  /// What this YEAR RANGE costs, per offered variant. See `RangePrice`.
+  rangePrices RangePrice[]
 
   createdAt DateTime @default(now())
 
@@ -238,6 +533,17 @@ model OrderItem {
 
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  /// Which OPTION of that product was bought. Null on every line written before
+  /// `ProductVariation` existed, and null means "the product, unspecified
+  /// option" — which is exactly what those lines meant.
+  ///
+  /// `Restrict`, like `productId` above: a variation somebody has been sold must
+  /// not be deletable. `/admin/products/[id]` refuses the delete and names the
+  /// order count instead of letting the database do it, because a P2003 is not
+  /// something to show an operator.
+  variationId String?
+  variation   ProductVariation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
 
   /// Supersedes `carId`. Nullable: a car the catalogue recognises but the
   /// fitment engine has not mapped yet is still a legitimate line.
@@ -344,10 +650,34 @@ model Layout {
   makeId String
   make   Make   @relation(fields: [makeId], references: [id], onDelete: Restrict)
 
-  /// "draft" | "inferred" | "confirmed" | "retired". Only `confirmed` is visible
-  /// to `/fit-check`; `retired` is retained forever so an old WhatsApp ref still
-  /// resolves to something useful (`fitment-engine` §10.6).
+  /// "draft" | "inferred" | "confirmed" | "retired" — PROVENANCE, not permission.
+  ///
+  /// Until 2026-10-05 this was the gate: only `confirmed` was visible to
+  /// `/fit-check`, and every one of the 212 seeded cars sat at `inferred` and refused.
+  /// It is no longer the gate — `active` is. See below.
   status String @default("draft")
+
+  /// THE SELL SWITCH. One boolean, and the only thing that decides whether a car is
+  /// offered to a customer.
+  ///
+  /// WHY THIS REPLACED THE `status` GATE (owner's decision, 2026-10-05)
+  ///
+  /// "Assume all fitment is confirmed; I will manually deactivate the ones that are
+  /// not." Two hundred and twelve cars were sitting at `inferred` and therefore
+  /// REFUSING — so the shop could sell a Corolla and a Matrix and nothing else, and
+  /// every other enquiry became a demand-log row rather than a sale.
+  ///
+  /// Requiring a per-car promotion ceremony to make a car sellable does not make it
+  /// truer, it makes it less likely to be done at all. The owner supplies the floor
+  /// pans and knows the stock; the useful control is therefore a SWITCH they can flip
+  /// in one click, not a workflow they must complete per car.
+  ///
+  /// `default(true)` is the whole decision: every seeded car is offered from the moment
+  /// this migration lands, at the prices already on it, and the owner turns off the
+  /// ones they cannot honour. Turning one off is reversible and instantaneous; the
+  /// consequence of a wrong "on" is one refused-to-honour order, and the consequence of
+  /// a wrong "off" is a lost sale.
+  active Boolean @default(true)
 
   /// "physical-fitting" | "supplier-confirmation" | "oem-floor-pan" — the three
   /// things that count as evidence, and nothing else does. All three nullable
@@ -365,10 +695,34 @@ model Layout {
   confirmationNote String?
   confirmedOn      DateTime?
 
-  /// "2–3 days". Nullable rather than required because the honest pre-confirmation
-  /// answer is "To be confirmed", and a column that forces a value would push
-  /// somebody to type a number nobody has measured.
+  /// "2–3 days". NULLABLE, and the storefront falls back to `DEFAULT_LEAD_TIME` in
+  /// the copy register. It was required until 2026-10-04, which made 212 people-typeable
+  /// rows out of one constant: a lead time is how long WE take, not a property of a
+  /// car, so it is the same for all of them.
   leadTime  String?
+
+  /// How many rows of seats this car has: "2" | "3" | "mixed". Added 2026-10-04.
+  ///
+  /// WHY THIS IS A FACT ABOUT THE CAR AND NOT JUST A QUESTION TO THE CUSTOMER
+  ///
+  /// The Fit Finder has always asked "2 rows or 3 rows?" and charged a 3-row
+  /// surcharge on the answer. That is fine for a car that comes in both — a Toyota
+  /// Highlander really is sold as a 2-row and a 3-row, and nobody should guess. But a
+  /// GX 460 or a Santa Fe is only ever three rows, and asking a customer to tell us
+  /// something about their own car that we already know is one more way for the answer
+  /// to go in wrong.
+  ///
+  /// "mixed" is the honest default and is what every seeded row carries: it means
+  /// "ask", and it is the only value that is true before anybody has checked. Setting
+  /// "2" or "3" makes the Fit Finder skip the question entirely and apply the right
+  /// surcharge automatically.
+  ///
+  /// It lives on `Layout` and not on `Vehicle` because a "range" here is a year span,
+  /// not a trim: the 2018 and the 2023 GX 460 are both three rows, and splitting the
+  /// fact across ranges would be a second thing to keep in step for no gain. It is on
+  /// the LAYOUT rather than the make because a make can contain both — see the
+  /// Highlander.
+  seatRows String @default("mixed")
   /// "sedan" | "suv" | "wagon" | "hatch" | "van" | "pickup" | "unknown". Part of
   /// what a fitment claim means, so "unknown" is legitimate only pre-confirmation.
   bodyType  String?
@@ -396,8 +750,10 @@ model Layout {
   @@index([internalCode])
   /// The admin console's primary list: every layout for a make, live ones first.
   @@index([makeId, status])
-  /// The dashboard's headline count, and `/fit-check`'s single gate.
+  /// The dashboard's headline count.
   @@index([status])
+  /// `/fit-check`'s single gate, now `active` rather than `status`.
+  @@index([active])
 }
 
 /// What is actually sold for a floor pan, and at what price. `fitment-engine`
@@ -418,12 +774,30 @@ model LayoutVariant {
   /// sold against must not vanish.
   product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
+  /// Which OPTION of that product this floor pan is cut for. Null for every row
+  /// seeded before `ProductVariation` existed, and null means "the product's own
+  /// single default variation" — so the seven original products behave exactly
+  /// as they did. Set it to offer a specific variation of the same product (a
+  /// beaded-edge double layer as well as a plain one).
+  variationId String?
+  variation   ProductVariation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
+
   /// "single_layer" | "double_layer" | "boot_liner" | "full_set".
   kind String
 
-  /// Locked decision 3: the price attaches to the layout variant, not to the car
-  /// or the product. Authoritative the moment this row exists — which is why
-  /// `Make.defaultTier` is only ever the value a first variant is seeded FROM.
+  /// Locked decision 3, as amended by the owner's per-year decision: this is the
+  /// DEFAULT price — what a newly added year range starts from, and what the
+  /// admin price grid pre-fills — and nothing else.
+  ///
+  /// **It is NOT what a customer is quoted.** `checkFitLive` reads
+  /// `RangePrice.priceFrom` for the year range the visitor actually selected,
+  /// and never this column. That is the whole point of `RangePrice`: a Corolla
+  /// 2009–2013 and a Corolla 2020–2024 are different floor pans in reality and
+  /// may cost different amounts, and one price for both is the defect.
+  ///
+  /// It stays non-nullable because a floor pan with no default has no sensible
+  /// starting value for the form, and because dropping it would lose the only
+  /// price the seeded rows have.
   priceFrom     Int
   /// Null unless this same floor pan genuinely covers both row counts. A 7-seat
   /// Highlander does not share a 5-seat floor pan, so the surcharge is a fact about
@@ -435,6 +809,8 @@ model LayoutVariant {
   stockState    String @default("made_to_order")
 
   orderItems OrderItem[]
+  /// One price per YEAR RANGE this variant is offered on. See `RangePrice`.
+  rangePrices RangePrice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -442,8 +818,73 @@ model LayoutVariant {
   /// One row per (pan, product, kind). Option B keeps `kind` independent of
   /// `productId`, so the constraint stops at the pair rather than at the product
   /// alone — and it is what makes the seed's upsert idempotent.
+  ///
+  /// It deliberately does NOT include `variationId`: two variations of one
+  /// product are one offer as far as this floor pan is concerned, and the seed's
+  /// `ON CONFLICT (layoutId, productId, kind)` still matches.
   @@unique([layoutId, productId, kind])
   @@index([productId])
+}
+
+/// What ONE YEAR RANGE costs for ONE offered variant. `fitment-engine` §3.4 as
+/// amended: the price attaches to the pan AND the years, not to the pan alone.
+///
+/// WHY IT IS A SEPARATE TABLE AND NOT A COLUMN
+///
+/// Because a year range is a first-class thing in this schema — a `Vehicle` row
+/// is a range, not a car, and one car carries several of them (`2009–2013`,
+/// `2014–2020`) — so the price has to hang off the range the same way
+/// photography already does on `ImageSet.vehicleId`. Putting the years in a
+/// string on `LayoutVariant` would make "which years does this price apply to?"
+/// answerable only by parsing, which is how a 2014 Corolla ends up quoted the
+/// 2009 price.
+///
+/// THE RULE THIS ENFORCES
+///
+/// `checkFitLive` quotable set is exactly: the floor pan's `LayoutVariant`s that
+/// have a `RangePrice` for the `Vehicle` row the visitor's year resolved to. No
+/// range price, no quote. That is what makes "every car model range should also
+/// have a price" mechanical rather than a thing somebody has to remember — and
+/// it is why `/api/fit-check` refuses with `nothingToQuote` instead of falling
+/// back to the pan-level default.
+///
+/// A floor pan with one range is the degenerate case and still works: the single
+/// `RangePrice` simply restates `LayoutVariant.priceFrom`.
+model RangePrice {
+  id String @id @default(uuid())
+
+  /// The offer being priced. Cascade: if the floor pan stops offering this
+  /// product, its per-range prices have nothing left to price.
+  layoutVariantId String
+  layoutVariant   LayoutVariant @relation(fields: [layoutVariantId], references: [id], onDelete: Cascade)
+
+  /// The YEAR RANGE. `SetNull` is deliberate and is the one soft reference added
+  /// here: removing a range must not delete the record of what that range once
+  /// cost, and the `AuditEntry` for the removal is the surviving evidence. A
+  /// price with no range cannot be quoted — the lookup joins on `vehicleId` — so
+  /// a null row is inert rather than wrong.
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  /// Naira. Above zero is enforced in the Server Action, not here: Prisma cannot
+  /// express a CHECK, and a hand-written one would be dropped by the next
+  /// `migrate diff`.
+  priceFrom Int
+
+  /// Overrides `LayoutVariant.rowsSurcharge` for this range only, when a pan
+  /// covers both row counts at different prices. Null means "same as the pan".
+  rowsSurcharge Int?
+  /// Null means "same as `LayoutVariant.stockState`". Set it to refuse a single
+  /// range without retiring the whole offer.
+  stockState String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One price per (offer, year range). This is what makes "add a range" refuse
+  /// to save without a price for every offered variant.
+  @@unique([layoutVariantId, vehicleId])
+  @@index([vehicleId])
 }
 
 /// Joins a Vehicle — a name a customer types — onto the floor pan that covers it.
@@ -481,7 +922,14 @@ model Mapping {
   @@index([vehicleId])
 }
 
-/// Photography for one floor pan, one angle. `fitment-engine` §6.1 and §11.
+/// Photography for one YEAR RANGE of one floor pan, one angle. `fitment-engine`
+/// §6.1 and §11.
+///
+/// A photograph belongs to a range, not to a car, because a single car now carries
+/// several ranges — a Corolla is `2009–2013` and `2014–2020` on one page, and the
+/// footwell of the earlier car is not a photograph of the later one. The range is
+/// the `(layoutId, vehicleId)` pair: the vehicle is the year span, the layout is
+/// the car it is mapped onto.
 ///
 /// Separate from `Product.images: String[]`, which survives for `/shop` and the PDP.
 /// This is the fit-level axis: a generic product shot next to a per-car claim is
@@ -491,6 +939,38 @@ model ImageSet {
 
   layoutId String
   layout   Layout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  /// The year range this photograph belongs to. Required rather than optional:
+  /// there is no such thing as a photograph of a car in general, only of a range
+  /// of it, and a nullable column here would let a shot drift onto a range nobody
+  /// checked. Cascade, like `layout`, so removing the range removes its images.
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  /// WHICH OPTION OF THE PRODUCT THIS PHOTOGRAPH SHOWS. Added 2026-10-05.
+  ///
+  /// Owner's words: "each year range should have the option for pics for single and
+  /// double, not one or the other". That is a hard requirement on the model, and it
+  /// is why this column is REQUIRED rather than nullable.
+  ///
+  /// A single-layer set and a double-layer set cut for the same car are different
+  /// objects that look different \u2014 one is a mat, the other has a waterproof base
+  /// layer visible from the side. A gallery that showed the single-layer shot to a
+  /// customer who bought the double layer would be showing them evidence of
+  /// something they did not receive, on the one screen whose job is to prove the
+  /// claim is real.
+  ///
+  /// So a range carries one slot set PER OPTION, and a photograph always says which
+  /// option it belongs to. There is deliberately no "this photo is of the car in
+  /// general" slot: the general claim is made by the product page, which is where a
+  /// generic product shot belongs, and keeping the two axes apart is what stops a
+  /// generic shot from ever standing in for a fit claim.
+  ///
+  /// `Cascade`, unlike `LayoutVariant.variationId`'s `Restrict`: an option nobody
+  /// has sold may be deleted in `/admin/products`, and its photographs must not be
+  /// what prevents it. An option that HAS been sold is already blocked by
+  /// `OrderItem.variationId`, which is the reference that means something.
+  variationId String
+  variation   ProductVariation @relation(fields: [variationId], references: [id], onDelete: Cascade)
 
   /// "driver" | "passenger" | "rear" | "boot" | "detail" | "comparison".
   /// `comparison` is always optional; a missing photograph never suppresses a fit
@@ -503,9 +983,17 @@ model ImageSet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// One slot per angle per layout, which is what makes the image manager a form
-  /// rather than a list (`fitment-engine` §11.1).
-  @@unique([layoutId, angle])
+  /// One slot per angle per RANGE PER OPTION, which is what makes the image
+  /// manager a grid rather than a list (`fitment-engine` §11.1): every option of
+  /// every range gets its own slots, and two options of one range can each have a
+  /// `driver` shot.
+  ///
+  /// `variationId` IS part of the key, which is the whole point of adding it. On
+  /// (layout, range, angle) alone the second option could never be photographed —
+  /// the first one's row would already occupy the slot.
+  @@unique([layoutId, vehicleId, variationId, angle])
+  @@index([vehicleId])
+  @@index([variationId])
 }
 
 /// A car we specifically looked at and know we cannot fit. `fitment-engine` §2.12,
@@ -577,9 +1065,14 @@ model DemandLog {
   // First-party attribution. Mirrors `Order`'s reserved columns exactly and
   // deliberately defines no key of its own — `ad-landing-and-tracking` owns the
   // taxonomy, `fitment-engine` §13.3 — and omits `fbclid`/`gclid` because `Order`
-  // omits them too. Nullable and empty while the NDJSON writer still owns the
-  // refusal path: `src/lib/demand-log.ts` records none of these today (its §5.2
-  // deviation), so a column that claims otherwise would be a lie about the data.
+  // omits them too.
+  //
+  // STILL EMPTY, AND STILL DELIBERATELY SO. This table is now the refusal
+  // writer's own sink (`src/lib/demand-log.ts` inserts a row rather than
+  // appending NDJSON), but the writer records none of these fields, so they stay
+  // NULL until §13.3's attribution lands. Nullable and empty is the honest
+  // shape: a column that claimed a value this code never writes would be a lie
+  // about the data.
   utmSource   String?
   utmMedium   String?
   utmCampaign String?
@@ -635,4 +1128,131 @@ model AuditEntry {
 
   @@index([entity, entityId])
   @@index([createdAt])
+}
+
+// ─── Promotions and coupons ────────────────────────────────────────────────────
+//
+// Added 2026-10-04. Both are DISCOUNTS and nothing else: they change the price a
+// customer is charged, and every rule below exists to make that number impossible to
+// get wrong rather than merely possible to get right.
+//
+// TWO DECISIONS THE OWNER MADE, WHICH SHAPE EVERYTHING HERE
+//
+// 1. A discount comes off the CONFIRMED PER-YEAR PRICE (`RangePrice.priceFrom`), not
+//    off the catalogue list price. The per-year figure is the real number for a
+//    specific car; discounting the list price and then applying the per-year price
+//    would mean two numbers multiplied together, and the wrong one is the one that
+//    looks like a discount.
+//
+// 2. THEY NEVER STACK. The best applicable discount wins and the other is ignored.
+//    Stacking a 30% sale with a ₦5,000 coupon is a 41% discount on a ₦45,000 order,
+//    which nobody priced and nobody intended. One discount, applied once, to a price
+//    the server computed — and `Order` stores which one it was.
+
+/// A time-boxed price reduction, owned by the shop rather than by a customer.
+model Promotion {
+  id   String @id @default(uuid())
+  name String
+  /// Stable identifier; "black-friday" reads better in a URL than the display name.
+  slug String @unique
+
+  /// "percent" | "fixed". A percent is 20 for 20%; a fixed is 5000 naira off.
+  kind  String
+  value Int
+
+  /// "site" | "category" | "product". Exactly one of `categoryId` / `productId` is set
+  /// for the two narrow scopes, and both are null for "site". Checked in the Server
+  /// Action, because Prisma cannot express a CHECK.
+  scope      String    @default("site")
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  productId  String?
+  product    Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Null means "started already" and "never ends" respectively. A promotion with
+  /// neither is a permanent price reduction, which is a strange thing to create by
+  /// accident and therefore a thing the admin screen warns about.
+  startsAt DateTime?
+  endsAt   DateTime?
+  active   Boolean   @default(true)
+
+  /// ── Storefront copy ───────────────────────────────────────────────────────
+  /// Optional, and every field is optional: a promotion can exist purely as a number.
+  /// None of this is a CLAIM about a car — it says what the discount is, never what
+  /// the resulting price means for fitment, which is the fitment engine's business.
+  label       String?
+  headline    String?
+  description String?
+  /// The badge on a product card, e.g. "20% OFF".
+  badge         String?
+  /// A banner image this promotion owns. Absent means the homepage banner falls back
+  /// to `public/banners/hero.json`; present means the seasonal promotion carries its
+  /// own photograph. Named with a real URL or path rather than a `media` reference so
+  /// it is editable without redeploying media files.
+  image         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, startsAt, endsAt])
+  @@index([scope])
+}
+
+/// A code a customer types. Same arithmetic as `Promotion`, plus the rules that only a
+/// customer-held thing can have: a minimum spend, and a cap on how many times it may
+/// be used.
+model Coupon {
+  id   String @id @default(uuid())
+  /// Stored and compared UPPERCASE and trimmed, so "blackfriday" and "BLACKFRIDAY" are
+  /// one code. Normalised on the way in rather than with a SQL function, because a
+  /// `citext` column would need an extension and this does not.
+  code String @unique
+
+  /// "percent" | "fixed".
+  kind  String
+  value Int
+
+  /// Null means "no minimum".
+  minSubtotal Int?
+  /// Null means "unlimited".
+  maxRedemptions Int?
+  redemptions    Int @default(0)
+
+  startsAt DateTime?
+  endsAt   DateTime?
+  active   Boolean   @default(true)
+
+  /// A short description shown next to the input, e.g. "₦5,000 off a ₦100,000 order".
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, startsAt, endsAt])
+}
+
+// ─── Site settings ────────────────────────────────────────────────────────────
+
+/// One editorial decision about the storefront, as a row.
+///
+/// WHY A TABLE AND NOT A COOKIE (the owner caught this: "I didn't see the switcher for
+/// Fullwidth to Crop in the admin")
+///
+/// The hero layout was a COOKIE, which made the switcher useless for its actual
+/// purpose. A cookie is per-VISITOR: setting it from the admin would have changed the
+/// layout on the operator's own screen and on nobody else's, so the control would
+/// have looked like it worked and changed what customers see for no one.
+///
+/// Anything an operator sets has to be server-side state or it is not a control. This
+/// is a key/value table because there is exactly one row needed today and a second
+/// one (a seasonal headline override, a support number) is certain, and a table of
+/// `Setting { name }` rows grows without a migration.
+model SiteSetting {
+  /// "heroLayout" | "heroHeadline" | …
+  key   String @id
+  /// JSON, so a setting can hold a shape rather than only a word.
+  value Json
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }

@@ -114,6 +114,36 @@ async function check() {
   const knownSlugs = new Set(products.map((p) => p.slug));
   const problems = [];
 
+  // The DATABASE IS ALSO A SOURCE OF PRODUCT SLUGS, and since 2026-10-04 it is the
+  // AUTHORITY.
+  //
+  // `src/data/products.ts` is now the SEED; a product created in `/admin/products` has
+  // a `Product` row and no line in that file. Checking the manifest against the seed
+  // alone therefore rejected the photography of a product that demonstrably exists —
+  // `seat-covers-3d` failed this check on its first run, for no reason other than that
+  // nobody had edited a TypeScript array.
+  //
+  // So the slugs are unioned with the database's when one is reachable, and the
+  // compile-time file remains the fallback for a fresh clone and CI. The check's real
+  // subject is "does every image named actually exist", which is unaffected either way.
+  if (process.env.DATABASE_URL) {
+    try {
+      const { PrismaClient } = await import("@prisma/client");
+      const prisma = new PrismaClient();
+      try {
+        for (const row of await prisma.product.findMany({ select: { slug: true } })) {
+          knownSlugs.add(row.slug);
+        }
+      } finally {
+        await prisma.$disconnect();
+      }
+    } catch {
+      // No reachable database. The seed file's slugs are then the only ones checked,
+      // which is the pre-existing behaviour — a warning would fail the build on every
+      // fresh clone, and a build must not need a database to compile.
+    }
+  }
+
   let declared = 0;
   for (const product of products) {
     for (const src of product.images ?? []) {
@@ -129,7 +159,9 @@ async function check() {
   if (manifest) {
     for (const [slug, value] of Object.entries(manifest)) {
       if (!knownSlugs.has(slug)) {
-        problems.push(`manifest: "${slug}" is not a product slug in src/data/products.ts`);
+        problems.push(
+          `manifest: "${slug}" is not a product slug — it is in neither src/data/products.ts nor the database`,
+        );
         continue;
       }
       const images = Array.isArray(value?.images) ? value.images : [];

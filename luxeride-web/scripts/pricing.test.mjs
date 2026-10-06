@@ -43,9 +43,29 @@ import { lineKey, priceOrder, PREPAY_DISCOUNT } from "../src/lib/order-pricing.t
 import { validateOrderSubmission, validateZone } from "../src/lib/order-validation.ts";
 import { CROCKFORD_ALPHABET, isOrderRef, mintOrderRef } from "../src/lib/order-ref.ts";
 
-const DOUBLE_LAYER = "double-layer-mats";
+/**
+ * THE MATS PRODUCT, AND THE DOUBLE-LAYER OPTION OF IT.
+ *
+ * These were one slug (`double-layer-mats`) until 2026-10-05, when the layers stopped
+ * being products and became two OPTIONS of one Floor Mats product. The figures did not
+ * move with them — the option carries exactly the ₦68,000 / ₦82,000 / ₦12,000 the old
+ * product row held — so every assertion below still means what it meant, and each one
+ * now goes through `unitPriceFor`'s per-option path rather than reading the product's
+ * own numbers. That is a stronger test of the same claim, not a weaker one.
+ */
+const MATS = "floor-mats";
+const DOUBLE_LAYER = "double-layer";
 const PREMIUM_BRAND = "Lexus";
 const REGULAR_BRAND = "Toyota";
+
+/** The named option's own figures, read rather than listed, like the product's. */
+function option(productSlug, variationSlug) {
+  const product = getProductBySlug(productSlug);
+  assert.ok(product, `fixture: ${productSlug} is not in PRODUCTS`);
+  const found = product.variations?.find((v) => v.slug === variationSlug);
+  assert.ok(found, `fixture: ${variationSlug} is not an option of ${productSlug}`);
+  return found;
+}
 
 /**
  * A priced line, built from the real catalogue row rather than a literal, so a
@@ -57,6 +77,9 @@ function line({ productSlug, brand, rows = null, qty = 1, ...overrides }) {
   assert.ok(product, `fixture: ${productSlug} is not in PRODUCTS`);
   return {
     productSlug,
+    // Undefined for every product with one option, and null for the mats when the
+    // caller did not name a layer — which is the "unspecified option" case.
+    variationSlug: overrides.variationSlug,
     brand,
     model: overrides.model ?? `${brand} test model`,
     year: overrides.year ?? "2020",
@@ -67,6 +90,11 @@ function line({ productSlug, brand, rows = null, qty = 1, ...overrides }) {
     tier: BRANDS[brand].tier,
     product,
   };
+}
+
+/** A double-layer mats line. The shape most of these tests are actually about. */
+function matsLine(overrides = {}) {
+  return line({ productSlug: MATS, brand: REGULAR_BRAND, variationSlug: DOUBLE_LAYER, ...overrides });
 }
 
 const ZONE = { name: LOCATIONS[0].name, fee: LOCATIONS[0].fee, eta: LOCATIONS[0].eta };
@@ -83,7 +111,7 @@ test("a premium brand prices from the premium figure (defect D2)", () => {
   assert.equal(BRANDS[PREMIUM_BRAND].tier, "premium", "fixture: Lexus is a premium brand");
 
   const order = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: PREMIUM_BRAND, model: "GX 470" })],
+    lines: [matsLine({ brand: PREMIUM_BRAND, model: "GX 470" })],
     zone: ZONE,
     paymentMethod: "pod",
   });
@@ -101,7 +129,7 @@ test("a regular brand prices from the regular figure", () => {
   assert.equal(BRANDS[REGULAR_BRAND].tier, "regular", "fixture: Toyota is a regular brand");
 
   const order = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND, model: "Camry" })],
+    lines: [matsLine({ brand: REGULAR_BRAND, model: "Camry" })],
     zone: ZONE,
     paymentMethod: "pod",
   });
@@ -121,12 +149,15 @@ test("the tier split is a property of the brand, and 8 of the 33 brands are prem
 // ─── The three-row surcharge ───────────────────────────────────────────────────
 
 test("the surcharge applies when the product is row-applicable and three rows were chosen", () => {
-  const product = getProductBySlug(DOUBLE_LAYER);
+  // The OPTION's figures, not the product's: since 2026-10-05 the product row holds
+  // the single-layer figures as its fallback and each option carries its own, so
+  // asserting on the product here would be asserting the wrong number.
+  const product = option(MATS, DOUBLE_LAYER);
   assert.equal(product.rowApplicable, true);
   assert.equal(product.threeRowSurcharge, 12000);
 
   const order = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: PREMIUM_BRAND, model: "GX 470", rows: "3" })],
+    lines: [matsLine({ brand: PREMIUM_BRAND, model: "GX 470", rows: "3" })],
     zone: ZONE,
     paymentMethod: "pod",
   });
@@ -137,7 +168,7 @@ test("the surcharge applies when the product is row-applicable and three rows we
 
 test("the surcharge does NOT apply when two rows were chosen", () => {
   const order = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: PREMIUM_BRAND, model: "GX 470", rows: "2" })],
+    lines: [matsLine({ brand: PREMIUM_BRAND, model: "GX 470", rows: "2" })],
     zone: ZONE,
     paymentMethod: "pod",
   });
@@ -183,7 +214,13 @@ test("the surcharge does NOT apply to a product that is not row-applicable", () 
 });
 
 test("rows: null and rows: \"2\" are different lines", () => {
-  const base = { productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND, model: "Camry", year: "2020" };
+  const base = {
+    productSlug: MATS,
+    variationSlug: DOUBLE_LAYER,
+    brand: REGULAR_BRAND,
+    model: "Camry",
+    year: "2020",
+  };
   assert.notEqual(lineKey({ ...base, rows: null, qty: 1 }), lineKey({ ...base, rows: "2", qty: 1 }));
 
   // And the cart's own merge key ignores quantity: editing the count must not
@@ -194,11 +231,12 @@ test("rows: null and rows: \"2\" are different lines", () => {
 // ─── Client prices are ignored ─────────────────────────────────────────────────
 
 test("a forged unitPrice in the input is ignored", () => {
-  const product = getProductBySlug(DOUBLE_LAYER);
+  const product = getProductBySlug(MATS);
   const order = priced({
     lines: [
       {
-        productSlug: DOUBLE_LAYER,
+        productSlug: MATS,
+        variationSlug: DOUBLE_LAYER,
         brand: PREMIUM_BRAND,
         model: "GX 470",
         year: "2020",
@@ -225,7 +263,7 @@ test("a forged unitPrice in the input is ignored", () => {
 
 test("pay on delivery pays the zone fee and takes no discount", () => {
   const order = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND, model: "Camry" })],
+    lines: [matsLine({ brand: REGULAR_BRAND, model: "Camry" })],
     zone: ZONE,
     paymentMethod: "pod",
   });
@@ -237,7 +275,7 @@ test("pay on delivery pays the zone fee and takes no discount", () => {
 
 test("prepay takes the discount and shipping is free", () => {
   const order = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND, model: "Camry" })],
+    lines: [matsLine({ brand: REGULAR_BRAND, model: "Camry" })],
     zone: ZONE,
     paymentMethod: "prepay",
   });
@@ -252,7 +290,7 @@ test("the four money columns always reconcile", () => {
   for (const paymentMethod of ["pod", "prepay"]) {
     const order = priced({
       lines: [
-        line({ productSlug: DOUBLE_LAYER, brand: PREMIUM_BRAND, model: "GX 470", rows: "3" }),
+        matsLine({ brand: PREMIUM_BRAND, model: "GX 470", rows: "3" }),
         line({ productSlug: "cargo-liner", brand: REGULAR_BRAND, model: "Hilux", qty: 2 }),
       ],
       zone: LOCATIONS[3],
@@ -267,12 +305,12 @@ test("the four money columns always reconcile", () => {
 
 test("quantity multiplies the line and the subtotal", () => {
   const one = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND, qty: 1 })],
+    lines: [matsLine({ qty: 1 })],
     zone: ZONE,
     paymentMethod: "pod",
   });
   const three = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND, qty: 3 })],
+    lines: [matsLine({ qty: 3 })],
     zone: ZONE,
     paymentMethod: "pod",
   });
@@ -282,14 +320,14 @@ test("quantity multiplies the line and the subtotal", () => {
 });
 
 test("a premium-brand order prices differently to the same product for a regular brand", () => {
-  const product = getProductBySlug(DOUBLE_LAYER);
+  const product = option(MATS, DOUBLE_LAYER);
   const premium = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: PREMIUM_BRAND })],
+    lines: [matsLine({ brand: PREMIUM_BRAND })],
     zone: ZONE,
     paymentMethod: "pod",
   });
   const regular = priced({
-    lines: [line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND })],
+    lines: [matsLine({ brand: REGULAR_BRAND })],
     zone: ZONE,
     paymentMethod: "pod",
   });
@@ -303,8 +341,8 @@ test("a premium-brand order prices differently to the same product for a regular
 test("a product with no price row rejects the whole order rather than defaulting", () => {
   const result = priceOrder({
     lines: [
-      line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND }),
-      { ...line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND }), product: null },
+      matsLine(),
+      { ...matsLine(), product: null },
     ],
     zone: ZONE,
     paymentMethod: "pod",
@@ -316,8 +354,8 @@ test("a product with no price row rejects the whole order rather than defaulting
 test("a non-integer price is refused, never rounded", () => {
   const result = priceOrder({
     lines: [
-      { ...line({ productSlug: DOUBLE_LAYER, brand: REGULAR_BRAND }), product: {
-        ...getProductBySlug(DOUBLE_LAYER),
+      { ...matsLine(), product: {
+        ...getProductBySlug(MATS),
         regular: 68000.5,
       } },
     ],
@@ -345,7 +383,8 @@ function submission(overrides = {}) {
     paymentMethod: "pod",
     lines: [
       {
-        productSlug: DOUBLE_LAYER,
+        productSlug: MATS,
+        variationSlug: DOUBLE_LAYER,
         brand: PREMIUM_BRAND,
         model: "GX 470",
         year: "2020",
@@ -558,11 +597,79 @@ function firstRefWithAmbiguous() {
   return "LR-O12345678I";
 }
 
+// ─── The option decides the price, not the product ─────────────────────────────
+
+/*
+ * THE 2026-10-05 REGRESSION THIS FILE EXISTS TO PREVENT, in the shape the change
+ * actually took.
+ *
+ * Before it, a layer WAS a product and the product row carried the layer's price, so
+ * there was no way to be wrong. Now one product carries two layers at two prices and
+ * the product row holds only the single-layer figure as its fallback quote — so a
+ * double-layer order priced from the PRODUCT is a live way to quote ₦45,000 for a
+ * ₦68,000 thing, and it fails silently rather than loudly.
+ */
+test("a named option is priced from the OPTION, not from the product's floor", () => {
+  const product = getProductBySlug(MATS);
+  assert.equal(product.regular, 45000, "the product's own figure is the single-layer one");
+
+  const double = priced({
+    lines: [matsLine({ brand: REGULAR_BRAND, model: "Camry" })],
+    zone: ZONE,
+    paymentMethod: "pod",
+  });
+  assert.equal(double.lines[0].unitPrice, 68000, "the double layer prices at the double layer");
+
+  const single = priced({
+    lines: [line({ productSlug: MATS, variationSlug: "single-layer", brand: REGULAR_BRAND })],
+    zone: ZONE,
+    paymentMethod: "pod",
+  });
+  assert.equal(single.lines[0].unitPrice, 45000);
+
+  // And no option named at all falls back to the product — which is what every
+  // single-option product does on every other line in this file.
+  const unnamed = priced({
+    lines: [line({ productSlug: MATS, brand: REGULAR_BRAND })],
+    zone: ZONE,
+    paymentMethod: "pod",
+  });
+  assert.equal(unnamed.lines[0].unitPrice, 45000);
+});
+
+test("the two layers of one car are two LINES, not one merged line", () => {
+  // `lineKey` includes the option, and this is why: without it a customer adding both
+  // layers for the same car would watch the second add merge into the first and halve
+  // their order.
+  const base = { productSlug: MATS, brand: REGULAR_BRAND, model: "Camry", year: "2020", rows: null };
+  assert.notEqual(
+    lineKey({ ...base, variationSlug: "single-layer", qty: 1 }),
+    lineKey({ ...base, variationSlug: "double-layer", qty: 1 }),
+  );
+  // And a line with no option is its own thing too, rather than folding into either.
+  assert.notEqual(lineKey({ ...base, qty: 1 }), lineKey({ ...base, variationSlug: "single-layer", qty: 1 }));
+});
+
+test("the priced line carries the option so the write path can record it", () => {
+  const order = priced({
+    lines: [matsLine({ brand: REGULAR_BRAND, model: "Camry" })],
+    zone: ZONE,
+    paymentMethod: "pod",
+  });
+  assert.equal(order.lines[0].variationSlug, DOUBLE_LAYER);
+});
+
 // ─── The catalogue the fixtures read ────────────────────────────────────────────
 
 test("the fixtures read the real catalogue, not a copy of it", () => {
   assert.ok(PRODUCTS.length >= 7);
-  assert.equal(getProductBySlug(DOUBLE_LAYER).regular, 68000);
-  assert.equal(getProductBySlug(DOUBLE_LAYER).premium, 82000);
+  // The double-layer figures live on the OPTION now. They are asserted here because
+  // every money assertion above is written against them: if an edit moved them, those
+  // tests would all fail at once and this is the one that says which value moved.
+  assert.equal(option(MATS, DOUBLE_LAYER).regular, 68000);
+  assert.equal(option(MATS, DOUBLE_LAYER).premium, 82000);
+  // And the product itself keeps the single-layer figures as its fallback quote.
+  assert.equal(option(MATS, "single-layer").regular, 45000);
+  assert.equal(getProductBySlug(MATS).regular, 45000);
   assert.equal(LOCATIONS.length, 4);
 });
