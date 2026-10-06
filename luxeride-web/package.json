@@ -12,7 +12,7 @@
     "media": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/media.mjs",
     "seo:check": "node scripts/seo-check.mjs",
     "check:placeholders": "node scripts/check-placeholders.mjs",
-    "verify": "tsc --noEmit && eslint . && npm run media:check && npm run seo:check && next build",
+    "verify": "tsc --noEmit && eslint . && npm run media:check && npm run contrast:check && npm run seo:check && next build",
     "check:hydration": "node scripts/hydration-check.mjs",
     "postinstall": "prisma generate",
     "db:seed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local prisma/seed.mts",
@@ -25,7 +25,8 @@
     "db:deploy": "node --env-file=.env.local scripts/prisma.mjs migrate deploy",
     "db:status": "node --env-file=.env.local scripts/prisma.mjs migrate status",
     "db:studio": "node --env-file=.env.local scripts/prisma.mjs studio",
-    "db:validate": "node --env-file=.env.local scripts/prisma.mjs validate"
+    "db:validate": "node --env-file=.env.local scripts/prisma.mjs validate",
+    "contrast:check": "node scripts/contrast-check.mjs"
   },
   "prisma": {
     "seed": "node prisma/seed.mts"

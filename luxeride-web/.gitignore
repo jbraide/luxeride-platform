@@ -42,3 +42,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local database dumps
+#
+# `scripts/db-backup.sh` writes outside the repo by default (LUXERIDE_BACKUP_DIR,
+# $HOME/luxeride-backups). The workspace-write sandbox here cannot write there, so the
+# backup was taken into the repo instead — and a pg dump must never be committable.
+.db-backups/

@@ -4,6 +4,32 @@ import { CATEGORIES } from "./src/data/products";
 
 const nextConfig: NextConfig = {
   async redirects() {
+    /*
+     * THE TWO MATS PAGES THAT STOPPED EXISTING, 2026-10-05.
+     *
+     * `single-layer-mats` and `double-layer-mats` were products; the layers are now
+     * OPTIONS of one Floor Mats product, so those two URLs name nothing and would 404.
+     * They are the most-linked URLs this site has ever had — ads, WhatsApp threads and
+     * bookmarks all carry them — so each is 307ed to the product page with the layer
+     * named in `?variation=`, which is how the PDP expresses a chosen option.
+     *
+     * NOT 308, for the same reason the category redirects are not: a 308 is cached
+     * indefinitely, so a decision that turns out to be wrong cannot be corrected for
+     * anyone who already followed it. A 307 is re-evaluated on every request.
+     *
+     * Written out here rather than derived from the catalogue on purpose: the whole
+     * point is that these slugs are NOT in the catalogue, so anything computed from it
+     * would produce nothing.
+     */
+    const mergedProductRedirects = [
+      { from: "single-layer-mats", to: "single-layer" },
+      { from: "double-layer-mats", to: "double-layer" },
+    ].map(({ from, to }) => ({
+      source: `/products/${from}`,
+      destination: `/products/floor-mats?variation=${to}`,
+      permanent: false,
+    }));
+
     // Categories were query filters (`/shop?category=floor-mats`); they are real
     // paths now (storefront-catalog §6). Any ad, bookmark or shared link still
     // carrying the old form is redirected rather than 404ing.
@@ -15,7 +41,7 @@ const nextConfig: NextConfig = {
     // URL that no longer exists, with no way for the site to correct it. The
     // search-engine argument for 308 does not outweigh a mistake that cannot be
     // undone. Verified: 307 to `/shop/<slug>`.
-    return CATEGORIES.map((category) => ({
+    const categoryRedirects = CATEGORIES.map((category) => ({
       // A query string cannot go in `source` — Next rejects it as an invalid
       // route source, which the first attempt discovered the hard way. The
       // `has` matcher is how a query is matched.
@@ -24,6 +50,8 @@ const nextConfig: NextConfig = {
       destination: `/shop/${category.slug}`,
       permanent: false,
     }));
+
+    return [...mergedProductRedirects, ...categoryRedirects];
   },
 
   async headers() {
@@ -57,6 +85,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  allowedDevOrigins: ["192.168.1.4"],
 
   images: {
     // Default is ['image/webp']. Leave it. Turning AVIF on is roughly 50%
