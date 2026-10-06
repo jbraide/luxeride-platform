@@ -1,0 +1,31 @@
+# Cloudflare Pages deployment config for luxeride-web.
+# This file is committed; secrets must be set via the Cloudflare dashboard
+# or `wrangler secret put` — never added to version control.
+#
+# Build adapter: `@cloudflare/next-on-pages` is the standard Next.js adapter
+# for Cloudflare Pages. Install it with:
+#   npm install --save-dev @cloudflare/next-on-pages
+# Then use the build command below or run `npx @cloudflare/next-on-pages`.
+#
+# Database: `.env` carries a placeholder DATABASE_URL (`<host>` / `<password>`);
+# the real hosted instance (master-build-plan M10.3) must be set in the dashboard
+# or via `wrangler secret put DATABASE_URL` before live traffic.
+#
+# D-05 domain is hard-coded in `.env` (`https://luxerideautos.com.ng`); it must
+# match the custom domain configured in the Cloudflare Pages dashboard.
+
+name = "luxeride-web"
+compatibility_date = "2026-01-01"
+pages_build_output_dir = ".vercel/output/static"
+
+[build]
+command = "npm run build"
+destination_dir = ".vercel/output/static"
+
+[env.production.vars]
+NEXT_PUBLIC_SITE_URL = "https://luxerideautos.com.ng"
+NODE_ENV = "production"
+
+# Note: DATABASE_URL, ADMIN_SESSION_SECRET, ADMIN_USER, ADMIN_PASSWORD_HASH
+# are omitted from this file intentionally — they must be injected as secrets
+# or via the dashboard environment variables, not committed.

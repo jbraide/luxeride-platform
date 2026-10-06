@@ -1,3 +1,6 @@
+// Cloudflare Pages deployment note (progressive deploy prep):
+// The `@cloudflare/next-on-pages` adapter supports this config's redirects,
+// headers and images settings. No structural changes are needed for Pages.
 import type { NextConfig } from "next";
 
 import { CATEGORIES } from "./src/data/products";
