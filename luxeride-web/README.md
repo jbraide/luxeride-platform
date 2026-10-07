@@ -336,6 +336,34 @@ Before the first deploy:
    product photography. If Cloudflare Images is not enabled on the account, either enable it or set
    `images: { unoptimized: true }` in `next.config.ts` — otherwise image requests fail at runtime.
 
+### If you deploy from Git (Cloudflare Workers Builds)
+
+Workers Builds runs a **build command** and then a **deploy command**, both from the repo root by
+default. This app lives in `luxeride-web/`, so at the repo root there is no `package.json` and no
+`wrangler.jsonc` — `npx wrangler deploy` finds no config and fails with
+"Could not detect a directory containing static files". In the Worker's **Settings → Build**, set:
+
+| Setting | Value |
+|---|---|
+| Root directory | `luxeride-web` |
+| Build command | `npx opennextjs-cloudflare build` |
+| Deploy command | `npx wrangler deploy` |
+| Git branch | `master` |
+
+`npx opennextjs-cloudflare build` runs `npm run build` and then the OpenNext transform, producing
+`.open-next/worker.js` — the file `wrangler deploy` uploads. **`npm run build` alone is not enough:**
+it stops at `next build` and never creates `.open-next/`. (Workers Builds does not read build config
+from `wrangler.jsonc`, so this must be set in the dashboard.)
+
+**The build needs the database.** The root layout reads the catalogue, so the prerendered routes
+(`/cart`, `/checkout`, `/contact`, `/policies/*`) query Postgres at build time. Add `DATABASE_URL`
+under **Build → Build variables and secrets** as well as at runtime, or the build fails on `P1001` /
+`P2037`.
+
+**`wrangler.jsonc` declares required secrets.** The deploy step refuses to run until `DATABASE_URL`,
+`ADMIN_SESSION_SECRET`, `ADMIN_USER` and `ADMIN_PASSWORD_HASH` exist on the Worker
+(**Settings → Variables & Secrets**).
+
 `@opennextjs/cloudflare` is pinned to `1.20.5` on purpose: `next` is pinned to `16.3.5`, and OpenNext
 `1.20.6+` requires `next >= 16.3.8`. To follow OpenNext upwards, bump `next` first.
 
