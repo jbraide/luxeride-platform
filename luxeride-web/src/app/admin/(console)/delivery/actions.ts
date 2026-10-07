@@ -1,9 +1,18 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { LOCATIONS } from "@/data/locations";
 import { requireAdmin } from "@/lib/admin-auth";
+
+/**
+ * A syntactically valid absolute URL used only to satisfy `requireAdmin`'s
+ * signature — a Server Action has no `Request` of its own, so the incoming
+ * headers are wrapped in one. The same constant (and the same reasoning) as
+ * `../actions.ts`; no Request built from it is ever sent anywhere.
+ */
+const ACTION_REQUEST_URL = "https://admin.invalid/";
 
 /** Reads one text field (`fitment-engine` §8.9: same shape as `actions.ts` line 83-86). */
 function text(formData: FormData, name: string): string {
@@ -21,17 +30,17 @@ function text(formData: FormData, name: string): string {
  * rule holds (`storefront-catalog` §5.5 / M4.7).
  */
 export async function updateDeliveryZone(formData: FormData): Promise<never> {
-  await requireAdmin();
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
 
-  const slug = text(formData, "slug");
+  const zoneName = text(formData, "name");
   const feeText = text(formData, "fee");
   const etaText = text(formData, "etaText");
 
-  const zone = LOCATIONS.find((l) => l.slug === slug);
+  const zone = LOCATIONS.find((l) => l.name === zoneName);
   if (!zone) {
     const params = new URLSearchParams();
     params.set("e", "deliveryZoneNotFound");
-    params.set("slug", slug);
+    params.set("zone", zoneName);
     redirect(`/admin/delivery?${params.toString()}`);
   }
 
@@ -39,7 +48,7 @@ export async function updateDeliveryZone(formData: FormData): Promise<never> {
   if (!Number.isFinite(fee) || fee < 0) {
     const params = new URLSearchParams();
     params.set("e", "deliveryZoneInvalidFee");
-    params.set("slug", slug);
+    params.set("zone", zoneName);
     redirect(`/admin/delivery?${params.toString()}`);
   }
 

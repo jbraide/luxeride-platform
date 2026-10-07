@@ -47,10 +47,14 @@ explicit "environment failure, not a passing check" message rather than reportin
 read the `probe` block: `href` must be the route you asked for and `textLen` must be non-trivial. `npm run build` on its own also runs `media:check` first, so a missing product image fails the
 production build rather than shipping an empty slot to paid traffic.
 
-> **No database is required to run or build the app yet.** `npm run build` never touches Postgres, and
-> nothing renders from it. `src/lib/db.ts` exists and guards the connection string, but only
-> `prisma/seed.mts` opens a connection, and `prisma/schema.prisma` has never been migrated — see
-> `../.kiro/specs/commerce-backend/tasks.md` §2.
+> **The database is not optional any more.** The storefront catalogue (`/`, `/shop`, `/products/[slug]`,
+> the sitemap) is read from Postgres through `src/lib/catalogue.ts`, as are the order lookup, the
+> Fit Finder's year ranges and fit checks, and every `/admin` screen. `src/lib/db.ts` throws, on the
+> first query of a request, if the connection string is missing or still the placeholder in `.env`.
+> That is deliberate
+> (`commerce-backend` §2.4): a page that cannot reach the database should fail at the door rather than
+> render an empty catalogue as though it were real, which is also why `src/lib/catalogue.ts` has no
+> fallback to the compile-time `PRODUCTS` array.
 
 ## Environment
 
@@ -61,30 +65,71 @@ Two files, and the difference matters:
 - **`.env.local`** is **never committed** and holds the real `DATABASE_URL`. Load order is
   `.env.$(NODE_ENV).local` → `.env.local` → `.env.$(NODE_ENV)` → `.env`, so `.env.local` wins.
 
-`src/lib/db.ts` throws at first import if `DATABASE_URL` is missing or still the placeholder from
-`.env`. That is deliberate (`commerce-backend` §2.4): a build that cannot reach a database should fail
-at the door rather than surface later as an empty product list or an order that silently did not save.
+`src/lib/db.ts` throws when it builds a client — the first query of a request — if the connection string
+is missing or still the placeholder from `.env`. That is deliberate (`commerce-backend` §2.4): a request
+that cannot reach a database should fail loudly rather than surface as an empty product list or an order
+that silently did not save. It is no longer checked at module load: on Cloudflare Workers the connection
+string does not exist until a request supplies its bindings.
 
-## The database, and the entire backup story
+## The database: hosted on Aiven, and the entire backup story
+
+The live database is a hosted **PostgreSQL 18.6** instance on Aiven. `.env.local` holds a URL of this
+shape:
+
+```
+postgres://avnadmin:<password>@<project>.aivencloud.com:15674/defaultdb?sslmode=require&connect_timeout=30
+```
+
+Two parts of that string are load-bearing, and both are the kind of thing a tidy-up removes:
+
+- **`sslmode=require`** — Aiven refuses an unencrypted connection.
+- **`connect_timeout=30`** — measured, not decoration. Prisma resolves hostnames with its own Rust
+  resolver rather than the system one, and this workstation runs the `127.0.0.53` systemd-resolved
+  stub. Against the hosted instance that produced `P1001 Can't reach database server` on roughly
+  **10 of every 16** new connections, while `psql` was 16/16 and raw TCP and TLS were 20/20 and 12/12 —
+  so it read as a server outage and never was one. With the timeout set it was 16/16 on the same test,
+  and 20/20 fresh `PrismaClient`s. If connections start failing intermittently again, look here first.
+
+### The local cluster is the rollback, not the source of truth
+
+The PostgreSQL 16 cluster that used to be the database is still on this workstation holding the same
+rows — the move was verified table by table, by per-table content hash rather than row counts — and its
+connection string is preserved in `.env.local.bak` (`postgresql://luxeride:<password>@localhost:5432/luxeride`).
+Nothing points at it now. If the hosted instance has to be abandoned, put that URL back into
+`.env.local` and the local cluster is the database again. Keep it until the hosted instance has been
+backed up and restored at least once. Recreating it from nothing is the two commands this section used
+to open with:
 
 ```bash
 sudo -u postgres psql -c "CREATE ROLE luxeride LOGIN PASSWORD '<yours>';"
 sudo -u postgres createdb -O luxeride luxeride
 ```
 
-Then `.env.local` holds `DATABASE_URL="postgresql://luxeride:<yours>@localhost:5432/luxeride"` —
+### Migrations: author against the local cluster, deploy to the hosted instance
 
-### Migrations on this machine
+`npm run db:migrate` runs `prisma migrate dev`, and **`migrate dev` is not run against the hosted
+instance**. Not because it cannot connect — it needs a *shadow database*, and whether it may create
+one is a privilege question that has already been answered on both sides (`avnadmin` on Aiven, and
+`luxeride` locally, each created and dropped scratch databases during the backup drills). It is not run
+because `migrate dev` is the command that can decide a database is out of date and offer to reset it,
+and the real data exists in exactly one place. So the split is:
 
-`npm run db:migrate` runs `prisma migrate dev`, **and that cannot work here**: Prisma needs to create a
-shadow database, and the `luxeride` role has no `CREATEDB` privilege, so it fails with
-`P3014: permission denied to create database`. Either grant it —
+```bash
+npm run db:migrate   # author the migration — LOCAL cluster, shadow database welcome
+npm run db:deploy    # prisma migrate deploy — applies what is in prisma/migrations to Aiven
+npm run db:status    # the migration HISTORY
+npm run db:check     # the SCHEMA, which status cannot see
+```
+
+`migrate deploy` needs no shadow database, so the hosted role never has to create one. If the local
+role is missing `CREATEDB` (`P3014: permission denied to create database`), grant it:
 
 ```bash
 sudo -u postgres psql -c "ALTER ROLE luxeride CREATEDB;"
 ```
 
-— or use the shadow-free path, which is what the first three migrations were written with:
+**Otherwise use the shadow-free path**, which is what the first three migrations were written with —
+generate the SQL, execute it, then record it as applied:
 
 ```bash
 TS=$(date +%Y%m%d%H%M%S); NAME=add_something
@@ -103,37 +148,72 @@ like success. That happened here: migration 2 was recorded as finished while fou
 and nothing reported it. `db:check` now diffs the live database against `prisma/schema.prisma` and fails
 on any disagreement, which is the assertion `migrate status` cannot make.
 
-**`prisma migrate deploy` (not `migrate dev`) is what runs against production** — `db:deploy`. It needs
-no shadow database, so the CREATEDB problem does not affect a deploy.
-**and it already does**, with a generated password. Run the `ALTER ROLE` above with that same password
-(or put yours in `.env.local` instead), then confirm the whole thing in one command:
+**`prisma migrate deploy` (not `migrate dev`) is what runs against the hosted instance** — `db:deploy`.
+Confirm the result in one command:
 
 ```bash
 npm run db:check
 ```
 
-That is E4's exit gate: it reads the URL out of `.env.local`, refuses the placeholder, runs
-`select 1`, and reports the role, the database, the server version and how many tables exist. It is
-also the command that tells you which half you forgot when you rotate the password — `.env.local` or
-Postgres. The connection string is never printed on any path, including the failures.
+It reads the URL out of `.env.local`, refuses the placeholder, runs `select 1` against whatever that URL
+names, and reports the role, the database, the server version and how many tables exist — against Aiven
+that reads `avnadmin`, `defaultdb`, `18.6` and 22. It then diffs the live database against
+`prisma/schema.prisma` and fails on any disagreement. It is also the command that tells you which half
+you forgot when you rotate the password — `.env.local` or the server. The connection string is never
+printed on any path, including the failures.
 
-**A local Postgres cluster ships no managed backups, and there is no history for the data the way there
-is for the code.** That leaves exactly one recovery path:
+**A hosted instance is not a backup, and there is no history for the data the way there is for the
+code.** Aiven's own backups are a plan-level feature rather than something this repository controls, so
+the recovery path it owns is still this one:
 
 ```bash
 npm run db:backup                     # pg_dump -Fc into ~/luxeride-backups, 14-day retention
 npm run db:backup -- --list           # what is on disk, and how old
 npm run db:backup -- --restore FILE   # the rehearsal: restore into a scratch database
+npm run db:backup -- --drop NAME      # drop a scratch copy a rehearsal left behind
 ```
 
+**The client tools must be at least as new as the server.** `pg_dump` refuses to dump a server newer
+than itself — `aborting because of server version mismatch` — and the distribution here ships
+PostgreSQL 16, so it cannot dump this 18.6 server at all. The first `db:backup` after the move failed
+for exactly that reason and wrote a 0-byte file. The 18.6 client is therefore installed **per-user**,
+because installing it system-wide needs a password this machine did not have:
+
+- `~/.local/opt/pg18` — the extracted 18.6 client and its `libpq5`, unpacked from the PGDG packages
+  with `dpkg-deb -x` (no root needed to read a `.deb`).
+- `~/.local/bin/pg_dump`, `~/.local/bin/pg_restore`, `~/.local/bin/pg_isready` — wrappers that put
+  `~/.local/opt/pg18` on `LD_LIBRARY_PATH` and exec the real binary. `~/.local/bin` precedes
+  `/usr/bin` on `PATH`, so the npm scripts pick them up without changing.
+
+Delete those three wrappers and the distribution's versions come back — but nothing on this machine can
+dump the hosted database without an 18.x client. With a password available, the package-manager
+equivalent is the PGDG repository plus `apt install postgresql-client-18`.
+
 **A backup that has never been restored is a hypothesis, not a backup.** `--restore` creates a
-`luxeride_restore_<timestamp>` database, restores into it, prints per-table row counts and the
-one-liner to compare them against the live database, then tells you how to drop the scratch copy. Run
-it weekly, and after any migration that changes a table. It never touches the live database: a scratch
-copy is always the target.
+`luxeride_restore_<timestamp>` database, restores into it, compares every table against the live
+database and prints **PASS** or **FAIL**, exiting non-zero on a mismatch. Run it weekly, and after any
+migration that changes a table. It never touches the live data: the scratch copy is always the target,
+and `--drop` removes it afterwards — refusing any name that is not a `luxeride_restore_*`, so the live
+database cannot be dropped by invoking this script wrongly.
+
+Three things about the rehearsal were found by running it against the hosted instance rather than
+reasoning about it. Each one had looked like success:
+
+- It assumed a maintenance database called `postgres` to issue `CREATE DATABASE` against. A local
+  cluster has one; Aiven does not, and the drill died on `FATAL: database "postgres" does not exist`.
+  `CREATE DATABASE` does not care which database you are connected to, as long as it is not the one
+  being created, so the drill now uses the configured one.
+- Building that URL by truncating the connection string also **threw away `?sslmode=require`**, so every
+  drill connection fell back to libpq's default `prefer` and happened to negotiate TLS anyway. It keeps
+  the query string now: "happened to work" is not a property to rely on.
+- It reported `pg_stat_user_tables.n_live_tup`, a statistics-collector *estimate* that does not exist
+  for a database that has just been restored. It printed `0` for all 22 tables — exactly what a restore
+  that copied nothing looks like, which is the one thing a drill must never be unable to tell apart. It
+  counts rows now.
 
 Schedule the nightly dump with a `systemd --user` timer or a crontab entry — there is one workstation
-and one person, so whatever is not scheduled will not happen.
+and one person, so whatever is not scheduled will not happen. **That part is still owed: as of this
+move, the dump is a command somebody has to remember to run.**
 
 ## What's here
 
@@ -212,15 +292,52 @@ set that constant to the bucket origin, add an `images.remotePatterns` entry for
 `next.config.ts`, and copy the manifest paths across unchanged. No component holds a path literal —
 they all go through `mediaUrl()` — so nothing else changes.
 
-## Next phases (not built yet, per the architecture plan)
+## Next phases (the rest of the architecture plan, with two of the four now built)
 
-1. Move `src/data/*.ts` into a real Postgres DB (Supabase + Prisma).
+1. ~~Move `src/data/*.ts` into a real Postgres DB~~ — **done**, and the destination turned out to be
+   Aiven rather than Supabase: the catalogue is read from Postgres through `src/lib/catalogue.ts`, with
+   no fallback to the compile-time array. `src/data/products.ts` survives as the seed (`prisma/seed.mts`
+   imports it) and as the source of the `Product`/`Category` types and `priceRange`, not as runtime data.
 2. Paystack integration for the "Prepay by Transfer" option. Prepay is currently **hidden** in the
    checkout, not merely relabelled — nothing in the app contains a bank account to pay into, and an
    option that cannot be honoured is worse than no option (`src/lib/payment-options.ts`).
 3. WhatsApp Business Cloud API — actual server-side send + webhook for the Confirm/Cancel buttons
    (today, checkout opens a `wa.me` link client-side, same as the prototype).
-4. Admin screen (or start with Supabase's table editor).
+4. ~~Admin screen~~ — **done**, and not via Supabase's table editor: `/admin` is the console, reading the
+   same database through `src/lib/db.ts`, with `requireAdmin()` on every mutating action.
+
+## Deployment — Cloudflare Workers, not Pages
+
+The app deploys to **Cloudflare Workers** through the OpenNext adapter
+(`@opennextjs/cloudflare`). `wrangler.jsonc` is the Worker configuration:
+
+```bash
+npm run preview   # build + serve locally in the Workers runtime
+npm run deploy    # build + deploy to Cloudflare
+npm run upload    # build + upload a new version without promoting it
+```
+
+**Why Workers and not the old Pages setup.** This storefront reads Postgres through Prisma, which needs
+the **Node.js** runtime. Cloudflare Pages with the now-retired `@cloudflare/next-on-pages` adapter ran the
+**Edge** runtime only, so it could never serve this app. `@opennextjs/cloudflare` runs the Node runtime
+on Workers — the comments at the top of `wrangler.jsonc` record the whole change.
+
+Before the first deploy:
+
+1. **Set the secrets.** `wrangler deploy` refuses to run until the secrets listed in `wrangler.jsonc`
+   exist (`DATABASE_URL`, `ADMIN_SESSION_SECRET`, `ADMIN_USER`, `ADMIN_PASSWORD_HASH`):
+   `npx wrangler secret put DATABASE_URL`, or set them in the dashboard. Never commit values.
+2. **Prisma reaches Postgres through a driver adapter — done.** `src/lib/db.ts` constructs its client
+   with `@prisma/adapter-pg`, and builds a fresh client per request (`maxUses: 1`), because a Worker may
+   not reuse a connection across requests. The connection string comes from a **Hyperdrive** binding when
+   one is configured, and falls back to `DATABASE_URL` otherwise — so the app deploys today without
+   Hyperdrive, and adopting it later is just uncommenting the binding in `wrangler.jsonc` (no code change).
+3. **`next/image` needs Cloudflare Images.** The `IMAGES` binding in `wrangler.jsonc` is what optimises
+   product photography. If Cloudflare Images is not enabled on the account, either enable it or set
+   `images: { unoptimized: true }` in `next.config.ts` — otherwise image requests fail at runtime.
+
+`@opennextjs/cloudflare` is pinned to `1.20.5` on purpose: `next` is pinned to `16.3.5`, and OpenNext
+`1.20.6+` requires `next >= 16.3.8`. To follow OpenNext upwards, bump `next` first.
 
 ## Notes on this build
 
@@ -232,12 +349,14 @@ they all go through `mediaUrl()` — so nothing else changes.
   written; it is true now, and `npm run verify` is what keeps it honest.
 - `npm run build` must exit 0 and write `.next/BUILD_ID`. If `.next/BUILD_ID` is absent, the build never
   succeeded — a green-looking `next build` that produced no `BUILD_ID` is not a build.
-- **No ISR interval is configured, deliberately.** Every catalogue route is a compile-time constant read
-  from `src/data/*.ts`, so there is nothing to revalidate: `/`, `/shop` and the seven PDPs are static or
-  SSG, and `/fit-finder` is dynamic only because it reads `?product=`. `export const revalidate` belongs
-  to whichever spec first introduces a real data read — `commerce-backend` when `/order/[reference]`
-  lands, and `fitment-engine` when `checkFit()` reads the database in M9. Adding it before then would
-  only hide a stale-catalogue bug that cannot exist yet.
+- **No ISR interval is configured, and the catalogue routes are not static.** `/shop`, `/shop/<slug>`,
+  `/products/[slug]`, the sitemap and every `/admin` screen declare `export const dynamic =
+  "force-dynamic"`, because they read the database through `src/lib/catalogue.ts`: there is no
+  compile-time constant to serve, and no period after which a cached copy would become correct. The
+  freshness question is answered by push instead — a catalogue write in `/admin` calls `revalidatePath`
+  on the storefront as well as the admin screen (`src/app/admin/(console)/catalogue-actions.ts`), which
+  is what the comment at the top of `src/app/shop/page.tsx` records. Adding `export const revalidate`
+  would be a second, weaker answer to a question that already has one.
 - **The product photography file must be named to a contract, not dropped in.** `scripts/media.mjs`
   reads `footage/photos/<product-slug>-<angle>.jpg`, where `<product-slug>` is one of the seven slugs in
   `src/data/products.ts` and `<angle>` becomes the image's `alt` text (`driver` → "driver-side view").

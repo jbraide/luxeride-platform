@@ -4,6 +4,7 @@
 # Dependencies and build output
 luxeride-web/node_modules/
 luxeride-web/.next/
+luxeride-web/.open-next/
 luxeride-web/out/
 luxeride-web/build/
 

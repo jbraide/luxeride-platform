@@ -27,7 +27,6 @@ export default async function DeliveryPage() {
         <thead className="bg-surface-2">
           <tr>
             <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-accent-dim">Zone</th>
-            <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-accent-dim">Area</th>
             <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-accent-dim">Fee</th>
             <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-accent-dim">Fastest ETA</th>
             <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-accent-dim">Slowest ETA</th>
@@ -35,12 +34,11 @@ export default async function DeliveryPage() {
         </thead>
         <tbody className="divide-y divide-border">
           {LOCATIONS.map((zone) => (
-            <tr key={zone.slug}>
+            <tr key={zone.name}>
               <td className="px-4 py-3 font-medium">{zone.name}</td>
-              <td className="px-4 py-3 text-fg-muted">{zone.slug}</td>
               <td className="px-4 py-3 text-right font-mono">{fmtNaira(zone.fee)}</td>
-              <td className="px-4 py-3 text-right text-fg-muted">{zone.etaText.split("–")[0]?.trim()}</td>
-              <td className="px-4 py-3 text-right text-fg-muted">{zone.etaText.split("–")[1]?.trim()}</td>
+              <td className="px-4 py-3 text-right text-fg-muted">{zone.eta.split("–")[0]?.trim()}</td>
+              <td className="px-4 py-3 text-right text-fg-muted">{zone.eta.split("–")[1]?.trim()}</td>
             </tr>
           ))}
         </tbody>
@@ -50,11 +48,11 @@ export default async function DeliveryPage() {
         <p className="text-xs font-mono uppercase tracking-widest text-accent-dim mb-3">Configure zone</p>
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label htmlFor="zoneSlug" className="text-xs text-fg-muted">Zone slug</label>
-            <select id="zoneSlug" name="slug" defaultValue="" className="mt-1 w-48 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none font-mono">
+            <label htmlFor="zoneName" className="text-xs text-fg-muted">Zone</label>
+            <select id="zoneName" name="name" defaultValue="" className="mt-1 w-48 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none font-mono">
               <option value="">Select zone</option>
               {LOCATIONS.map((z) => (
-                <option key={z.slug} value={z.slug}>{z.slug}</option>
+                <option key={z.name} value={z.name}>{z.name}</option>
               ))}
             </select>
           </div>
@@ -96,7 +94,7 @@ export default async function DeliveryPage() {
         Changing a fee or ETA here propagates to all surfaces that read `LOCATIONS` (`src/lib/availability.ts`
         `formatDeliverySummary()` derives the range from this table, not from a hardcoded constant — M1.8 verified).
         The remaining policy slots (`returns`, `privacy`, `terms`) are hidden from production
-        (`policies/[slug]/page.tsx` drops empty/unpublished sections; M4.3 fix verified by `grep -rni 'TODO(owner)'`
+        (`policies/[slug]/page.tsx` drops empty/unpublished sections; M4.3 fix verified by `grep -rni &apos;TODO(owner)&apos;`
         returning 0 hits); they must be filled before the site makes a real legal promise (D-07 / D-11).
         Generation data for floor-mats (`seat-covers/floor-mats-generations.mjs`) matches `scripts/vehicle-years.data.mjs`
         format (verified by `ls` + `head` of both files); the full catalogue generation split (`fitment-engine`

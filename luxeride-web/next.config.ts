@@ -1,9 +1,18 @@
-// Cloudflare Pages deployment note (progressive deploy prep):
-// The `@cloudflare/next-on-pages` adapter supports this config's redirects,
-// headers and images settings. No structural changes are needed for Pages.
+// Cloudflare deployment note (updated 2026-10-07):
+//
+// This app runs on Cloudflare **Workers** through the OpenNext adapter
+// (`@opennextjs/cloudflare`), configured by `wrangler.jsonc`. It is NOT on
+// Cloudflare Pages, and it does NOT use `@cloudflare/next-on-pages` — that
+// adapter is deprecated. The reason is concrete: `next-on-pages` ran Next on
+// the Edge runtime only, and this storefront reads Postgres through Prisma,
+// which needs the Node.js runtime. OpenNext runs that runtime on Workers.
+//
+// The adapter picks up this file's `redirects`, `headers` and `images` settings
+// unchanged, so nothing below is Cloudflare-specific.
 import type { NextConfig } from "next";
 
 import { CATEGORIES } from "./src/data/products";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const nextConfig: NextConfig = {
   async redirects() {
@@ -91,6 +100,18 @@ const nextConfig: NextConfig = {
 
   allowedDevOrigins: ["192.168.1.4"],
 
+  // Cloudflare Workers / OpenNext: keep the Prisma client out of the bundle so
+  // the adapter can supply the workerd-compatible build. Without this the
+  // generated client is bundled for the wrong runtime and fails at deploy.
+  //
+  // `pg-cloudflare` is here for the same reason, and it is subtler: `pg`
+  // `require`s it lazily on workerd for its TCP socket implementation, and it
+  // ships conditional exports (`workerd` -> the real implementation, `default` ->
+  // an empty stub). Listing it makes OpenNext copy the FULL package with the
+  // `workerd` condition rewritten, instead of a traced subset that is missing
+  // `dist/index.js` — which is exactly what failed the bundler otherwise.
+  serverExternalPackages: ["@prisma/client", ".prisma/client", "pg-cloudflare"],
+
   images: {
     // Default is ['image/webp']. Leave it. Turning AVIF on is roughly 50%
     // slower to encode for about 20% smaller files, and Next's own guidance is
@@ -108,3 +129,7 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// `next dev` only: exposes the bindings declared in `wrangler.jsonc` to the
+// local dev server. A no-op during `next build` and on the deployed Worker.
+initOpenNextCloudflareForDev();

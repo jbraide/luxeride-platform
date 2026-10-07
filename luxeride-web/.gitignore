@@ -36,8 +36,18 @@ yarn-error.log*
 # which variables the app needs, and it must carry no values.
 !.env.example
 
-# vercel
+# vercel (legacy — the app now deploys to Cloudflare Workers, see wrangler.jsonc)
 .vercel
+
+# cloudflare workers / opennext
+# `.open-next/` is the adapter's build output; never commit it.
+/.open-next/
+/.wrangler/
+cloudflare-env.d.ts
+
+# local dev vars for `wrangler dev` / `opennextjs-cloudflare preview`
+.dev.vars
+.dev.vars.*
 
 # typescript
 *.tsbuildinfo
