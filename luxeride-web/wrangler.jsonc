@@ -43,6 +43,13 @@
     { "binding": "WORKER_SELF_REFERENCE", "service": "luxeride-web" }
   ],
 
+  // `npx wrangler preview` — the Workers Builds *preview* command — refuses to run
+  // without a `previews` block, and the block may be empty. Assets, compatibility
+  // settings, services and secrets all stay at the top level. Without this, every
+  // preview build dies with "Your Wrangler configuration is missing a
+  // `previews` block". It has no effect on `wrangler deploy`.
+  "previews": {},
+
   // `next/image` optimisation through Cloudflare Images. This REQUIRES
   // Cloudflare Images to be enabled on the account. If it is not, either enable
   // it or set `images: { unoptimized: true }` in `next.config.ts` — leaving it
