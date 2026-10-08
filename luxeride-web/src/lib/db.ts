@@ -53,8 +53,17 @@ const PLACEHOLDER_URL = "postgresql://user:pass@localhost:5432/luxeride";
 /** The binding shape when Hyperdrive is configured in `wrangler.jsonc`. */
 type HyperdriveBinding = { connectionString?: string };
 
-function assertUsable(url: string | undefined): string {
-  if (!url || url.trim() === "") {
+function assertUsable(raw: string | undefined): string {
+  // Env values are routinely pasted with the surrounding quotes — `"postgres://…"` —
+  // and Prisma's only complaint is "the URL must start with the protocol
+  // `postgresql://`", which never mentions the quotes. Strip one matching pair and
+  // surrounding whitespace first: a real connection string cannot start with a quote.
+  let url = (raw ?? "").trim();
+  if (url.length >= 2 && (url[0] === '"' || url[0] === "'") && url[url.length - 1] === url[0]) {
+    url = url.slice(1, -1).trim();
+  }
+
+  if (url === "") {
     throw new Error(
       "DATABASE_URL is not set. Copy luxeride-web/.env.example to " +
         "luxeride-web/.env.local and fill it in — the E-track creates the role and " +
@@ -66,6 +75,13 @@ function assertUsable(url: string | undefined): string {
     throw new Error(
       "DATABASE_URL is still the placeholder from .env. The real connection string " +
         "belongs in luxeride-web/.env.local, which is never committed."
+    );
+  }
+
+  if (!/^postgres(ql)?:\/\//i.test(url)) {
+    throw new Error(
+      "DATABASE_URL must start with postgres:// or postgresql:// — it starts with " +
+        `${JSON.stringify(url.slice(0, 16))}. Check the value for stray characters or quotes.`
     );
   }
 
