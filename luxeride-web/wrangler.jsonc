@@ -19,88 +19,91 @@
 // `main` and `assets` are produced by the adapter (`npm run build`); do not
 // point them elsewhere or edit `.open-next/` by hand.
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-
-  "name": "luxeride-web",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2026-01-01",
-  "compatibility_flags": [
-    // Required: Prisma, `pg` and the rest of the Node API surface only exist on
-    // Workers behind this flag. Without it the Worker fails to start.
-    "nodejs_compat",
-    // Lets the app fetch public URLs (OpenNext uses this for its own calls).
-    "global_fetch_strictly_public"
-  ],
-
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
-  },
-
-  // OpenNext calls back into this same Worker for revalidation/ISR. The service
-  // name must match `name` above.
-  "services": [
-    { "binding": "WORKER_SELF_REFERENCE", "service": "luxeride-web" }
-  ],
-
-  // `npx wrangler preview` — the Workers Builds *preview* command — refuses to run
-  // without a `previews` block, and the block may be empty. Assets, compatibility
-  // settings, services and secrets all stay at the top level. Without this, every
-  // preview build dies with "Your Wrangler configuration is missing a
-  // `previews` block". It has no effect on `wrangler deploy`.
-  "previews": {},
-
-  // `next/image` optimisation through Cloudflare Images. This REQUIRES
-  // Cloudflare Images to be enabled on the account. If it is not, either enable
-  // it or set `images: { unoptimized: true }` in `next.config.ts` — leaving it
-  // off while `next/image` is in use makes image requests fail at runtime.
-  "images": { "binding": "IMAGES" },
-
-  "observability": { "enabled": true },
-
-  // Public, non-secret values. NOTE: `NEXT_PUBLIC_*` variables are inlined at
-  // BUILD time, so the value that actually ships comes from `.env` during the
-  // build — this entry documents the expected value rather than setting it.
-  "vars": {
-    "NEXT_PUBLIC_SITE_URL": "https://luxerideautos.com.ng"
-  },
-
-  // `wrangler deploy` fails if any of these are not set on the Worker, which is
-  // the point: a deploy without a database URL should stop, not go live and 500.
-  // Set them with `npx wrangler secret put <NAME>` or in the dashboard.
-  // NEVER commit values.
-  "secrets": {
-    "required": [
-      "DATABASE_URL",
-      "ADMIN_SESSION_SECRET",
-      "ADMIN_USER",
-      "ADMIN_PASSWORD_HASH"
-    ]
-  }
-
-  // ── Optional, left commented until each is actually needed ────────────────
-  //
-  // Custom domain: uncomment once `luxerideautos.com.ng` is a zone in THIS
-  // Cloudflare account. Until then leave it to the dashboard, so a deploy does
-  // not fail on a zone it cannot see.
-  //
-  // "routes": [
-  //   { "pattern": "luxerideautos.com.ng", "custom_domain": true }
-  // ],
-  //
-  // Hyperdrive: the recommended way to reach a Postgres database from a Worker
-  // (connection pooling, lower latency, no cold-connection storm). The app
-  // already reads `env.HYPERDRIVE.connectionString` when this binding exists and
-  // falls back to `DATABASE_URL` otherwise, so adding the binding below is the
-  // only step — no code change.
-  //
-  // "hyperdrive": [
-  //   { "binding": "HYPERDRIVE", "id": "<HYPERDRIVE_CONFIG_ID>" }
-  // ],
-  //
-  // R2 bucket backing the Next.js incremental/ISR cache:
-  //
-  // "r2_buckets": [
-  //   { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "<BUCKET_NAME>" }
-  // ],
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "luxeride-web",
+	"main": ".open-next/worker.js",
+	"compatibility_date": "2026-01-01",
+	"compatibility_flags": [
+		// Required: Prisma, `pg` and the rest of the Node API surface only exist on
+		// Workers behind this flag. Without it the Worker fails to start.
+		"nodejs_compat",
+		// Lets the app fetch public URLs (OpenNext uses this for its own calls).
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	// OpenNext calls back into this same Worker for revalidation/ISR. The service
+	// name must match `name` above.
+	"services": [
+		{
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "luxeride-web"
+		}
+	],
+	// `npx wrangler preview` — the Workers Builds *preview* command — refuses to run
+	// without a `previews` block, and the block may be empty. Assets, compatibility
+	// settings, services and secrets all stay at the top level. Without this, every
+	// preview build dies with "Your Wrangler configuration is missing a
+	// `previews` block". It has no effect on `wrangler deploy`.
+	"previews": {},
+	// `next/image` optimisation through Cloudflare Images. This REQUIRES
+	// Cloudflare Images to be enabled on the account. If it is not, either enable
+	// it or set `images: { unoptimized: true }` in `next.config.ts` — leaving it
+	// off while `next/image` is in use makes image requests fail at runtime.
+	"images": {
+		"binding": "IMAGES"
+	},
+	"observability": {
+		"enabled": true
+	},
+	// Public, non-secret values. NOTE: `NEXT_PUBLIC_*` variables are inlined at
+	// BUILD time, so the value that actually ships comes from `.env` during the
+	// build — this entry documents the expected value rather than setting it.
+	"vars": {
+		"NEXT_PUBLIC_SITE_URL": "https://luxerideautos.com.ng"
+	},
+	// `wrangler deploy` fails if any of these are not set on the Worker, which is
+	// the point: a deploy without a database URL should stop, not go live and 500.
+	// Set them with `npx wrangler secret put <NAME>` or in the dashboard.
+	// NEVER commit values.
+	"secrets": {
+		"required": [
+			"DATABASE_URL",
+			"ADMIN_SESSION_SECRET",
+			"ADMIN_USER",
+			"ADMIN_PASSWORD_HASH"
+		]
+	},
+	// Runtime database path. The Worker reaches Postgres through Hyperdrive rather
+	// than dialing Aiven directly: Cloudflare disallows raw outbound TCP from a
+	// Worker to addresses it will not route to, which is why the direct connection
+	// failed at request time. `db.ts` reads `env.HYPERDRIVE.connectionString` first,
+	// and falls back to `DATABASE_URL` — which the BUILD still needs, because the
+	// prerender step runs in plain Node and reads the database directly.
+	//
+	// Keep caching DISABLED on this Hyperdrive config: the admin console writes the
+	// catalogue and expects the storefront to read it straight back.
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "a36429d51364428c8bf8c1f39c7abbda"
+		}
+	]
+	// ── Optional, left commented until each is actually needed ────────────────
+	//
+	// Custom domain: uncomment once `luxerideautos.com.ng` is a zone in THIS
+	// Cloudflare account. Until then leave it to the dashboard, so a deploy does
+	// not fail on a zone it cannot see.
+	//
+	// "routes": [
+	//   { "pattern": "luxerideautos.com.ng", "custom_domain": true }
+	// ],
+	//
+	// R2 bucket backing the Next.js incremental/ISR cache:
+	//
+	// "r2_buckets": [
+	//   { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "<BUCKET_NAME>" }
+	// ],
 }
