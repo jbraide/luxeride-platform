@@ -106,13 +106,36 @@ function connectionString(): string {
   try {
     const { env } = getCloudflareContext();
     const hyperdrive = (env as unknown as { HYPERDRIVE?: HyperdriveBinding }).HYPERDRIVE;
-    if (hyperdrive?.connectionString) return hyperdrive.connectionString;
+    if (hyperdrive?.connectionString) return logTargetOnce(hyperdrive.connectionString, "Hyperdrive");
   } catch {
     // Not inside a Cloudflare request. On Workers this should not happen; if it
     // does, `DATABASE_URL` below is still the correct answer.
   }
 
-  return assertReachableFromWorkers(assertUsable(process.env.DATABASE_URL));
+  return logTargetOnce(
+    assertReachableFromWorkers(assertUsable(process.env.DATABASE_URL)),
+    "DATABASE_URL"
+  );
+}
+
+/**
+ * Print the host the Worker is about to dial, once per isolate, never the
+ * credentials. The Cloudflare log shows the Prisma stack but not the address, so
+ * this is the only way to tell from production whether a bad deploy is pointing
+ * at `localhost` or at the real host.
+ */
+let loggedTarget = false;
+function logTargetOnce(url: string, source: string): string {
+  if (!loggedTarget) {
+    loggedTarget = true;
+    try {
+      const { hostname, port } = new URL(url);
+      console.log(`[luxeride/db] connecting to ${hostname}:${port || "5432"} (from ${source})`);
+    } catch {
+      console.log(`[luxeride/db] connecting via ${source} (URL not parseable)`);
+    }
+  }
+  return url;
 }
 
 /**
