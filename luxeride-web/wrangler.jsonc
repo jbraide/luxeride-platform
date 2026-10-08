@@ -88,7 +88,17 @@
 	"hyperdrive": [
 		{
 			"binding": "HYPERDRIVE",
-			"id": "a36429d51364428c8bf8c1f39c7abbda"
+			"id": "a36429d51364428c8bf8c1f39c7abbda",
+			// NOT USED BY THIS APP. It exists only to satisfy wrangler's platform
+			// proxy, which `opennextjs-cloudflare deploy` calls on EVERY deploy and
+			// which REFUSES a Hyperdrive binding that has no local connection string:
+			//   UserError: … 'no local hyperdrive connection string'
+			// Wrangler only checks that a value is PRESENT — verified against a dead
+			// address, and it resolved every binding without connecting — so a local
+			// placeholder is enough and keeps credentials out of the repo.
+			// Override with CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE
+			// (e.g. in .env.local) if you ever want real local emulation.
+			"localConnectionString": "postgres://luxeride:luxeride@localhost:5432/luxeride"
 		}
 	]
 	// ── Optional, left commented until each is actually needed ────────────────
