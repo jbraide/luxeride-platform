@@ -12,7 +12,6 @@
 import type { NextConfig } from "next";
 
 import { CATEGORIES } from "./src/data/products";
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const nextConfig: NextConfig = {
   async redirects() {
@@ -130,6 +129,19 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-// `next dev` only: exposes the bindings declared in `wrangler.jsonc` to the
-// local dev server. A no-op during `next build` and on the deployed Worker.
-initOpenNextCloudflareForDev();
+// NO `initOpenNextCloudflareForDev()` HERE, ON PURPOSE.
+//
+// It eagerly starts OpenNext's local dev proxy, which resolves every binding in
+// `wrangler.jsonc`. As soon as a `hyperdrive` binding exists, that proxy demands a
+// local Postgres URL (`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` or
+// the binding's `localConnectionString`) and rejects without one — from inside
+// `next build` too, which is what broke the Cloudflare build:
+//
+//   unhandledRejection Error: … 'no local hyperdrive connection string'
+//
+// This app reads no bindings while developing: `db.ts` takes its **Node** path
+// under Node, which reads `DATABASE_URL` from `.env.local`, and never calls the
+// Cloudflare context. So the proxy buys us nothing and only adds a failure mode.
+//
+// If a future feature does need bindings in `next dev`, restore the call AND set
+// that env var to the local Postgres URL in `.env.local` (never committed).
