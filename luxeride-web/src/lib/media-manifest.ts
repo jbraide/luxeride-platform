@@ -1,31 +1,36 @@
-import fs from "node:fs";
-import path from "node:path";
+import manifestJson from "../../public/products/manifest.json";
 import type { MediaEntry, MediaManifest, ProductMedia } from "@/lib/media";
 
 /**
  * The media seam — **server-only half**.
  *
- * Reads `public/products/manifest.json` once per process. This module imports
- * `node:fs`, so it must never be reached from a `"use client"` component. Types
- * and `mediaUrl()` live in `src/lib/media.ts` precisely so a Client Component
- * can render resolved media without pulling this file in.
+ * Reads `public/products/manifest.json` once per process. It must never be reached
+ * from a `"use client"` component: the manifest is bundled into whatever imports
+ * it. Types and `mediaUrl()` live in `src/lib/media.ts` precisely so a Client
+ * Component can render resolved media without pulling this file — or the manifest
+ * — into the browser bundle.
+ *
+ * ── WHY THE MANIFEST IS IMPORTED, NOT READ FROM DISK ─────────────────────────
+ *
+ * This used to `fs.readFileSync(public/products/manifest.json)`. That works under
+ * Node (`next dev`, `next build`) but NOT on Cloudflare Workers, where this app is
+ * deployed: workerd has no filesystem, so the read threw and the `catch` below
+ * swallowed it, quietly returning `{}` — every product fell back to
+ * `ProductPlaceholder`, and the live site shipped with no photographs and no error
+ * to explain why. Importing the JSON resolves it at BUILD time and inlines it into
+ * the server bundle, so the exact same data exists in both runtimes.
+ *
+ * The guard the runtime read used to provide is not lost: `scripts/media.mjs
+ * --check`, which `npm run build` runs before `next build`, fails the build if any
+ * path in this manifest does not resolve to a file in `public/`.
  */
 
-const MANIFEST_PATH = path.join(process.cwd(), "public", "products", "manifest.json");
+const parsed: unknown = manifestJson;
 
 let cached: MediaManifest | null = null;
 
 export function readMediaManifest(): MediaManifest {
   if (cached !== null) return cached;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-  } catch {
-    // Absent or unreadable: no product has media, so all take the placeholder.
-    cached = {};
-    return cached;
-  }
 
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     cached = {};
