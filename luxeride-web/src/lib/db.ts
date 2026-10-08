@@ -96,7 +96,48 @@ function connectionString(): string {
     // does, `DATABASE_URL` below is still the correct answer.
   }
 
-  return assertUsable(process.env.DATABASE_URL);
+  return assertReachableFromWorkers(assertUsable(process.env.DATABASE_URL));
+}
+
+/**
+ * Loopback and private hosts. Cloudflare refuses outbound TCP to all of them.
+ *
+ * https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/#troubleshooting
+ * — "proxy request failed, cannot connect to the specified address" means the
+ * socket target was disallowed, and the examples given are Cloudflare IPs,
+ * `localhost` and private network IPs.
+ */
+const UNREACHABLE_FROM_WORKERS =
+  /^(localhost|\.+localhost|0\.0\.0\.0|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
+
+/**
+ * Catch the one misconfiguration that reads as a network outage on Workers.
+ *
+ * A Build variable is not present at runtime, so a Worker deployed with only a
+ * build-time `DATABASE_URL` falls back to whatever the repo's `.env` holds — the
+ * `localhost` placeholder — and Cloudflare answers every request with
+ * `cannot connect to the specified address` rather than anything that names the
+ * real problem. This turns that into a message that says what to fix.
+ */
+function assertReachableFromWorkers(url: string): string {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    // Not a URL we can read; let `pg` report it rather than guessing here.
+    return url;
+  }
+
+  if (UNREACHABLE_FROM_WORKERS.test(host)) {
+    throw new Error(
+      `DATABASE_URL points at "${host}", which a Cloudflare Worker cannot reach — ` +
+        "Cloudflare blocks outbound TCP to loopback and private addresses. Set the value as a " +
+        "RUNTIME secret on the Worker (Settings -> Variables and Secrets) using the public " +
+        "database host; a Build variable does not exist at request time."
+    );
+  }
+
+  return url;
 }
 
 /**
