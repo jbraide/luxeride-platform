@@ -228,24 +228,40 @@ function createWorkersClient(): PrismaClient {
  */
 const workersClientForRequest = cache(createWorkersClient);
 
-/** The Node client: the query engine, one per process, pooled as before. */
-let nodeClient: PrismaClient | undefined;
+/**
+ * The Node client: the query engine, one per process, pooled.
+ *
+ * ── WHY IT LIVES ON `globalThis`, AND WHY THE POOL IS CAPPED IN DEV TOO ───────
+ *
+ * Prisma's default pool is `2 x CPUs + 1`. On a sixteen-core machine that is
+ * THIRTY-THREE connections from a single client — and `next dev` re-evaluates this
+ * module on every hot reload. With a module-level `let`, each reload built a new client
+ * with a new pool while the previous one kept its sockets until the process exited, so a
+ * working session walked into Aiven's connection ceiling:
+ *
+ *   FATAL: sorry, too many clients already
+ *
+ * `globalThis` survives the reload, so there is ONE client and ONE pool for the life of
+ * the dev server. The cap below used to apply only during `next build`; it applies to dev
+ * as well now, because dev is where the leak was, and a storefront with one operator never
+ * needs thirty-three sockets.
+ *
+ * The build case stays at 1 for the reason it always did: several worker processes
+ * prerender in parallel and Prisma's default pool per worker is what produced
+ * `P2037 Too many database connections` against Aiven's slot limit.
+ */
+const globalForPrisma = globalThis as unknown as { __luxeridePrisma?: PrismaClient };
+
+/** One process, one small pool: enough to render a page's queries, far below the ceiling. */
+const NODE_CONNECTION_LIMIT = process.env.NEXT_PHASE === "phase-production-build" ? "1" : "5";
 
 function resolveClient(): PrismaClient {
   if (isCloudflareWorkers()) return workersClientForRequest();
 
   const url = assertUsable(process.env.DATABASE_URL);
+  const datasourceUrl = withParam(url, "connection_limit", NODE_CONNECTION_LIMIT);
 
-  // During `next build` several worker processes prerender in parallel, and each
-  // would otherwise open Prisma's default pool (`2 x CPUs + 1`) — against Aiven's
-  // slot limit that is what produced `P2037 Too many database connections`, because
-  // the root layout reads the catalogue on every prerendered route. One connection
-  // per worker is enough to render the site, and the cap is limited to the build:
-  // `next dev` keeps the default pool.
-  const datasourceUrl =
-    process.env.NEXT_PHASE === "phase-production-build" ? withParam(url, "connection_limit", "1") : url;
-
-  return (nodeClient ??= new PrismaClient({ datasourceUrl }));
+  return (globalForPrisma.__luxeridePrisma ??= new PrismaClient({ datasourceUrl }));
 }
 
 /**
