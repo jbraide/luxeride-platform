@@ -1224,6 +1224,16 @@ export async function saveBundle(formData: FormData): Promise<void> {
           where: { id: productId },
           data: { regular: nextRegular, premium: nextPremium },
         });
+
+        // THE OPTIONS FOLLOW THE PRODUCT. A bundle's variation is what a cart line and
+        // any per-option reader price from, and leaving it on the old hand-typed figure
+        // is exactly the drift that made `full-bundle` sell at 110,000/135,000 while the
+        // product itself said 151,200/163,800. The derivation belongs to the bundle, so
+        // every option of it carries the same two figures.
+        await tx.productVariation.updateMany({
+          where: { productId },
+          data: { regular: nextRegular, premium: nextPremium },
+        });
       }
     }
 

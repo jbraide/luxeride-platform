@@ -17,8 +17,9 @@ import {
   updateProduct,
   updateVariation,
 } from "../../catalogue-actions";
+import BundlePricePreview from "../../bundle-price-preview";
 import { messageFor, readEcho, readFailures, slugify, STOCK_STATES } from "../../catalogue-guard";
-import { BUNDLE_DISCOUNT_KINDS, deriveBundlePrices, MIN_BUNDLE_PRICE } from "@/lib/bundle-price";
+import { BUNDLE_DISCOUNT_KINDS } from "@/lib/bundle-price";
 
 /**
  * `/admin/products/[id]` — one product, and its VARIATIONS.
@@ -776,9 +777,9 @@ export default async function ProductDetailPage({
  *
  * ── WHY THE ARITHMETIC IS SHOWN RATHER THAN DESCRIBED ───────────────────────
  *
- * `deriveBundlePrices()` is imported and run HERE, so the operator sees the same
- * figure the save is about to write, computed by the same function. The alternative —
- * describing the rule in prose and asking the owner to trust it — is how a bundle ends
+ * `deriveBundlePrices()` is run live by `BundlePricePreview`, so the operator sees the
+ * same figure the save is about to write, computed by the same function. The alternative
+ * — describing the rule in prose and asking the owner to trust it — is how a bundle ends
  * up priced at a number its contents do not justify.
  */
 function BundleEditor({
@@ -834,26 +835,17 @@ function BundleEditor({
   const parts = bundle?.items ?? [];
 
   /*
-   * THE ARITHMETIC ON THIS SCREEN, FROM THE PARTS' OWN PRICES.
-   *
-   * The VARIATION's price when one is named, the product's otherwise — the same
-   * resolution order `bundleParts()` uses in the action and `toBundle()` uses on the
-   * storefront. That is why the prisma select above pulls both: a screen that summed the
-   * product's list price while the action summed the variation's would show one figure
-   * and write another, which is the exact class of bug the composition model exists to
-   * remove.
+   * THE PARTS, AT THE PRICES A CUSTOMER WOULD PAY. The VARIATION's price when one is
+   * named, the product's otherwise — the same resolution order `bundleParts()` uses in the
+   * action. `BundlePricePreview` does the arithmetic live from these, with the same
+   * `deriveBundlePrices` the save calls.
    */
-  const derived = deriveBundlePrices(
-    parts.map((item) => ({
-      qty: item.qty,
-      regular: item.variation?.regular ?? item.product.regular,
-      premium: item.variation?.premium ?? item.product.premium,
-    })),
-    bundle && (BUNDLE_DISCOUNT_KINDS as readonly string[]).includes(bundle.discountKind)
-      ? (bundle.discountKind as (typeof BUNDLE_DISCOUNT_KINDS)[number])
-      : "percent",
-    bundle?.discountValue ?? 0,
-  );
+  const previewParts = parts.map((item) => ({
+    id: item.id,
+    qty: item.qty,
+    regular: item.variation?.regular ?? item.product.regular,
+    premium: item.variation?.premium ?? item.product.premium,
+  }));
 
   return (
     <section className="mt-10">
@@ -865,7 +857,7 @@ function BundleEditor({
         and the prices at the top of this page are what it sells at.
       </p>
 
-      <form method="post" action={saveBundle} className="mt-4">
+      <form id="bundle-form" method="post" action={saveBundle} className="mt-4">
         <input type="hidden" name="productId" value={product.id} />
 
         <label className="flex items-start gap-3 text-sm text-fg/80">
@@ -1083,51 +1075,11 @@ function BundleEditor({
           agree even in the half-built state, rather than the screen showing ₦0 and the
           save writing something else.
         */}
-        <div className="mt-5 rounded-xl border border-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-fg-muted">
-          {parts.length === 0 ? (
-            <p>
-              No parts yet, so there is nothing to price this from.
-              {bundle?.derivePricing
-                ? ` While the price is worked out from the parts, this sells at the floor — ${naira(MIN_BUNDLE_PRICE)} — until a part is added, and that is the figure the shop would quote.`
-                : " The two prices at the top of this page are what it sells at."}{" "}
-              Add a product above and the prices are worked out from it.
-            </p>
-          ) : (
-            <>
-              <p>
-                The {parts.length} part{parts.length === 1 ? "" : "s"} come to{" "}
-                <span className="font-mono text-fg/85">
-                  {naira(derived.listRegular)} regular
-                </span>{" "}
-                and{" "}
-                <span className="font-mono text-fg/85">
-                  {naira(derived.listPremium)} premium
-                </span>
-                , which is what a customer would pay buying them on their own.
-              </p>
-              <p className="mt-1.5">
-                With the discount that is{" "}
-                <span className="font-mono text-accent">{naira(derived.regular)}</span> and{" "}
-                <span className="font-mono text-accent">{naira(derived.premium)}</span> —
-                saving{" "}
-                <span className="font-mono text-accent">
-                  {naira(derived.savedRegular)} / {naira(derived.savedPremium)}
-                </span>
-                .
-              </p>
-              <p className="mt-1.5">
-                This product currently sells at{" "}
-                <span className="font-mono text-fg/85">
-                  {naira(product.regular)} regular / {naira(product.premium)} premium
-                </span>
-                {bundle?.derivePricing ? "." : " — untick the box above to make that the price."}
-                {bundle?.derivePricing &&
-                  (product.regular !== derived.regular || product.premium !== derived.premium) &&
-                  " Saving below will bring it in line with the parts."}
-              </p>
-            </>
-          )}
-        </div>
+        <BundlePricePreview
+          formId="bundle-form"
+          parts={previewParts}
+          current={{ regular: product.regular, premium: product.premium }}
+        />
 
         <div className="mt-4">
           <button

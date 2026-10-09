@@ -3,6 +3,7 @@
 import { useState } from "react";
 import ProductImage from "@/components/ProductImage";
 import ProductPlaceholder from "@/components/ProductPlaceholder";
+import Lightbox from "@/components/Lightbox";
 import type { ProductMedia } from "@/lib/media";
 
 /**
@@ -21,6 +22,7 @@ export default function ProductGallery({ media, name }: { media: ProductMedia | 
   const images = media?.images ?? [];
   const [selected, setSelected] = useState(0);
   const [failed, setFailed] = useState<number[]>([]);
+  const [open, setOpen] = useState(false);
 
   if (images.length === 0) {
     return (
@@ -38,14 +40,24 @@ export default function ProductGallery({ media, name }: { media: ProductMedia | 
         {showPlaceholder ? (
           <ProductPlaceholder name={name} />
         ) : (
-          <ProductImage
-            media={media}
-            name={name}
-            index={selected}
-            sizes="(min-width: 768px) 50vw, 100vw"
-            preload
-            onError={() => setFailed((prev) => (prev.includes(selected) ? prev : [...prev, selected]))}
-          />
+          <>
+            <ProductImage
+              media={media}
+              name={name}
+              index={selected}
+              sizes="(min-width: 768px) 50vw, 100vw"
+              preload
+              onError={() => setFailed((prev) => (prev.includes(selected) ? prev : [...prev, selected]))}
+            />
+            {/* The whole photograph is the control, so a phone tap anywhere on it opens
+                the viewer rather than hunting for a small affordance. */}
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              aria-label={`Open ${name} image ${selected + 1} of ${images.length} full screen`}
+              className="absolute inset-0 cursor-zoom-in"
+            />
+          </>
         )}
       </div>
 
@@ -70,6 +82,10 @@ export default function ProductGallery({ media, name }: { media: ProductMedia | 
             </button>
           ))}
         </div>
+      )}
+
+      {open && media && (
+        <Lightbox media={media} name={name} startIndex={selected} onClose={() => setOpen(false)} />
       )}
     </div>
   );
