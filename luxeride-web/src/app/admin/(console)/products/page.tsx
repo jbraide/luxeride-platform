@@ -7,13 +7,12 @@ import { messageFor, readEcho, readFailures, slugify } from "../catalogue-guard"
 /**
  * `/admin/products` — every product in the shop, and the place to add one.
  *
- * THE CAR-SPECIFIC FLAG IS THE MOST IMPORTANT FIELD ON THIS FORM
+ * THE FIT FINDER FLAG IS THE MOST IMPORTANT FIELD ON THIS FORM
  *
- * `isCarSpecific` decides whether an item goes through the Fit Finder at all. A
- * floor mat is cut to a specific pan, so selling it means claiming a fit — that is
- * what the whole fitment engine exists to keep honest. A gear cover does not vary
- * by model, so gating its sale on a fitment check would refuse a sale that is
- * perfectly well-defined and push the customer to WhatsApp for no reason.
+ * `isCarSpecific` decides whether an item is offered by the Fit Finder at all. Floor
+ * mats are the product the Fit Finder exists for, so they are ticked; a cargo liner is
+ * cut to a boot, so it CAN be ticked when the owner wants it offered by car. A seat
+ * cover, a mud flap or a bundle is sold from the shop without a car, so it is not.
  *
  * It is a flag rather than something inferred because nothing in the data can
  * derive it and getting it wrong is expensive in both directions: `true` on a
@@ -162,11 +161,11 @@ export default async function ProductsPage({
                       }`}
                       title={
                         product.isCarSpecific
-                          ? "Sold through the Fit Finder — needs a confirmed floor pan."
-                          : "Generic — bought from /shop, no car or year needed."
+                          ? "In the Fit Finder — offered for a car."
+                          : "Shop only — bought without a car."
                       }
                     >
-                      {product.isCarSpecific ? "per car" : "generic"}
+                      {product.isCarSpecific ? "in Fit Finder" : "shop only"}
                     </span>
                     <Link
                       href={`/admin/products/${product.id}`}

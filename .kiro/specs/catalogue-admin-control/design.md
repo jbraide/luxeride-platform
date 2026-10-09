@@ -230,6 +230,31 @@ overwrite a layout price without an explicit, separately-confirmed intent.
   footer HTML; delete a product, assert its PDP returns `not-found` and it is gone from `/shop` and the
   sitemap.
 
+## Bundles and the Fit Finder scope (Requirement 12–13)
+
+**A bundle is never a Fit Finder offer.** `full_set` is gone from the `kind` union
+(`src/data/fitment.ts`) and from `FLOOR_PAN_PRODUCTS` (`src/data/fitment-catalogue.ts`), so
+no floor pan offers a bundle and no bundle carries a `LayoutVariant`. A bundle is priced
+from its parts (`derivePricing`) and its car is confirmed in the WhatsApp order.
+
+**The Fit Finder's product scope is the owner's switch, enforced at read time.** In
+`src/lib/fitment-live.ts`, `loadLiveFitment` filters a layout's variants by
+`product: { isCarSpecific: true, archivedAt: null }`. That is the whole mechanism: ticking
+"Show in the Fit Finder" in `/admin/products` makes a product's existing offers visible on
+the next request, with no deploy and no re-seed. Floor mats are the only product in-fit by
+default.
+
+**Data (applied 2026-10-09).** 231 `full_set` `LayoutVariant` rows were deleted and their
+427 `RangePrice`s cascaded; `cargo-liner`, `full-bundle`, `seat-covers-3d` and `mud-flaps`
+were moved out of the Fit Finder; the `full-bundle` variation price was synced to its
+derived 151,200/163,800, which removes the underpricing the per-floor-pan price carried.
+`boot_liner` offers stay — a cargo liner remains eligible behind the owner's switch.
+
+**Trade-off taken.** `isCarSpecific` keeps its column name but changes meaning, from "cut
+to a car" to "offered through the Fit Finder". A new column would have been a migration
+and a second flag for no behavioural gain, and every existing reader already had the right
+shape.
+
 ## Open Questions
 
 1. **Migration timing.** The `archivedAt` columns are additive and nullable, so they can ship before the

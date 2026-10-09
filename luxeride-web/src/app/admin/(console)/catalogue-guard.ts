@@ -145,7 +145,7 @@ export function validateCategory(
   return { ok: true, value: { name, slug: slug.slug, blurb: input.blurb.trim() } };
 }
 
-/** Every field of a product. `isCarSpecific` is the generic-vs-floor-pan decision. */
+/** Every field of a product. `isCarSpecific` is whether the Fit Finder offers it. */
 export interface ProductInput {
   name: string;
   slug: string;

@@ -1,9 +1,8 @@
 # Implementation Plan
 
 ## Status
-**NOT STARTED — 0 done, 24 remaining.** No task below is marked `- [x]`: nothing in this feature has been
-written yet. The `_(verified: …)_` convention is used only for items checked by reading code, of which
-there are none here yet.
+**PARTIAL — 5 done, 20 remaining.** The bundle / Fit Finder-scope slice (section 9) is done and verified;
+sections 1–8 are not started.
 
 - [ ] 1. Stop the static catalogue arrays being a runtime source
   - [ ] 1.1 Add `listNavCategories()` to `src/lib/catalogue.ts` and switch `src/components/Footer.tsx` to it _(P0)_
@@ -66,3 +65,15 @@ there are none here yet.
     - _Requirements: 2.1, 2.3_
   - [ ] 8.4 Add a rendered-path check: create a category, assert it appears in the footer HTML; delete a product, assert its PDP returns `not-found` and it is absent from `/shop` and `src/app/sitemap.ts` _(P1)_
     - _Requirements: 1.1, 4.4, 8.1_
+
+- [ ] 9. Bundles out of the Fit Finder; its scope is the owner's switch
+  - [x] 9.1 Remove `full_set` from the `kind` union in `src/data/fitment.ts` and the `full-bundle` entry from `FLOOR_PAN_PRODUCTS` in `src/data/fitment-catalogue.ts` _(P0)_ _(verified: src/data/fitment.ts, src/data/fitment-catalogue.ts)_
+    - _Requirements: 12.2, 12.5_
+  - [x] 9.2 Gate the Fit Finder's offers on `product.isCarSpecific` and `archivedAt: null` in `src/lib/fitment-live.ts` _(P0)_ _(verified: src/lib/fitment-live.ts)_
+    - _Requirements: 13.1, 13.2, 13.5_
+  - [x] 9.3 Data: delete the 231 `full_set` variants (and their 427 `RangePrice`s), move `cargo-liner` / `full-bundle` / `seat-covers-3d` / `mud-flaps` out of the Fit Finder, sync the `full-bundle` variation price to its derived figure _(P0)_
+    - _Requirements: 12.5, 13.3_
+  - [x] 9.4 Relabel the admin flag "Show in the Fit Finder" in `src/app/admin/(console)/products/page.tsx` and `products/[id]/page.tsx`, and correct the stale `isCarSpecific` comments in `src/lib/catalogue.ts` and `src/app/admin/(console)/catalogue-guard.ts` _(P1)_ _(verified: src/app/admin/(console)/products/page.tsx, src/app/admin/(console)/products/[id]/page.tsx)_
+    - _Requirements: 13.1_
+  - [ ] 9.5 Add a kind to `FLOOR_PAN_PRODUCTS` when a genuinely new per-fit shape exists (an existing shape — a cargo liner — needs only the tick) _(P2)_
+    - _Requirements: 13.4_

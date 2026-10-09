@@ -137,8 +137,8 @@ export const MAT_TYPE_LABEL: Record<MatTypeKind, string> = {
  * two of them end up disagreeing. Built from the map rather than written out, so a
  * third layer cannot be added to one and forgotten in the other.
  *
- * A slug that is not a mat layer — the boot liner's, the bundle's — returns null,
- * which is correct: those are not layers and the layer choice does not apply to them.
+ * A slug that is not a mat layer — the boot liner's — returns null, which is correct: a
+ * boot liner is not a layer and the layer choice does not apply to it.
  */
 export function matTypeForVariation(variationSlug: string | null | undefined): MatTypeKind | null {
   if (!variationSlug) return null;

@@ -130,8 +130,8 @@ export default async function ProductDetailPage({
    *     with no base case. The answer to "a bundle of bundles" is one bundle with the
    *     parts listed flat, which is what the owner can already build here.
    *
-   * `isCarSpecific` is deliberately NOT a filter. The mats and the covers — the parts
-   * almost every bundle is made of — are `true`, because they are cut for a specific car.
+   * `isCarSpecific` is deliberately NOT a filter. The mats and the cargo liner are
+   * offered through the Fit Finder, and either can be a part.
    * Filtering them out would leave nothing to bundle but the mud flaps and the sun
    * shades, which is exactly backwards.
    *
@@ -182,7 +182,7 @@ export default async function ProductDetailPage({
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="font-display text-lg font-semibold">{product.name}</h2>
         <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-          {product.category.name} · {product.isCarSpecific ? "per car" : "generic"}
+          {product.category.name} · {product.isCarSpecific ? "in Fit Finder" : "shop only"}
         </span>
       </div>
       <p className="mt-1 font-mono text-xs text-accent-dim">/products/{product.slug}</p>
@@ -385,9 +385,10 @@ export default async function ProductDetailPage({
                 className="accent-gold"
               />
               <span>
-                Needs a car
+                Show in the Fit Finder
                 <span className="block text-[11px] text-fg-muted">
-                  Sold through the Fit Finder, only once a floor pan for that car is confirmed.
+                  Offered by the Fit Finder for a car. Floor mats are the default; tick a per-fit
+                  product (a cargo liner) to add it, untick to keep it in the shop only.
                 </span>
               </span>
             </label>

@@ -60,8 +60,8 @@ import { loadPromotions } from "@/lib/discounts-server";
  * than hand-written, so a column added here cannot drift from the mapper that reads it.
  *
  * The columns are chosen to be what the shop renders and nothing else: no `createdAt`,
- * no `updatedAt`, no `id`. `isCarSpecific` is in because `/shop` and the Fit Finder's
- * product step both need to know whether an item is gated on a car.
+ * no `updatedAt`, no `id`. `isCarSpecific` is in because `/shop` and the Fit Finder both
+ * need to know whether an item is offered by the Fit Finder or bought from the shop.
  */
 const productSelect = {
   id: true,
@@ -319,9 +319,10 @@ export async function listCategoryWithSales(
 /**
  * Products sold WITHOUT a car.
  *
- * `isCarSpecific: false` is the owner's per-product decision: a gear lever cover is
- * the same whatever car it goes in, so gating its sale on a fitment check would
- * refuse a sale that is perfectly well-defined. These are bought straight from
+ * `isCarSpecific: false` is the owner's per-product decision: the item is bought from
+ * the shop without a car, because it is either the same whatever car it goes in or it is
+ * a composition. Only the products the Fit Finder offers (floor mats, and a cargo liner
+ * when the owner ticks it) are `true`. These are bought straight from
  * `/shop` with no make, model or year.
  *
  * Excluded on purpose: a product is NOT included because it happens to have no
