@@ -208,9 +208,8 @@ export function validateLiveLayout(layout: Layout): string[] {
     // footwell variants (a cargo-liner claim then needs its own `kind: "boot"`
     // layout, and the owner confirms two pans per car), or `Layout.kind` is a
     // primary-pan label rather than an exclusion and §9.11 is withdrawn.
-    // `full_set` is not part of this either way: `full-bundle` is "Double Layer
-    // Mats + Seat Covers" covering "every footwell and every seat", so it makes
-    // no boot claim. Recorded as an open decision in `fitment-engine` §9.11.
+    // The bundle is not part of this at all: a bundle is a composition, never a
+    // floor-pan offer, so it makes no boot claim and has no `kind` here.
   }
   return problems;
 }
@@ -234,6 +233,14 @@ export async function loadLiveFitment(): Promise<LiveFitment> {
       where: { active: true, status: { not: "retired" } },
       include: {
         variants: {
+          // ONLY THE OFFERS THE OWNER PUT IN THE FIT FINDER.
+          //
+          // `Product.isCarSpecific` means "offered through the Fit Finder", and this is
+          // the one place that decides it. A product the owner switches off (a cargo
+          // liner, a bundle) keeps its rows but is invisible here, so the switch takes
+          // effect on the next request — no deploy, no re-seed. `archivedAt: null` is the
+          // same rule the storefront reads by.
+          where: { product: { isCarSpecific: true, archivedAt: null } },
           include: {
             product: { select: { slug: true, name: true } },
             // WHICH OPTION this offer is. Added 2026-10-05: Floor Mats is one product

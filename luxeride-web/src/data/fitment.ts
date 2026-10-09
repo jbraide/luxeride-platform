@@ -88,7 +88,7 @@ export interface LayoutVariant {
    * rather than the layer it assumed.
    */
   variationSlug?: string;
-  kind: "single_layer" | "double_layer" | "boot_liner" | "full_set";
+  kind: "single_layer" | "double_layer" | "boot_liner";
   /**
    * The layout-level DEFAULT, not the quote. Added by the per-year pricing change
    * on 2026-10-04, when `priceFrom` stopped being what a customer is charged and

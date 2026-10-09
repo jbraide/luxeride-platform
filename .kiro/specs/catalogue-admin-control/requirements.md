@@ -165,4 +165,26 @@ measured in this session (`src/lib/catalogue.ts`, `catalogue-actions.ts`, `prism
 1. THIS SPEC SHALL NOT re-specify the catalogue screen (`admin-console` Requirement 7) or destructive-action confirmation (`admin-console` Requirement 12); it removes the data-layer limits those screens depend on.
 2. WHERE this spec and `storefront-catalog` both touch catalogue rendering, `storefront-catalog` owns the display and this spec owns the data source.
 3. THE SYSTEM's changes to `prisma/seed.mts` SHALL NOT alter `prisma/seed-fitment.mts`, the fitment tables, or any row `fitment-engine` owns.
-4. THIS SPEC SHALL NOT loosen any locked decision in `_CONTEXT.md` §9, and in particular SHALL NOT expose an `Inferred` layout to the front end or merge two makes into one layout.
+4. THIS SPEC SHALL NOT loosen a locked decision in `_CONTEXT.md` §9, and in particular SHALL NOT expose an `Inferred` layout to the front end or merge two makes into one layout.
+
+### Requirement 12 — Bundles are compositions of any products, not floor-pan offers
+
+**User Story:** As the owner, I want a bundle to be any set of products I choose — mats-and-covers for a specific car, or a safety-kit bundle that has nothing to do with a floor pan — so that "bundle" means a composition rather than a floor-mat accessory.
+
+#### Acceptance Criteria
+1. THE SYSTEM SHALL treat a bundle as a composition of any two or more products in the catalogue, in any category (a cargo liner included), and SHALL NOT require any part to be a floor-mat product.
+2. THE SYSTEM SHALL NEVER offer a bundle through the Fit Finder, whatever its parts. A bundle has no `LayoutVariant` of any `kind`, and the kind `full_set` SHALL NOT exist.
+3. WHEN a bundle contains a car-specific part (floor mats) THEN its car SHALL be confirmed in the WhatsApp order, not in the Fit Finder.
+4. WHEN a bundle is priced THEN the price SHALL be derived from its parts (`derivePricing`, `src/lib/bundle-price.ts`) and no per-floor-pan price SHALL exist for it.
+5. ANY existing bundle that a `LayoutVariant` pinned to floor pans SHALL be migrated off that mechanism — its `full_set` rows and their `RangePrice`s removed — and `prisma/seed-fitment.mts` SHALL NOT recreate them.
+
+### Requirement 13 — The Fit Finder's product scope is the owner's switch
+
+**User Story:** As the owner, I want to decide which products the Fit Finder offers, so that it can be mats today and include a per-fit product like a cargo liner tomorrow without a deploy.
+
+#### Acceptance Criteria
+1. `Product.isCarSpecific` SHALL mean "offered through the Fit Finder", and the admin SHALL label it "Show in the Fit Finder".
+2. WHEN the owner turns the switch on or off THEN the Fit Finder SHALL reflect it on the next request, with no deploy and no re-seed — `loadLiveFitment` SHALL read only offers whose product is flagged in-fit and not archived.
+3. THE SYSTEM SHALL leave floor mats in-fit by default and every other product out of it, because mats are the only product the Fit Finder is for.
+4. WHEN a product is flagged in-fit THEN the fitment seed SHALL be able to offer it once per variation; a product with no offer kind SHALL NOT appear.
+5. THE SYSTEM SHALL NOT expose an offer whose product is archived.

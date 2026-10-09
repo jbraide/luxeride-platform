@@ -72,8 +72,15 @@ import type {
  * floor pan actually offers, so a car with a single-layer variant and no double-layer
  * one IS a single-layer-only car. See `matTypesForCar()`.
  *
- * `cargo-liner` and `full-bundle` remain in the catalogue and on their own pages —
- * they are sold, just not through the Fit Finder yet.
+ * `cargo-liner` may be OFFERED by a pan (it is a product cut to a boot), but whether it
+ * appears in the Fit Finder is the OWNER's per-product switch: `loadLiveFitment` reads
+ * only offers whose product is flagged in-fit, so ticking "Show in the Fit Finder" in
+ * `/admin/products` turns it on with no deploy.
+ *
+ * A BUNDLE IS NEVER AN OFFER. A bundle is a composition of other products, so it has no
+ * floor pan to be cut for; its price is derived from its parts and its car is confirmed
+ * in the WhatsApp order. That is why there is no `full_set` kind and no `full-bundle`
+ * entry here — the list below is products a pan can be cut for, and a bundle is not one.
  */
 export const MAT_TYPE_KINDS = ["single_layer", "double_layer"] as const;
 export type MatTypeKind = (typeof MAT_TYPE_KINDS)[number];
@@ -95,7 +102,6 @@ const FLOOR_PAN_PRODUCTS = [
   { kind: "single_layer", slug: "floor-mats", variationSlug: "single-layer" },
   { kind: "double_layer", slug: "floor-mats", variationSlug: "double-layer" },
   { kind: "boot_liner", slug: "cargo-liner", variationSlug: "cargo-liner" },
-  { kind: "full_set", slug: "full-bundle", variationSlug: "full-bundle" },
 ] as const satisfies ReadonlyArray<{
   kind: LayoutVariant["kind"];
   slug: FitProductSlug;
