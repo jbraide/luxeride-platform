@@ -1120,6 +1120,17 @@ export async function saveBundle(formData: FormData): Promise<void> {
    * go with it, which is right — they are meaningless without the bundle they belong to.
    */
   if (!isBundle) {
+    // The explicit `removeBundle` refuses when the product has order lines. The untick
+    // is the same deletion reached from the other form, so it must refuse for the same
+    // reason and with the same sentence — otherwise "untick it in the editor" is the
+    // bypass around a guard that exists to protect a bundle somebody has been sold.
+    const references = await productReferences(productId);
+    if (!references) {
+      backTo("/admin/products", refusalParams(values, [{ field: "productId", code: "productNotFound" }]));
+    }
+    const refusal = bundleRemoval({ isBundle: true, orderItems: references.orderItems });
+    if (refusal) backTo(back, refusalParams(values, [refusal]));
+
     const existing = await prisma.bundle.findUnique({
       where: { productId },
       select: { _count: { select: { items: true } } },

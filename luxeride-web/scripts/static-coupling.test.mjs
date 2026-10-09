@@ -15,7 +15,7 @@
  *
  * This test is the mechanical form of that rule. It reads every module under
  * `src/app/**` and `src/components/**` and fails if any of them imports
- * `CATEGORIES`, `PRODUCTS`, `BUNDLES` or `getProductBySlug` from
+ * `CATEGORIES`, `PRODUCTS`, `BUNDLES`, `getProductBySlug` or `getCategoryBySlug` from
  * `@/data/products` AS A VALUE.
  *
  * ALLOWED, ON PURPOSE:
@@ -41,7 +41,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /** The named exports that ARE catalogue data, as opposed to a type or a helper. */
-const FORBIDDEN = ["CATEGORIES", "PRODUCTS", "BUNDLES", "getProductBySlug"];
+const FORBIDDEN = ["CATEGORIES", "PRODUCTS", "BUNDLES", "getProductBySlug", "getCategoryBySlug"];
 
 /** Every module the storefront renders, or is rendered by. */
 const SCAN_DIRS = ["src/app", "src/components"];

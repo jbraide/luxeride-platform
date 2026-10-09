@@ -119,7 +119,11 @@ export default async function CategoryPage({
           </div>
         ) : (
           <>
-            <CatalogExplorer products={products} mediaBySlug={resolveAllMedia(products.map((p) => p.slug))} />
+            <CatalogExplorer
+              products={products}
+              mediaBySlug={resolveAllMedia(products.map((p) => p.slug))}
+              categoryNames={Object.fromEntries(allCategories.map((c) => [c.slug, c.name]))}
+            />
 
             <div className="mt-10 flex flex-wrap gap-2">
               {allCategories.filter((c) => c.slug !== category.slug).map((c) => (

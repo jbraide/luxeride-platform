@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import ProductCard from "@/components/ProductCard";
 import { LinkButton } from "@/components/Button";
-import { getCategoryBySlug, priceRange, type Product } from "@/data/products";
+import { priceRange, type Product } from "@/data/products";
 import { whatsappLink } from "@/lib/whatsapp";
 import type { ProductMedia } from "@/lib/media";
 
@@ -11,9 +11,9 @@ import type { ProductMedia } from "@/lib/media";
  * Search, sort and the empty state for the catalogue.
  *
  * A Client Component because the query and sort are interactive state. It
- * receives the whole array rather than fetching: the catalogue is seven items
- * in a compile-time constant, so a request per keystroke would be a round trip
- * to learn something already in the bundle.
+ * receives the whole array rather than fetching: the catalogue is resolved on the
+ * server and handed in, so a request per keystroke would be a round trip to learn
+ * something already in hand.
  *
  * The result count is announced through `aria-live` AND shown as visible copy.
  * Silent filtering is disorienting — a visitor who types "mats" and sees four
@@ -36,6 +36,7 @@ const SORT_LABELS: { value: SortKey; label: string }[] = [
 export default function CatalogExplorer({
   products,
   mediaBySlug,
+  categoryNames,
 }: {
   products: Product[];
   /**
@@ -44,6 +45,13 @@ export default function CatalogExplorer({
    * handed down, exactly as `FitFinder` receives `mediaBySlug`.
    */
   mediaBySlug: Record<string, ProductMedia | null>;
+  /**
+   * Category slug → name, resolved from the DATABASE by the server page. Search
+   * matches on a category's name, and a Client Component cannot look that up in
+   * `src/data/products.ts` — a category created in `/admin/categories` would then
+   * be unsearchable, and the static array is not a runtime source of truth.
+   */
+  categoryNames: Record<string, string>;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("featured");
@@ -53,7 +61,7 @@ export default function CatalogExplorer({
 
     const matched = needle
       ? products.filter((product) => {
-          const category = getCategoryBySlug(product.categorySlug);
+          const categoryName = categoryNames[product.categorySlug];
           return (
             product.name.toLowerCase().includes(needle) ||
             product.note.toLowerCase().includes(needle) ||
@@ -62,7 +70,7 @@ export default function CatalogExplorer({
             // note; searching for its material finds nothing, which is honest, and
             // calling `.toLowerCase()` on undefined would take the whole page down.
             (product.materials ?? "").toLowerCase().includes(needle) ||
-            (category?.name.toLowerCase().includes(needle) ?? false)
+            (categoryName?.toLowerCase().includes(needle) ?? false)
           );
         })
       : products;
@@ -81,7 +89,7 @@ export default function CatalogExplorer({
       // "featured" is source order — the catalogue's own curation.
     }
     return sorted;
-  }, [products, query, sort]);
+  }, [products, query, sort, categoryNames]);
 
   const total = products.length;
   const count = results.length;

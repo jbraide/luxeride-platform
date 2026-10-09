@@ -59,7 +59,11 @@ export default async function ShopPage() {
         ))}
       </div>
 
-      <CatalogExplorer products={products} mediaBySlug={resolveAllMedia(products.map((p) => p.slug))} />
+      <CatalogExplorer
+        products={products}
+        mediaBySlug={resolveAllMedia(products.map((p) => p.slug))}
+        categoryNames={Object.fromEntries(categories.map((c) => [c.slug, c.name]))}
+      />
     </div>
   );
 }
