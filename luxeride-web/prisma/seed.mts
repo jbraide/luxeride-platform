@@ -5,6 +5,7 @@ import { CATALOGUE_LAYOUTS, CATALOGUE_MAPPINGS } from "../src/data/fitment-catal
 import { LOCATIONS } from "../src/data/locations.ts";
 import { BUNDLES, CATEGORIES, PRODUCTS } from "../src/data/products.ts";
 import { deriveBundlePrices, isBundleDiscountKind } from "../src/lib/bundle-price.ts";
+import { shouldSeedTable } from "./seed-guard.ts";
 
 // Run with `npm run db:seed` -> `node prisma/seed.mts`.
 //
@@ -19,12 +20,17 @@ import { deriveBundlePrices, isBundleDiscountKind } from "../src/lib/bundle-pric
 //
 // WHAT THIS SEED OWNS, AND WHAT IT LEAVES ALONE
 //
-// It owns the columns that mirror `src/data/*.ts`, because that is what makes the
-// database a copy of the catalogue rather than a second, drifting source:
+// It is a FIRST-RUN FIXTURE, not a synchroniser. It counts every table it owns
+// before it writes anything, seeds a table only when that table is empty, and
+// otherwise leaves the existing rows exactly as they are. That is what makes a
+// re-run a no-op — and, specifically, what stops a deploy from overwriting an edit
+// the owner made in `/admin` or resurrecting a row they deleted.
 //
-//   Category  slug, name, blurb
+// On an empty database it inserts the columns that mirror `src/data/*.ts`:
+//
+//   Category  slug, name, blurb, seoTitle, seoDescription, heroLine
 //   Product   slug, name, note, regular, premium, rowApplicable,
-//             threeRowSurcharge, images, availability
+//             threeRowSurcharge, images, availability, and the PDP prose
 //   Location  slug, name, fee, etaText
 //   Make      defaultTier, note, isSearchable
 //   Vehicle   model, isPopular, status
@@ -66,29 +72,58 @@ function isModelUnavailable(brand: string, model: string): boolean {
 }
 
 async function main() {
+  // ── The first-run guard ────────────────────────────────────────────────────
+  //
+  // Count every table this file owns once, before writing anything. A non-empty
+  // table is live data and is skipped whole; only an empty table is seeded. The
+  // decision itself is the pure `shouldSeedTable`, kept in `./seed-guard.ts` so it
+  // can be unit-tested without a database (`scripts/seed-guard.test.mjs`).
+  const counts = {
+    categories: await prisma.category.count(),
+    products: await prisma.product.count(),
+    locations: await prisma.location.count(),
+    makes: await prisma.make.count(),
+    vehicles: await prisma.vehicle.count(),
+  };
+  const seedCategories = shouldSeedTable(counts.categories);
+  const seedProducts = shouldSeedTable(counts.products);
+  const seedLocations = shouldSeedTable(counts.locations);
+  const seedMakes = shouldSeedTable(counts.makes);
+  const seedVehicles = shouldSeedTable(counts.vehicles);
+
+  // Tables deliberately left untouched, so the count assertion at the end does not
+  // mistake "the owner owns this table now" for "the seed fell short". The fitment
+  // tables are never skipped here, so their check still fires.
+  const leftAlone = new Set<string>();
+  if (!seedCategories) leftAlone.add("categories");
+  if (!seedProducts) {
+    leftAlone.add("products");
+    leftAlone.add("variations");
+  }
+  if (!seedLocations) leftAlone.add("locations");
+  if (!seedMakes) leftAlone.add("makes");
+  if (!seedVehicles) leftAlone.add("vehicles");
+
   // ── Categories ─────────────────────────────────────────────────────────────
-  for (const category of CATEGORIES) {
-    const fields = {
-      name: category.name,
-      blurb: category.blurb,
-      // The category page's own copy. Unlike `isCarSpecific`, this IS written on
-      // every run: it is authored prose in `src/data/products.ts`, there is no admin
-      // field for it, and it is the seed's job to keep the two in step. If a category
-      // is created in `/admin/categories` instead, these stay null and the storefront
-      // says so honestly rather than inventing a headline.
-      seoTitle: category.seoTitle,
-      seoDescription: category.seoDescription,
-      heroLine: category.heroLine,
-    };
-    await prisma.category.upsert({
-      where: { slug: category.slug },
-      update: fields,
-      create: { slug: category.slug, ...fields },
+  if (!seedCategories) console.log(`  categories left alone (${counts.categories} row(s) already there)`);
+  for (const category of seedCategories ? CATEGORIES : []) {
+    await prisma.category.create({
+      data: {
+        slug: category.slug,
+        name: category.name,
+        blurb: category.blurb,
+        // The category page's own copy. It has no admin field, so the seed is its
+        // author on the empty-table path — and only there.
+        seoTitle: category.seoTitle,
+        seoDescription: category.seoDescription,
+        heroLine: category.heroLine,
+      },
     });
   }
 
   // ── Products ───────────────────────────────────────────────────────────────
-  for (const product of PRODUCTS) {
+  if (!seedProducts) console.log(`  products   left alone (${counts.products} row(s) already there)`);
+  for (const product of seedProducts ? PRODUCTS : []) {
     const category = await prisma.category.findUnique({ where: { slug: product.categorySlug } });
     if (!category) {
       throw new Error(
@@ -96,12 +131,12 @@ async function main() {
       );
     }
 
-    // `isCarSpecific` is NOT written here, deliberately. Every product in
+    // `isCarSpecific` is NOT written, deliberately. Every product in
     // `src/data/products.ts` is cut to a specific floor pan, so the default of `true`
     // is correct for all of them — but the flag is the OWNER's per-product decision
     // (a gear cover is generic, a mat is not), it is edited in `/admin/products`, and
-    // a seed that rewrote it would silently undo an edit every time it was run. It
-    // appears in neither `update` nor `create`.
+    // a seed that wrote it would silently undo an edit. It is absent from the columns
+    // below, so `create` leaves it at its default.
     const fields = {
       name: product.name,
       note: product.note,
@@ -118,9 +153,9 @@ async function main() {
       // with nowhere to put its description is the rigidity the owner asked to be
       // removed.
       //
-      // Written on every run, unlike `isCarSpecific` below — this is authored prose
-      // with no admin field behind it, so the seed is the authority. `faq` is `Json`
-      // and `inBox` an array, which is why both need casting below.
+      // Written once, on the empty-table path — this is authored prose with no admin
+      // field behind it, so the seed is its author the one time it runs. `faq` is
+      // `Json` and `inBox` an array, which is why both need casting.
       materials: product.materials,
       inBox: product.inBox,
       coverage: product.coverage,
@@ -130,11 +165,7 @@ async function main() {
       seoDescription: product.seoDescription,
     };
 
-    const upserted = await prisma.product.upsert({
-      where: { slug: product.slug },
-      update: fields,
-      create: { slug: product.slug, ...fields },
-    });
+    const created = await prisma.product.create({ data: { slug: product.slug, ...fields } });
 
     // ── The product's OPTIONS ─────────────────────────────────────────────────
     //
@@ -153,12 +184,13 @@ async function main() {
     // `src/data/products.ts` rather than derived here: `?variation=double-layer` is in
     // an ad and in a bookmark, and a slug derived from a name would change under it.
     //
-    // `update` CARRIES THE PRICE but nothing else the owner owns. The seed row is
-    // seeded data and must track `src/data/products.ts` — the seat covers proved it, by
-    // moving the product to ₦100,000 while the variation sat at ₦52,000 and quoted a
-    // price nobody charges. Everything else is left alone: an option the owner created
-    // in `/admin/products/[id]` is theirs, and a seed that overwrites operator edits is a
-    // seed people learn to fear.
+    // THE OPTIONS ARE SEEDED ONCE, with the product, and never touched again — the
+    // same first-run rule as the rest of this file. Before that rule an `update` carried
+    // the price so the row tracked `src/data/products.ts`, and the seat covers proved why
+    // that was fragile: the product moved to ₦100,000 while its variation sat at ₦52,000
+    // and quoted a price nobody charges. The fix is not to track harder but to stop
+    // writing: an option the owner created or re-priced in `/admin/products/[id]` is
+    // theirs, and a seed that overwrites operator edits is a seed people learn to fear.
     const options: {
       slug: string;
       name: string;
@@ -184,17 +216,9 @@ async function main() {
           ];
 
     for (const [index, option] of options.entries()) {
-      await prisma.productVariation.upsert({
-        where: { productId_slug: { productId: upserted.id, slug: option.slug } },
-        update: {
-          name: option.name,
-          regular: option.regular,
-          premium: option.premium,
-          rowApplicable: option.rowApplicable,
-          threeRowSurcharge: option.threeRowSurcharge ?? null,
-        },
-        create: {
-          productId: upserted.id,
+      await prisma.productVariation.create({
+        data: {
+          productId: created.id,
           slug: option.slug,
           name: option.name,
           regular: option.regular,
@@ -220,11 +244,16 @@ async function main() {
   //
   // The ordering is load-bearing and is the whole reason this is a separate pass rather
   // than a field on the loop above: the product loop writes `regular`/`premium` from
-  // `src/data/products.ts` on every run, so a derived price written DURING that loop
-  // would be stamped straight back over. Running afterwards means the derivation is the
-  // last word, which is also the right answer to "the catalogue says 110,000 and the
-  // parts say something else" — the parts win, because the parts are the thing.
-  for (const bundle of BUNDLES) {
+  // `src/data/products.ts`, so a derived price written DURING that loop would be stamped
+  // straight back over. Running afterwards means the derivation is the last word, which
+  // is also the right answer to "the catalogue says 110,000 and the parts say something
+  // else" — the parts win, because the parts are the thing.
+  //
+  // Seeded only on the first run, with the products it is made of. Keyed on the PRODUCT
+  // table rather than `Bundle`'s own count on purpose: an owner who removes a bundle
+  // (`removeBundle` in `/admin`) leaves its product behind, so a guard on `Bundle` alone
+  // would see an empty table and put the bundle straight back.
+  for (const bundle of seedProducts ? BUNDLES : []) {
     const bundleProduct = await prisma.product.findUnique({
       where: { slug: bundle.slug },
       select: { id: true },
@@ -270,15 +299,9 @@ async function main() {
       parts.push({ productId: part.id, variationId, qty: item.qty, sortOrder: index, regular, premium });
     }
 
-    await prisma.bundle.upsert({
-      where: { productId: bundleProduct.id },
-      create: {
+    await prisma.bundle.create({
+      data: {
         productId: bundleProduct.id,
-        discountKind: bundle.discountKind,
-        discountValue: bundle.discountValue,
-        derivePricing: true,
-      },
-      update: {
         discountKind: bundle.discountKind,
         discountValue: bundle.discountValue,
         derivePricing: true,
@@ -286,15 +309,13 @@ async function main() {
     });
 
     /*
-     * THE PARTS ARE REPLACED, NOT MERGED.
+     * THE PARTS ARE WRITTEN ONCE, WITH THE BUNDLE.
      *
-     * `deleteMany` then `createMany` makes the seed the authority on the COMPOSITION,
-     * exactly as it is on the discount — which is what it has to be, because a half-applied
-     * composition is a bundle priced from a list the owner cannot see. `/admin` is where
-     * compositions are edited once the product exists, and re-running the seed restores
-     * the definition in this file.
+     * Creating them makes the seed the authority on the COMPOSITION the one time it runs
+     * — the same first-run rule as everything else here. `/admin` is where compositions
+     * are edited once the product exists, and the seed must not come back and overwrite
+     * that: a half-applied composition is a bundle priced from a list the owner cannot see.
      */
-    await prisma.bundleItem.deleteMany({ where: { bundleId: bundleProduct.id } });
     for (const part of parts) {
       await prisma.bundleItem.create({
         data: {
@@ -326,39 +347,42 @@ async function main() {
   }
 
   // ── Locations ──────────────────────────────────────────────────────────────
-  for (const zone of LOCATIONS) {
+  if (!seedLocations) console.log(`  locations  left alone (${counts.locations} row(s) already there)`);
+  for (const zone of seedLocations ? LOCATIONS : []) {
     const fields = { name: zone.name, fee: zone.fee, etaText: zone.eta };
-    await prisma.location.upsert({
-      where: { slug: slugify(zone.name) },
-      update: fields,
-      create: { slug: slugify(zone.name), ...fields },
-    });
+    await prisma.location.create({ data: { slug: slugify(zone.name), ...fields } });
   }
 
   // ── Makes ──────────────────────────────────────────────────────────────────
   // "Other" is a real Make on purpose: `FLAT_CARS` excludes it, and dropping it
   // would lose the "Enter model on WhatsApp" escape hatch entirely.
   const makeIds = new Map<string, string>();
-  for (const [name, brand] of Object.entries(BRANDS)) {
-    const fields = {
-      defaultTier: brand.tier,
-      note:
-        name === "Other"
-          ? "The catch-all. Not searchable: a customer who picks it is routed to WhatsApp."
-          : null,
-      isSearchable: name !== "Other",
-    };
-    const make = await prisma.make.upsert({
-      where: { name },
-      update: fields,
-      create: { name, ...fields },
-    });
-    makeIds.set(name, make.id);
+  if (!seedMakes) {
+    console.log(`  makes      left alone (${counts.makes} row(s) already there)`);
+    // Vehicles reference a make by id, so map the makes that are already there
+    // rather than leaving the map empty for the vehicle loop below.
+    for (const make of await prisma.make.findMany({ select: { id: true, name: true } })) {
+      makeIds.set(make.name, make.id);
+    }
+  } else {
+    for (const [name, brand] of Object.entries(BRANDS)) {
+      const fields = {
+        defaultTier: brand.tier,
+        note:
+          name === "Other"
+            ? "The catch-all. Not searchable: a customer who picks it is routed to WhatsApp."
+            : null,
+        isSearchable: name !== "Other",
+      };
+      const make = await prisma.make.create({ data: { name, ...fields } });
+      makeIds.set(name, make.id);
+    }
   }
 
   // ── Vehicles ───────────────────────────────────────────────────────────────
+  if (!seedVehicles) console.log(`  vehicles   left alone (${counts.vehicles} row(s) already there)`);
   const popular = new Set(POPULAR_CARS.map(([brand, model]) => `${brand}::${model}`));
-  for (const car of FLAT_CARS) {
+  for (const car of seedVehicles ? FLAT_CARS : []) {
     const makeId = makeIds.get(car.brand);
     if (!makeId) {
       throw new Error(`seed: FLAT_CARS names make "${car.brand}", which is not in BRANDS.`);
@@ -372,11 +396,7 @@ async function main() {
       status: isModelUnavailable(car.brand, car.model) ? "excluded" : "recognised",
     };
 
-    await prisma.vehicle.upsert({
-      where: { sourceKey },
-      update: fields,
-      create: { sourceKey, ...fields },
-    });
+    await prisma.vehicle.create({ data: { sourceKey, ...fields } });
   }
 
   // ── The count assertion ────────────────────────────────────────────────────
@@ -431,10 +451,13 @@ async function main() {
   for (const table of Object.keys(expected) as Array<keyof typeof expected>) {
     const want = expected[table];
     const got = actual[table];
-    console.log(
-      `  ${table.padEnd(11)} ${String(got).padStart(4)} / ${want}${got < want ? "  <-- SHORT" : ""}`,
-    );
-    if (got < want) short.push(`${table}: ${got} of ${want}`);
+    // A table the guard deliberately skipped is the owner's now: a count below `want`
+    // is a deletion they chose, not a short seed, so it reads "(left alone)" and does
+    // not fail. The fitment tables (layouts, mappings) are never skipped here, so their
+    // check still fires when `db:seed:fitment` has not been run.
+    const note = leftAlone.has(table) ? "  (left alone)" : got < want ? "  <-- SHORT" : "";
+    console.log(`  ${table.padEnd(11)} ${String(got).padStart(4)} / ${want}${note}`);
+    if (!leftAlone.has(table) && got < want) short.push(`${table}: ${got} of ${want}`);
   }
 
   // AND A CEILING, which the loop above has no way to express.

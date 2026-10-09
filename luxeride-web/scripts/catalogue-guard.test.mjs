@@ -20,6 +20,13 @@
  * 5. **Every failure, not the first.** Same reasoning as `confirm-guard.test.mjs`:
  *    a form that reports one field at a time is a form people defeat with a
  *    plausible value.
+ * 6. **A hard delete is refused by a fact about other rows.** An order line cannot be
+ *    undone and a floor pan that still offers the product loses a fit claim with it,
+ *    so the rule has to name which reference is holding the row rather than let a
+ *    Prisma P2003 be the explanation.
+ * 7. **Archived rows stay off the storefront.** The archive switch is only worth
+ *    anything if every storefront read filters it, so the source of the read path is
+ *    asserted here — there is no database in this process to assert it against.
  *
  * NO DATABASE, ON PURPOSE. The "is this slug taken" question is the caller's, for
  * the same reason `ConfirmationContext.confirmedCodes` is: only the database knows,
@@ -27,14 +34,20 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   RESERVED_SLUGS,
+  bundleRemoval,
+  categoryRemoval,
+  productRemoval,
   slugify,
   validateCategory,
+  validateCategoryMove,
   validateProduct,
   validateSlug,
   validateVariation,
+  variationRemoval,
 } from "../src/app/admin/(console)/catalogue-guard.ts";
 
 const codes = (failures) => failures.map((failure) => failure.code);
@@ -277,4 +290,107 @@ test("a variation with no name or no prices is refused, reporting each one", () 
     assert.ok(codes3.includes("required"));
     assert.ok(codes3.includes("badPrice"));
   }
+});
+
+// ─── Removal rules (task 8.1) ────────────────────────────────────────────────
+//
+// A hard delete is refused by a fact about OTHER rows, and the console has to say
+// which — a Prisma P2003 is not an explanation. These are the same rules the delete
+// actions run, moved out of the database so they can be exercised with plain numbers.
+
+test("a product with no references may be deleted", () => {
+  assert.equal(productRemoval({ orderItems: 0, layoutVariants: 0 }), null);
+});
+
+test("an order-referenced product is refused, and the field names the orders", () => {
+  // Orders win the tie because they are the reference a delete cannot undo, and the
+  // case the screen offers `archive` as the reversible answer to.
+  assert.deepEqual(productRemoval({ orderItems: 2, layoutVariants: 3 }), {
+    field: "orderItems",
+    code: "productInUse",
+  });
+});
+
+test("a product only offered on a floor pan is refused, naming the floor pan", () => {
+  assert.deepEqual(productRemoval({ orderItems: 0, layoutVariants: 1 }), {
+    field: "layoutVariants",
+    code: "productInUse",
+  });
+});
+
+test("a variation is refused for either reference, with the one sentence", () => {
+  for (const references of [
+    { orderItems: 1, layoutVariants: 0 },
+    { orderItems: 0, layoutVariants: 1 },
+  ]) {
+    assert.deepEqual(variationRemoval(references), { field: "name", code: "variationInUse" });
+  }
+  assert.equal(variationRemoval({ orderItems: 0, layoutVariants: 0 }), null);
+});
+
+test("a category holding products cannot be deleted on its own", () => {
+  assert.deepEqual(categoryRemoval(3), { field: "name", code: "categoryNotEmpty" });
+  assert.equal(categoryRemoval(0), null);
+});
+
+test("a bundle may be removed only when it is one and nothing sold it", () => {
+  assert.deepEqual(bundleRemoval({ isBundle: false, orderItems: 0 }), {
+    field: "productId",
+    code: "notABundle",
+  });
+  assert.deepEqual(bundleRemoval({ isBundle: true, orderItems: 1 }), {
+    field: "orderItems",
+    code: "productInUse",
+  });
+  assert.equal(bundleRemoval({ isBundle: true, orderItems: 0 }), null);
+});
+
+test("a category move needs a target that is chosen, known and not the source", () => {
+  const ids = ["floor-mats", "seat-covers", "gear-covers"];
+  assert.deepEqual(validateCategoryMove({ fromId: "floor-mats", toId: "" }, ids), {
+    ok: false,
+    failure: { field: "toCategoryId", code: "required" },
+  });
+  // Moving a category into itself is the same mistake as naming none: no move happened.
+  assert.deepEqual(validateCategoryMove({ fromId: "floor-mats", toId: "floor-mats" }, ids), {
+    ok: false,
+    failure: { field: "toCategoryId", code: "required" },
+  });
+  assert.deepEqual(validateCategoryMove({ fromId: "floor-mats", toId: "nope" }, ids), {
+    ok: false,
+    failure: { field: "toCategoryId", code: "unknownCategory" },
+  });
+  const moved = validateCategoryMove({ fromId: "floor-mats", toId: "seat-covers" }, ids);
+  assert.equal(moved.ok, true);
+  if (moved.ok) assert.equal(moved.toId, "seat-covers");
+});
+
+// ─── The storefront read path hides archived rows (task 8.4) ─────────────────
+//
+// The rendered behaviour — an archived or deleted product gone from /shop, its PDP
+// falling to not-found — is a property of ONE file: the storefront reads in
+// `src/lib/catalogue.ts`. There is no database in this test process (the same reason
+// every rule above is a plain literal), so the check is made against the source. If a
+// read loses its `archivedAt: null` filter the row comes back and the PDP renders
+// instead of 404ing, which is exactly the regression this pins.
+test("no storefront catalogue read can return an archived row", () => {
+  const source = readFileSync(new URL("../src/lib/catalogue.ts", import.meta.url), "utf8");
+  for (const needle of [
+    // listProducts
+    "where: { archivedAt: null }",
+    // listProductsInCategory
+    "where: { category: { slug: categorySlug }, archivedAt: null }",
+    // listGenericProducts
+    "where: { isCarSpecific: false, archivedAt: null }",
+    // getProduct — findFirst, because the filter is the unique slug AND not-archived
+    "where: { slug, archivedAt: null }",
+    // productSelect's variations sub-select
+    "where: { archivedAt: null },",
+  ]) {
+    assert.ok(source.includes(needle), `catalogue.ts no longer filters archived rows here: ${needle}`);
+  }
+  assert.ok(
+    source.includes("prisma.product.findFirst({ where: { slug, archivedAt: null }"),
+    "getProduct must use a filtered findFirst, or an archived slug still resolves",
+  );
 });

@@ -4,16 +4,21 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import {
   addBundleItem,
+  archiveProduct,
+  archiveVariation,
   createVariation,
   deleteProduct,
   deleteVariation,
+  removeBundle,
   removeBundleItem,
   saveBundle,
+  unarchiveProduct,
+  unarchiveVariation,
   updateProduct,
   updateVariation,
 } from "../../catalogue-actions";
 import { messageFor, readEcho, readFailures, slugify, STOCK_STATES } from "../../catalogue-guard";
-import { BUNDLE_DISCOUNT_KINDS, deriveBundlePrices } from "@/lib/bundle-price";
+import { BUNDLE_DISCOUNT_KINDS, deriveBundlePrices, MIN_BUNDLE_PRICE } from "@/lib/bundle-price";
 
 /**
  * `/admin/products/[id]` — one product, and its VARIATIONS.
@@ -91,6 +96,24 @@ export default async function ProductDetailPage({
           },
         },
         _count: { select: { layoutVariants: true, orderItems: true } },
+        /*
+         * WHAT THE FRONT END ACTUALLY QUOTES FOR A CAR.
+         *
+         * Locked decision 3 puts the price on the layout as `priceFrom`, so for a
+         * confirmed vehicle the storefront shows THIS figure, not the catalogue prices
+         * below. Loading it here is what lets the editor show both side by side rather
+         * than letting a catalogue-price edit silently lose to, or overwrite, a layout
+         * price (Requirement 7).
+         */
+        layoutVariants: {
+          select: {
+            id: true,
+            kind: true,
+            priceFrom: true,
+            layout: { select: { internalCode: true, customerName: true } },
+          },
+          orderBy: { kind: "asc" },
+        },
       },
     }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
@@ -163,6 +186,12 @@ export default async function ProductDetailPage({
         </span>
       </div>
       <p className="mt-1 font-mono text-xs text-accent-dim">/products/{product.slug}</p>
+      {product.archivedAt && (
+        <p className="mt-2 inline-block rounded-lg border border-[#FF6B35]/50 px-3 py-1 text-xs text-[#FF6B35]">
+          Archived — off the shop. Its order history and prices are kept, and it can be put back
+          at any time.
+        </p>
+      )}
 
 
       {failures.size > 0 && (
@@ -201,6 +230,33 @@ export default async function ProductDetailPage({
             read-only in effect — change the parts or the discount in the Bundle section
             below and this figure follows.
           </p>
+        )}
+
+        {/* Requirement 7: the catalogue price and the layout's `priceFrom` are two
+            facts, and the operator has to see which one a confirmed car is quoted.
+            Locked decision 3 puts the site's price on the layout, so the layout figure
+            is the one that wins wherever a car is involved. */}
+        {product.layoutVariants.length > 0 && (
+          <div className="mt-2 rounded-lg border border-border bg-surface/60 px-3 py-2 text-xs leading-relaxed text-fg-muted">
+            <p className="text-fg/80">
+              For a confirmed car the storefront does not show the two boxes below — it shows
+              the floor pan&apos;s own price. That figure is the one the customer is quoted
+              (locked decision 3):
+            </p>
+            <ul className="mt-1.5 space-y-0.5 font-mono">
+              {product.layoutVariants.map((variant) => (
+                <li key={variant.id}>
+                  {variant.layout.customerName} · {variant.kind.replace(/_/g, " ")} ·{" "}
+                  <span className="text-accent">{naira(variant.priceFrom)}</span>{" "}
+                  <span className="text-fg-muted">({variant.layout.internalCode})</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5">
+              Editing the prices below changes the shop figure only. It never rewrites a floor
+              pan&apos;s price, which is set per year range on the car&apos;s own page.
+            </p>
+          </div>
         )}
 
         <form method="post" action={updateProduct} className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -490,6 +546,9 @@ export default async function ProductDetailPage({
 
                   <div className="sm:col-span-6 flex flex-wrap items-baseline justify-between gap-3 border-t border-border pt-3">
                     <span className="text-[11px] text-fg-muted">
+                      {variation.archivedAt && (
+                        <span className="text-[#FF6B35]">Archived · </span>
+                      )}
                       {naira(variation.regular)} regular · {naira(variation.premium)} premium
                       {variation._count.orderItems > 0 &&
                         ` · sold ${variation._count.orderItems}×`}
@@ -498,19 +557,35 @@ export default async function ProductDetailPage({
                           variation._count.layoutVariants === 1 ? "" : "s"
                         }`}
                     </span>
-                    <button
-                      type="submit"
-                      formAction={deleteVariation}
-                      disabled={variation._count.orderItems > 0}
-                      title={
-                        variation._count.orderItems > 0
-                          ? "This variation has been sold. Mark it out of stock instead."
-                          : "Delete this variation"
-                      }
-                      className="text-xs text-fg-muted underline-offset-4 hover:text-[#FF6B35] hover:text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Delete
-                    </button>
+                    <span className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="submit"
+                        formAction={deleteVariation}
+                        disabled={variation._count.orderItems > 0}
+                        title={
+                          variation._count.orderItems > 0
+                            ? "This variation has been sold. Archive it or mark it out of stock instead."
+                            : "Delete this variation"
+                        }
+                        className="text-xs text-fg-muted underline-offset-4 hover:text-[#FF6B35] hover:text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Delete
+                      </button>
+                      {/* Requirement 6.3: a variation that cannot be deleted still has an
+                          honest, reversible path — off the product page, kept for the order. */}
+                      <button
+                        type="submit"
+                        formAction={variation.archivedAt ? unarchiveVariation : archiveVariation}
+                        title={
+                          variation.archivedAt
+                            ? "Put this option back on the product page"
+                            : "Take this option off the product page without deleting anything"
+                        }
+                        className="text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
+                      >
+                        {variation.archivedAt ? "Put back" : "Archive"}
+                      </button>
+                    </span>
                   </div>
                 </form>
               </li>
@@ -620,7 +695,9 @@ export default async function ProductDetailPage({
 
       {/* ── Danger ───────────────────────────────────────────────────────── */}
       <section className="mt-12 border-t border-border pt-6">
-        <h3 className="font-display text-base font-semibold text-[#FF6B35]">Delete this product</h3>
+        <h3 className="font-display text-base font-semibold text-[#FF6B35]">
+          Archive or delete this product
+        </h3>
         <p className="mt-1 max-w-prose text-xs leading-relaxed text-fg-muted">
           {product._count.layoutVariants > 0
             ? `Refused: this product is cut for ${product._count.layoutVariants} floor pan${
@@ -632,16 +709,41 @@ export default async function ProductDetailPage({
                 } reference it. A sold product cannot vanish.`
               : "Nothing is sold or cut for this product, so deleting it removes only itself."}
         </p>
-        <form method="post" action={deleteProduct} className="mt-3">
-          <input type="hidden" name="id" value={product.id} />
-          <button
-            type="submit"
-            disabled={product._count.layoutVariants > 0 || product._count.orderItems > 0}
-            className="rounded-lg border border-[#FF6B35] px-4 py-2 text-sm text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Delete product
-          </button>
-        </form>
+        <p className="mt-1 max-w-prose text-xs leading-relaxed text-fg-muted">
+          Archiving is the reversible answer: it takes the product off the shop and keeps
+          everything — orders, prices and fitment — so it can be put back whenever you like.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <form method="post" action={deleteProduct}>
+            <input type="hidden" name="id" value={product.id} />
+            <button
+              type="submit"
+              disabled={product._count.layoutVariants > 0 || product._count.orderItems > 0}
+              title={
+                product._count.layoutVariants > 0 || product._count.orderItems > 0
+                  ? "This product is referenced, so it cannot be deleted. Archive it instead."
+                  : "Delete this product"
+              }
+              className="rounded-lg border border-[#FF6B35] px-4 py-2 text-sm text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Delete product
+            </button>
+          </form>
+          <form method="post" action={product.archivedAt ? unarchiveProduct : archiveProduct}>
+            <input type="hidden" name="id" value={product.id} />
+            <button
+              type="submit"
+              title={
+                product.archivedAt
+                  ? "Put this product back on the shop"
+                  : "Take this product off the shop without deleting anything"
+              }
+              className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
+            >
+              {product.archivedAt ? "Put back on the shop" : "Archive instead"}
+            </button>
+          </form>
+        </div>
       </section>
     </div>
   );
@@ -689,6 +791,7 @@ function BundleEditor({
     regular: number;
     premium: number;
     threeRowSurcharge: number | null;
+    _count: { orderItems: number };
     bundle: {
       discountKind: string;
       discountValue: number;
@@ -982,8 +1085,11 @@ function BundleEditor({
         <div className="mt-5 rounded-xl border border-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-fg-muted">
           {parts.length === 0 ? (
             <p>
-              No parts yet, so there is nothing to price this from. Add at least one
-              product above and the two prices will be worked out from it.
+              No parts yet, so there is nothing to price this from.
+              {bundle?.derivePricing
+                ? ` While the price is worked out from the parts, this sells at the floor — ${naira(MIN_BUNDLE_PRICE)} — until a part is added, and that is the figure the shop would quote.`
+                : " The two prices at the top of this page are what it sells at."}{" "}
+              Add a product above and the prices are worked out from it.
             </p>
           ) : (
             <>
@@ -1030,6 +1136,35 @@ function BundleEditor({
             Save bundle
           </button>
         </div>
+
+        {/* Requirement 5.2: an explicit, named way to remove the bundle, with the
+            consequence stated. It submits `removeBundle` rather than saveBundle, so it
+            deletes the definition and the product stays — which is what unticking the
+            box above also does, only now it is a thing the operator can name. */}
+        {bundle && (
+          <div className="mt-6 border-t border-border pt-4">
+            <p className="max-w-prose text-xs leading-relaxed text-fg-muted">
+              <span className="font-semibold text-fg/80">Remove this bundle.</span> The bundle
+              definition and everything inside it are deleted, and the product stays on the shop
+              as a single item — selling at the two prices at the top of this page. Unlike
+              unticking the box above, this is refused while any order names the product, because
+              the composition is what explains that order.
+            </p>
+            <button
+              type="submit"
+              formAction={removeBundle}
+              disabled={product._count.orderItems > 0}
+              title={
+                product._count.orderItems > 0
+                  ? "This product has been sold as a bundle. Its composition is kept so the order stays readable."
+                  : "Delete the bundle definition; the product stays on the shop"
+              }
+              className="mt-3 rounded-lg border border-[#FF6B35] px-4 py-2 text-sm text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Remove this bundle
+            </button>
+          </div>
+        )}
       </form>
     </section>
   );

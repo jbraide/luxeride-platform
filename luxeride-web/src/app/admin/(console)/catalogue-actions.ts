@@ -14,10 +14,16 @@ import {
 } from "@/lib/bundle-price.ts";
 
 import {
+  bundleRemoval,
+  categoryRemoval,
+  productRemoval,
   validateCategory,
+  validateCategoryMove,
   validateProduct,
   validateVariation,
+  variationRemoval,
   type Failure,
+  type RowReferences,
 } from "./catalogue-guard.ts";
 
 /**
@@ -143,6 +149,25 @@ async function audit(entry: {
   });
 }
 
+/**
+ * WHAT REFERENCES A PRODUCT RIGHT NOW, counted before anything is removed.
+ *
+ * Orders first because they are the reference a hard delete cannot undo; the
+ * floor-pan offers next because deleting the product would take a live fit claim with
+ * it. Both come from one read, so the refusal, the report on the screen and the
+ * delete's own guard cannot disagree about the same row.
+ *
+ * Returns null when the product is gone, which is its own answer (`productNotFound`).
+ */
+async function productReferences(productId: string): Promise<RowReferences | null> {
+  const row = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { _count: { select: { orderItems: true, layoutVariants: true } } },
+  });
+  if (!row) return null;
+  return { orderItems: row._count.orderItems, layoutVariants: row._count.layoutVariants };
+}
+
 /** The storefront paths a catalogue change has to reach. */
 function revalidateCatalogue(): void {
   revalidatePath("/admin");
@@ -251,9 +276,8 @@ export async function deleteCategory(formData: FormData): Promise<void> {
   });
   if (!category) backTo(back, refusalParams(values, [{ field: "name", code: "required" }]));
 
-  if (category._count.products > 0) {
-    backTo(back, refusalParams(values, [{ field: "name", code: "categoryNotEmpty" }]));
-  }
+  const blocked = categoryRemoval(category._count.products);
+  if (blocked) backTo(back, refusalParams(values, [blocked]));
 
   await prisma.category.delete({ where: { id } });
   await audit({
@@ -266,6 +290,131 @@ export async function deleteCategory(formData: FormData): Promise<void> {
 
   revalidateCatalogue();
   await flashBack(back, "categoryDeleted");
+}
+
+/**
+ * Empty a category by moving its products to another one — the DEFAULT of the two
+ * honest choices Requirement 3.3 offers.
+ *
+ * A move only. The category is left in place and empty, and the now-enabled Delete
+ * button removes it, which is exactly what the disabled button's own title promises
+ * ("Move or delete them first"). Doing the delete here as well would make one press
+ * do two things and take the operator past the step where they can see the shop is
+ * correct with the products simply re-homed.
+ */
+export async function moveCategoryProducts(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const id = text(formData, "id");
+  const back = "/admin/categories";
+
+  const category = await prisma.category.findUnique({
+    where: { id },
+    include: { _count: { select: { products: true } } },
+  });
+  if (!category) backTo(back, refusalParams(values, [{ field: "name", code: "required" }]));
+
+  // Nothing to move. A no-op rather than a refusal, because the two actions that can
+  // reach here (the form, or a hand-written POST) both mean "move the products", and
+  // there are none.
+  if (category._count.products === 0) {
+    await flashBack(back, "unchanged");
+    return;
+  }
+
+  const targets = await prisma.category.findMany({ select: { id: true } });
+  const move = validateCategoryMove(
+    { fromId: id, toId: pick(values, "toCategoryId") },
+    targets.map((target) => target.id),
+  );
+  if (!move.ok) backTo(back, refusalParams(values, [move.failure]));
+
+  const moved = await prisma.product.updateMany({
+    where: { categoryId: id },
+    data: { categoryId: move.toId },
+  });
+  await audit({
+    entity: "Category",
+    entityId: id,
+    action: "update",
+    field: "products moved",
+    before: { category: category.slug, products: moved.count },
+    after: { toCategoryId: move.toId },
+    note: `moved ${moved.count} product${moved.count === 1 ? "" : "s"} out of ${category.slug}`,
+  });
+
+  revalidateCatalogue();
+  await flashBack(back, "categoryProductsMoved");
+}
+
+/**
+ * The second, more deliberate choice: delete the category AND every product in it.
+ *
+ * Kept separate from the move above so the destructive one is never the default, and
+ * guarded on the products' own references first: `LayoutVariant` and `BundleItem` are
+ * `Restrict`, so a product cut for a car cannot be deleted at all, and a P2003 is not
+ * an explanation. A category holding anything that cannot be deleted is refused whole
+ * rather than half-emptied — a hidden cascade that takes a live PDP with it is exactly
+ * what Requirement 3.3 exists to prevent.
+ */
+export async function deleteCategoryAndProducts(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const id = text(formData, "id");
+  const back = "/admin/categories";
+
+  const category = await prisma.category.findUnique({
+    where: { id },
+    include: {
+      products: {
+        select: {
+          id: true,
+          slug: true,
+          _count: { select: { orderItems: true, layoutVariants: true, partOf: true } },
+        },
+      },
+    },
+  });
+  if (!category) backTo(back, refusalParams(values, [{ field: "name", code: "required" }]));
+
+  if (category.products.length === 0) {
+    await flashBack(back, "unchanged");
+    return;
+  }
+
+  // `partOf` as well as the two the report names: a product that is a part of another
+  // bundle is `Restrict` too, so deleting it would fail. Refusing on it here keeps the
+  // transaction from throwing halfway through a category.
+  let blocked: Failure | null = productRemoval({
+    orderItems: category.products.reduce((sum, p) => sum + p._count.orderItems, 0),
+    layoutVariants: category.products.reduce((sum, p) => sum + p._count.layoutVariants, 0),
+  });
+  if (!blocked && category.products.some((p) => p._count.partOf > 0)) {
+    blocked = { field: "name", code: "productInUse" };
+  }
+  if (blocked) backTo(back, refusalParams(values, [blocked]));
+
+  await prisma.$transaction(async (tx) => {
+    // A cascade would take the variations and any bundle definition with each product;
+    // the explicit deletes and the single audit row keep the removal legible.
+    await tx.product.deleteMany({ where: { categoryId: id } });
+    await tx.category.delete({ where: { id } });
+    await tx.auditEntry.create({
+      data: {
+        entity: "Category",
+        entityId: id,
+        action: "delete",
+        before: { slug: category.slug, name: category.name, products: category.products.map((p) => p.slug) } as never,
+        note: `category ${category.slug} deleted with its ${category.products.length} product${category.products.length === 1 ? "" : "s"}`,
+        who: process.env.ADMIN_USER ?? null,
+      },
+    });
+  });
+
+  revalidateCatalogue();
+  await flashBack(back, "categoryProductsDeleted");
 }
 
 // ─── Products ────────────────────────────────────────────────────────────────
@@ -525,9 +674,10 @@ export async function deleteProduct(formData: FormData): Promise<void> {
   });
   if (!product) backTo(back, refusalParams(values, [{ field: "name", code: "required" }]));
 
-  if (product._count.layoutVariants > 0 || product._count.orderItems > 0) {
-    backTo(back, refusalParams(values, [{ field: "name", code: "productInUse" }]));
-  }
+  // The hard stop, named. `productRemoval` says WHICH reference is holding the row,
+  // so the refusal reads "orderItems" or "layoutVariants" rather than a shrug.
+  const blocked = productRemoval(product._count);
+  if (blocked) backTo(back, refusalParams(values, [blocked]));
 
   // No floor pan and no order references it, so the cascade to its variations is
   // safe and nothing else is touched.
@@ -542,6 +692,77 @@ export async function deleteProduct(formData: FormData): Promise<void> {
 
   revalidateCatalogue();
   await flashBack(back, "productDeleted");
+}
+
+/**
+ * Archive a product: off the shop, kept for the orders it was sold on.
+ *
+ * The reversible answer to `deleteProduct`'s refusal (Requirement 4.5). Nothing is
+ * deleted and no price moves — `archivedAt` is set, and every storefront read in
+ * `src/lib/catalogue.ts` drops `archivedAt: null` rows, so `/shop`, the PDP, the
+ * related-products strip and the sitemap all stop showing it while its order lines
+ * and pricing history stay exactly as they were. Unarchive clears the timestamp.
+ */
+export async function archiveProduct(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const id = text(formData, "id");
+  const back = `/admin/products/${encodeURIComponent(id)}`;
+
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { id: true, slug: true, archivedAt: true },
+  });
+  if (!product) backTo("/admin/products", refusalParams(values, [{ field: "name", code: "productNotFound" }]));
+
+  if (!product.archivedAt) {
+    const now = new Date();
+    await prisma.product.update({ where: { id }, data: { archivedAt: now } });
+    await audit({
+      entity: "Product",
+      entityId: id,
+      action: "archive",
+      before: { slug: product.slug, archivedAt: null },
+      after: { slug: product.slug, archivedAt: now.toISOString() },
+      note: `product ${product.slug} archived — off the shop, orders and prices kept`,
+    });
+    revalidateCatalogue();
+    revalidatePath(back);
+  }
+
+  await flashBack(back, product.archivedAt ? "unchanged" : "productArchived");
+}
+
+/** Put an archived product back on the shop. The undo of `archiveProduct`. */
+export async function unarchiveProduct(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const id = text(formData, "id");
+  const back = `/admin/products/${encodeURIComponent(id)}`;
+
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { id: true, slug: true, archivedAt: true },
+  });
+  if (!product) backTo("/admin/products", refusalParams(values, [{ field: "name", code: "productNotFound" }]));
+
+  if (product.archivedAt) {
+    await prisma.product.update({ where: { id }, data: { archivedAt: null } });
+    await audit({
+      entity: "Product",
+      entityId: id,
+      action: "unarchive",
+      before: { slug: product.slug, archivedAt: product.archivedAt.toISOString() },
+      after: { slug: product.slug, archivedAt: null },
+      note: `product ${product.slug} back on the shop`,
+    });
+    revalidateCatalogue();
+    revalidatePath(back);
+  }
+
+  await flashBack(back, product.archivedAt ? "productUnarchived" : "unchanged");
 }
 
 // ─── Variations ──────────────────────────────────────────────────────────────
@@ -707,17 +928,11 @@ export async function deleteVariation(formData: FormData): Promise<void> {
   });
   if (!variation) backTo(back, refusalParams(values, [{ field: "name", code: "required" }]));
 
-  if (variation._count.orderItems > 0) {
-    backTo(back, refusalParams(values, [{ field: "name", code: "variationInUse" }]));
-  }
-
-  // A variation no offer points at is safe to remove; `LayoutVariant.variationId` is
-  // `Restrict`, so anything still pointing here fails loudly rather than silently
-  // becoming "the product, unspecified option". The admin is told which, because a
-  // P2003 is not an explanation.
-  if (variation._count.layoutVariants > 0) {
-    backTo(back, refusalParams(values, [{ field: "name", code: "variationInUse" }]));
-  }
+  // `OrderItem.variationId` and `LayoutVariant.variationId` are both `Restrict`, so the
+  // database would raise P2003 rather than let an order line or a live offer point at
+  // nothing. The rule is one function so the two references cannot drift apart.
+  const blocked = variationRemoval(variation._count);
+  if (blocked) backTo(back, refusalParams(values, [blocked]));
 
   await prisma.productVariation.delete({ where: { id } });
   await audit({
@@ -732,6 +947,80 @@ export async function deleteVariation(formData: FormData): Promise<void> {
   revalidatePath(back);
   await flashBack(back, "variationDeleted");
 }
+
+/**
+ * Archive a variation — a retired colourway or layer, kept for its order history.
+ *
+ * The reversible answer to `deleteVariation`'s refusal (Requirement 6.3): the option
+ * stops being offered because `productSelect.variations` filters `archivedAt: null`,
+ * while a sold order line that names it still resolves. Distinct from setting the
+ * stock state to `out_of_stock`, which is the honesty sentence about a car and not a
+ * lifecycle state.
+ */
+export async function archiveVariation(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const id = text(formData, "id");
+  const productId = text(formData, "productId");
+  const back = `/admin/products/${encodeURIComponent(productId)}`;
+
+  const variation = await prisma.productVariation.findUnique({
+    where: { id },
+    select: { id: true, slug: true, productId: true, archivedAt: true },
+  });
+  if (!variation) backTo(back, refusalParams(values, [{ field: "name", code: "required" }]));
+
+  if (!variation.archivedAt) {
+    const now = new Date();
+    await prisma.productVariation.update({ where: { id }, data: { archivedAt: now } });
+    await audit({
+      entity: "ProductVariation",
+      entityId: id,
+      action: "archive",
+      before: { slug: variation.slug, archivedAt: null },
+      after: { slug: variation.slug, archivedAt: now.toISOString() },
+      note: `variation ${variation.slug} archived — off the product page, order history kept`,
+    });
+    revalidateCatalogue();
+    revalidatePath(back);
+  }
+
+  await flashBack(back, variation.archivedAt ? "unchanged" : "variationArchived");
+}
+
+/** Put an archived variation back on the product. The undo of `archiveVariation`. */
+export async function unarchiveVariation(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const id = text(formData, "id");
+  const productId = text(formData, "productId");
+  const back = `/admin/products/${encodeURIComponent(productId)}`;
+
+  const variation = await prisma.productVariation.findUnique({
+    where: { id },
+    select: { id: true, slug: true, productId: true, archivedAt: true },
+  });
+  if (!variation) backTo(back, refusalParams(values, [{ field: "name", code: "required" }]));
+
+  if (variation.archivedAt) {
+    await prisma.productVariation.update({ where: { id }, data: { archivedAt: null } });
+    await audit({
+      entity: "ProductVariation",
+      entityId: id,
+      action: "unarchive",
+      before: { slug: variation.slug, archivedAt: variation.archivedAt.toISOString() },
+      after: { slug: variation.slug, archivedAt: null },
+      note: `variation ${variation.slug} back on the product page`,
+    });
+    revalidateCatalogue();
+    revalidatePath(back);
+  }
+
+  await flashBack(back, variation.archivedAt ? "variationUnarchived" : "unchanged");
+}
+
 // ─── Bundles ──────────────────────────────────────────────────────────────────
 
 /**
@@ -1118,6 +1407,61 @@ export async function removeBundleItem(formData: FormData): Promise<void> {
   revalidateCatalogue();
   revalidatePath(back);
   await flashBack(back, item ? "bundlePartRemoved" : "unchanged");
+}
+
+/**
+ * Remove the bundle definition outright — a named action, not only the `isBundle`
+ * untick (Requirement 5.2).
+ *
+ * The `Bundle` row and its parts go; the PRODUCT survives at `/products/<slug>` and
+ * sells at its own typed prices, which is the whole point of a bundle being a product
+ * (see the schema). Unlike `removeBundleItem`, this CAN be refused: a bundle the shop
+ * has sold is part of what explains those orders, so the composition is kept and the
+ * refusal names the reference. The reversible path is the `isBundle` untick in the
+ * editor, which makes the product a single item again without deleting anything the
+ * order needs to be read.
+ */
+export async function removeBundle(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const productId = text(formData, "productId");
+  const back = `/admin/products/${encodeURIComponent(productId)}`;
+
+  const [bundle, references] = await Promise.all([
+    prisma.bundle.findUnique({
+      where: { productId },
+      select: { _count: { select: { items: true } } },
+    }),
+    productReferences(productId),
+  ]);
+  if (!references) backTo("/admin/products", refusalParams(values, [{ field: "productId", code: "productNotFound" }]));
+
+  const refusal = bundleRemoval({ isBundle: bundle !== null, orderItems: references.orderItems });
+  if (refusal) backTo(back, refusalParams(values, [refusal]));
+
+  // `bundleRemoval` has proved it is a bundle; this is the compiler's copy of that
+  // proof, and it costs nothing on a row already in hand.
+  if (!bundle) return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.bundle.delete({ where: { productId } });
+    await tx.auditEntry.create({
+      data: {
+        entity: "Bundle",
+        entityId: productId,
+        action: "delete",
+        field: "bundle",
+        before: { parts: bundle._count.items } as never,
+        note: "bundle removed by name; the product stays and its typed prices are what it sells at",
+        who: process.env.ADMIN_USER ?? null,
+      },
+    });
+  });
+
+  revalidateCatalogue();
+  revalidatePath(back);
+  await flashBack(back, "bundleRemoved");
 }
 
 /**

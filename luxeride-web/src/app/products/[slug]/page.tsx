@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -7,8 +8,10 @@ import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
 import { StickyBuyBar } from "@/components/StickyBuyBar";
 import ViewItemTracker from "@/components/ViewItemTracker";
+import renderSection from "@/components/funnel/render-section";
 import { getCategory, getProductWithSale, listProducts } from "@/lib/catalogue";
 import { priceRange } from "@/data/products";
+import type { Section } from "@/data/funnel/sections";
 import { resolveMedia } from "@/lib/media-manifest";
 import { breadcrumbJsonLd, faqJsonLd, pageMetadata, productJsonLd } from "@/lib/seo";
 import { selectedVariationSlug } from "@/lib/select-variation";
@@ -114,6 +117,62 @@ export default async function ProductPage({
   const [priceMin, priceMax] = priceRange(product);
 
   /**
+   * THE FIT-GUIDE AND MECHANISM, FROM THE PRODUCT'S OWN DATA (`funnel-pages` 8.2).
+   *
+   * Every line below is read from this product's own fields — `materials`,
+   * `coverage`, `install`, `care` — so the page keeps ONE source of truth for what
+   * the product is and how it fits, and introduces no second price or fit claim
+   * anywhere (Requirement 8.2). If a product carries none of those fields the
+   * mechanism section is simply absent, which is the honest empty state
+   * (Requirement 9.3). These sections add no buy control; `BuyBox` and `StickyBuyBar`
+   * remain the only two (Requirement 8.4).
+   */
+  const mechanismItems = [
+    product.materials ? { title: "What it is made of", body: product.materials, icon: "🧵" } : null,
+    product.coverage ? { title: "What it covers", body: product.coverage, icon: "🚗" } : null,
+    product.install ? { title: "How it goes on", body: product.install, icon: "🔧" } : null,
+    product.care ? { title: "How to clean it", body: product.care, icon: "🧼" } : null,
+  ].filter((item): item is { title: string; body: string; icon: string } => item !== null);
+
+  const optionNames = (product.variations ?? []).map((variation) => variation.name);
+
+  const productFunnelSections: Section[] = [];
+  if (mechanismItems.length > 0) {
+    productFunnelSections.push({
+      kind: "heading",
+      level: 2,
+      eyebrow: "How it fits",
+      title: `${product.name}, made for your car`,
+    });
+    productFunnelSections.push({ kind: "mechanism", items: mechanismItems });
+  }
+  productFunnelSections.push({ kind: "heading", level: 2, title: "How ordering works" });
+  productFunnelSections.push({
+    kind: "steps",
+    steps: [
+      {
+        title: "Tell us your car",
+        body: "Open the Fit Finder and pick your model and year, so the fit and the price are confirmed against the exact car.",
+      },
+      {
+        title: "Choose your option",
+        body:
+          optionNames.length > 1
+            ? `Pick from the options on this page — ${optionNames.join(", ")} — and the choice travels into the Fit Finder with you.`
+            : "The option you pick on this page travels into the Fit Finder with you.",
+      },
+      {
+        title: "We confirm the fit",
+        body: "We confirm your exact model and year on WhatsApp before dispatch, so nothing is made on a guess.",
+      },
+      {
+        title: "Pay when it arrives",
+        body: "Pay the rider on delivery, nationwide — or prepay by bank transfer for the saving.",
+      },
+    ],
+  });
+
+  /**
    * One array, two consumers: the visible trail and the BreadcrumbList. A
    * structured-data trail that does not match the page a visitor sees is a
    * policy violation, so they are built from the same source rather than
@@ -189,6 +248,15 @@ export default async function ProductPage({
             metadata (§10.2). The guarantee and the delivery band come from
             `TrustStrip`, so the PDP cannot restate a different figure. */}
         <BuyBox product={product} selectedSlug={selectedSlug} />
+      </div>
+
+      {/* The fit-guide and ordering process, read from this product's own data.
+          Rendered here, between the buy column and the cross-sell, so a visitor who
+          has decided reads HOW it fits before being shown other products. */}
+      <div className="mt-10">
+        {productFunnelSections.map((section, index) => (
+          <Fragment key={index}>{renderSection(section)}</Fragment>
+        ))}
       </div>
 
       <RelatedProducts product={product} products={products} />

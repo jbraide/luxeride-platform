@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import FitFinder from "@/components/FitFinder";
-import { listProducts } from "@/lib/catalogue";
-import { resolveCampaign } from "@/data/landing";
+import { getProduct, listProducts } from "@/lib/catalogue";
+import { resolveCampaignFromCatalogue } from "@/data/landing";
 import { resolveAllMedia } from "@/lib/media-manifest";
 import { pageMetadata } from "@/lib/seo";
 
@@ -28,12 +28,17 @@ export default async function FitFinderPage({
   // Resolve the campaign on the server too, so the alias locks the RIGHT product.
   // Passing the raw value straight through meant `?product=mats` locked nothing,
   // because `mats` is an alias, not a product slug (`ad-landing-and-tracking` §3.5).
-  const resolvedLanding = resolveCampaign(
+  //
+  // Validation reads the DATABASE: a campaign or slug the catalogue no longer sells
+  // resolves to `null`, so the funnel runs ungated rather than locking onto a
+  // product that is gone (Requirement 8.2, 9.3).
+  const resolvedLanding = await resolveCampaignFromCatalogue(
     product,
     // The option the link named. This is the PDP's own "Select My Car" CTA arriving
     // with the layer the customer just picked — dropping it here is what would send
     // them back through the layer question having already answered it.
     Array.isArray(variation) ? variation[0] : (variation ?? null),
+    getProduct,
   );
   return (
     <div className="mx-auto max-w-md px-5 py-10">

@@ -53,10 +53,20 @@ export const FLASH_MESSAGES: Record<string, string> = {
   // Catalogue
   category: "Saved. The change is on the shop.",
   categoryDeleted: "Category deleted. It was empty, and the removal is in the audit log.",
+  categoryProductsMoved:
+    "Moved. The products are in their new category, and this one is empty — delete it below if you still want it gone.",
+  categoryProductsDeleted:
+    "Category and its products deleted, and every removal is in the audit log.",
   product: "Created, with its first variation. Open it to add more.",
   productDeleted: "Product deleted, and the removal is in the audit log.",
+  productArchived:
+    "Archived. It is off the shop, and its order history and prices are kept. Put it back whenever you like.",
+  productUnarchived: "Back on the shop. Nothing else about it changed.",
   variation: "Variation added.",
   variationDeleted: "Variation deleted, and the removal is in the audit log.",
+  variationArchived:
+    "Archived. The option is off the product page, and anything sold against it still resolves.",
+  variationUnarchived: "Back on the product page.",
 
   // Bundles
   bundle: "Bundle saved, and its price was worked out from its parts.",

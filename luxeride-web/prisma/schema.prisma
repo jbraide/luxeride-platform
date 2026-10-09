@@ -183,6 +183,16 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Null means LIVE. A timestamp means ARCHIVED: the row stays, its order lines and
+  /// prices stay, and every storefront read drops it. Archive is the reversible answer
+  /// where a hard delete would break an order (Requirement 4.5) — the /shop listing, the
+  /// PDP, the related-products strip and the sitemap all filter `archivedAt: null` in
+  /// `src/lib/catalogue.ts`, so the row is off the shop without anything being lost.
+  ///
+  /// Distinct from `availability`: that is the honesty sentence about stock for a car,
+  /// not a lifecycle state. A row can be in stock and archived, or out of stock and live.
+  archivedAt DateTime?
+
   @@index([categoryId])
   @@index([isCarSpecific])
 }
@@ -369,6 +379,12 @@ model ProductVariation {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// Same semantics as `Product.archivedAt`: null is live, a timestamp is archived. A
+  /// retired colourway stops being offered without its order history becoming
+  /// unexplainable. `productSelect.variations` filters it for the storefront; the admin
+  /// reads its own unfiltered list.
+  archivedAt DateTime?
 
   @@unique([productId, slug])
   @@index([sortOrder])

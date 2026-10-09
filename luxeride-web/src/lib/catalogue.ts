@@ -84,6 +84,10 @@ const productSelect = {
   seoDescription: true,
   category: { select: { slug: true } },
   variations: {
+    // A retired option is off every storefront surface. The admin reads its own
+    // unfiltered list — this select is the SHOP's view of the product. See
+    // `ProductVariation.archivedAt`.
+    where: { archivedAt: null },
     select: {
       slug: true,
       name: true,
@@ -241,9 +245,19 @@ function toCategory(row: {
   };
 }
 
-/** Every product, in name order. */
+/**
+ * Every product, in name order.
+ *
+ * `archivedAt: null` is what makes archive mean something: an archived row is off
+ * `/shop`, the sitemap, the featured row and the related strip, and its PDP falls to
+ * `not-found.tsx` — the same disappearance a delete causes, but reversible.
+ */
 export async function listProducts(): Promise<Product[]> {
-  const rows = await prisma.product.findMany({ select: productSelect, orderBy: { name: "asc" } });
+  const rows = await prisma.product.findMany({
+    where: { archivedAt: null },
+    select: productSelect,
+    orderBy: { name: "asc" },
+  });
   return rows.map(toProduct);
 }
 
@@ -256,7 +270,10 @@ export async function listCategories(): Promise<Category[]> {
 }
 
 export async function getProduct(slug: string): Promise<Product | undefined> {
-  const row = await prisma.product.findUnique({ where: { slug }, select: productSelect });
+  // `findFirst` rather than `findUnique`, because the filter is `slug AND not
+  // archived` and `findUnique` only takes the unique key. An archived slug therefore
+  // returns undefined and its PDP falls to `not-found.tsx`.
+  const row = await prisma.product.findFirst({ where: { slug, archivedAt: null }, select: productSelect });
   return row ? toProduct(row) : undefined;
 }
 
@@ -271,7 +288,7 @@ export async function getCategory(slug: string): Promise<Category | undefined> {
 /** Products in one category. Used by `/shop/<slug>`. */
 export async function listProductsInCategory(categorySlug: string): Promise<Product[]> {
   const rows = await prisma.product.findMany({
-    where: { category: { slug: categorySlug } },
+    where: { category: { slug: categorySlug }, archivedAt: null },
     select: productSelect,
     orderBy: { name: "asc" },
   });
@@ -314,7 +331,7 @@ export async function listCategoryWithSales(
  */
 export async function listGenericProducts(): Promise<Product[]> {
   const rows = await prisma.product.findMany({
-    where: { isCarSpecific: false },
+    where: { isCarSpecific: false, archivedAt: null },
     select: productSelect,
     orderBy: { name: "asc" },
   });

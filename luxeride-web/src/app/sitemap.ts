@@ -59,6 +59,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: newestMtime([path.join(SRC, "app", "shop", "page.tsx")]),
   });
 
+  // The two funnel pages (`funnel-pages` 1.4). `/offer` changes whenever the live
+  // promotion does, and it depends on the page and its copy module; `/why-carpet-fails`
+  // is the evergreen education page, and the same two files determine it. Neither
+  // claims `new Date()` — the rule at the top of this file holds.
+  routes.push({
+    url: absoluteUrl("/offer"),
+    changeFrequency: "weekly",
+    priority: 0.8,
+    lastModified: newestMtime([
+      path.join(SRC, "app", "offer", "page.tsx"),
+      path.join(SRC, "data", "funnel", "offer.ts"),
+    ]),
+  });
+
+  routes.push({
+    url: absoluteUrl("/why-carpet-fails"),
+    changeFrequency: "monthly",
+    priority: 0.6,
+    lastModified: newestMtime([
+      path.join(SRC, "app", "why-carpet-fails", "page.tsx"),
+      path.join(SRC, "data", "funnel", "why-carpet-fails.ts"),
+    ]),
+  });
+
   // Categories are real paths now (`/shop/[category]`), so they can be listed.
   // They could not be while they were `/shop?category=<slug>` — §13.1 forbids a
   // query string in a sitemap, because a crawler cannot canonicalise it and

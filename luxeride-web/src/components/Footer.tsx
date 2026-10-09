@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CATEGORIES } from "@/data/products";
+import { listCategories } from "@/lib/catalogue";
 import { contact, guarantee } from "@/lib/copy";
 import { whatsappLink } from "@/lib/whatsapp";
 
@@ -10,9 +10,18 @@ import { whatsappLink } from "@/lib/whatsapp";
  * hydration. Every figure it quotes comes from the copy register, and the
  * policy links point at the routes that exist (`/policies/[slug]`). Single
  * column on the narrowest viewport, ≥44px tap targets.
+ *
+ * The category links come from the DATABASE, through `listCategories()`, and not
+ * from the `CATEGORIES` array in `src/data/products.ts`. That array is the seed
+ * fixture; reading it here meant a category the owner added in
+ * `/admin/categories` never reached the footer and one they removed kept its
+ * link (Requirement 1.1, 1.3). Awaiting is what makes the component async — it is
+ * rendered on the server inside `PublicChrome`, which deliberately passes it as
+ * `children` so the read stays out of the browser.
  */
-export default function Footer() {
-  const shopLinks = [{ href: "/shop", label: "All Products" }, ...CATEGORIES.map((c) => ({
+export default async function Footer() {
+  const categories = await listCategories();
+  const shopLinks = [{ href: "/shop", label: "All Products" }, ...categories.map((c) => ({
     href: `/shop/${c.slug}`,
     label: c.name,
   }))];

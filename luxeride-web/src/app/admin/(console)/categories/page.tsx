@@ -1,7 +1,13 @@
 import Link from "next/link";
 
 import { prisma } from "@/lib/db";
-import { createCategory, deleteCategory, updateCategory } from "../catalogue-actions";
+import {
+  createCategory,
+  deleteCategory,
+  deleteCategoryAndProducts,
+  moveCategoryProducts,
+  updateCategory,
+} from "../catalogue-actions";
 import { messageFor, readEcho, readFailures, slugify } from "../catalogue-guard";
 
 /**
@@ -192,6 +198,80 @@ export default async function CategoriesPage({
                     </button>
                   </div>
                 </form>
+
+                {/* ── Removing a category that still holds products ───────────────
+                    Requirement 3.3: the two honest choices, move first. The plain
+                    Delete above stays disabled (its own title says why), so this is the
+                    only way out of a non-empty category and the two choices are
+                    deliberately unequal — a move is one press, deleting the products
+                    along with the category is behind a disclosure. */}
+                {category._count.products > 0 && (
+                  <div className="mt-4 border-t border-border pt-4">
+                    <p className="text-xs leading-relaxed text-fg-muted">
+                      This category holds {category._count.products} product
+                      {category._count.products === 1 ? "" : "s"}, so it cannot be deleted on
+                      its own. Move them to another category, or delete them along with it.
+                    </p>
+
+                    <form
+                      method="post"
+                      action={moveCategoryProducts}
+                      className="mt-3 flex flex-wrap items-end gap-3"
+                    >
+                      <input type="hidden" name="id" value={category.id} />
+                      <div>
+                        <label htmlFor={`toCategoryId__${category.id}`} className={label}>
+                          Move products to — the safe choice
+                        </label>
+                        <select
+                          id={`toCategoryId__${category.id}`}
+                          name="toCategoryId"
+                          defaultValue={echo("toCategoryId")}
+                          className={`${input} ${fieldFailed("toCategoryId")}`}
+                        >
+                          <option value="">Choose a category…</option>
+                          {categories
+                            .filter((other) => other.id !== category.id)
+                            .map((other) => (
+                              <option key={other.id} value={other.id}>
+                                {other.name}
+                              </option>
+                            ))}
+                        </select>
+                        {refusal("toCategoryId")}
+                      </div>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
+                      >
+                        Move {category._count.products} product
+                        {category._count.products === 1 ? "" : "s"}
+                      </button>
+                    </form>
+
+                    <details className="mt-3 rounded-lg border border-[#FF6B35]/40 px-4 py-3">
+                      <summary className="cursor-pointer text-xs text-[#FF6B35]">
+                        Or delete the {category._count.products} product
+                        {category._count.products === 1 ? "" : "s"} as well
+                      </summary>
+                      <p className="mt-2 text-xs leading-relaxed text-fg-muted">
+                        This removes the products and the category in one step. A product that
+                        has been sold or is cut for a car is refused, so this never takes a
+                        live page with it silently.
+                      </p>
+                      <form method="post" action={deleteCategoryAndProducts} className="mt-2">
+                        <input type="hidden" name="id" value={category.id} />
+                        <button
+                          type="submit"
+                          className="rounded-lg border border-[#FF6B35] px-4 py-2 text-sm text-[#FF6B35]"
+                        >
+                          Delete this category and its {category._count.products} product
+                          {category._count.products === 1 ? "" : "s"}
+                        </button>
+                      </form>
+                    </details>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

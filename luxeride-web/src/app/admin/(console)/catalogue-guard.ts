@@ -262,6 +262,93 @@ export function validateVariation(
 }
 
 /**
+ * WHAT HOLDS A ROW BACK FROM A HARD DELETE, as numbers.
+ *
+ * The counts come from the caller — only the database knows them, the same split
+ * `validateSlug`'s `taken` list follows — so the rules below are plain functions over
+ * plain numbers and `scripts/catalogue-guard.test.mjs` exercises them with no database.
+ * A delete is refused here rather than left to a Prisma P2003, because a foreign-key
+ * error is not an explanation and the operator cannot act on it.
+ */
+export interface RowReferences {
+  /** Order lines pointing at the row. The one reference a delete cannot undo. */
+  orderItems: number;
+  /** Floor-pan offers pointing at the row. A delete takes a live fit claim with it. */
+  layoutVariants: number;
+}
+
+/**
+ * The refusal a product's references earn, or `null` when it may be hard-deleted.
+ *
+ * The FIELD names which reference is holding it — orders before floor pans, because an
+ * order line is the irreversible one and the case the screen offers `archive` for
+ * (Requirement 4.2/4.5). The code is the same `productInUse` either way: both are
+ * "something else is pointing at this", and the sentence is fixed by the code table
+ * while the field says which.
+ */
+export function productRemoval(references: RowReferences): Failure | null {
+  if (references.orderItems > 0) return { field: "orderItems", code: "productInUse" };
+  if (references.layoutVariants > 0) return { field: "layoutVariants", code: "productInUse" };
+  return null;
+}
+
+/**
+ * The refusal a variation's references earn, or `null` when it may be hard-deleted.
+ *
+ * One code for both references, unlike a product, because the variation's sentence is
+ * the same either way: mark it out of stock (or now, archive it) instead of deleting,
+ * so the order history and the floor plate that names it stay readable.
+ */
+export function variationRemoval(references: RowReferences): Failure | null {
+  if (references.orderItems > 0 || references.layoutVariants > 0) {
+    return { field: "name", code: "variationInUse" };
+  }
+  return null;
+}
+
+/** A category may be removed on its own only when it holds nothing (Requirement 3.3). */
+export function categoryRemoval(productCount: number): Failure | null {
+  return productCount > 0 ? { field: "name", code: "categoryNotEmpty" } : null;
+}
+
+/**
+ * Whether a bundle may be explicitly removed, and why not when it may not.
+ *
+ * Removing a bundle deletes the `Bundle` row and its parts while the PRODUCT survives
+ * at its own typed prices, so it is refused only when the product still has order lines
+ * — Refusing is the honest answer there because the composition is what explains the
+ * order, and the reversible path is to leave it or convert it in the editor
+ * (Requirement 5.3).
+ */
+export function bundleRemoval(input: {
+  isBundle: boolean;
+  orderItems: number;
+}): Failure | null {
+  if (!input.isBundle) return { field: "productId", code: "notABundle" };
+  if (input.orderItems > 0) return { field: "orderItems", code: "productInUse" };
+  return null;
+}
+
+/**
+ * The target of a category move: chosen, known, and not the category being emptied.
+ */
+export function validateCategoryMove(
+  input: { fromId: string; toId: string },
+  categoryIds: readonly string[],
+): { ok: true; toId: string } | { ok: false; failure: Failure } {
+  const toId = input.toId.trim();
+  // Blank and "the one we are emptying" are the same mistake — no move was named —
+  // and they share `required` rather than inventing a code for a no-op.
+  if (toId === "" || toId === input.fromId) {
+    return { ok: false, failure: { field: "toCategoryId", code: "required" } };
+  }
+  if (!categoryIds.includes(toId)) {
+    return { ok: false, failure: { field: "toCategoryId", code: "unknownCategory" } };
+  }
+  return { ok: true, toId };
+}
+
+/**
  * The sentence for a failure code, re-exported so a catalogue page imports one module.
  *
  * `readEcho` and `readFailures` are re-exported for the same reason: the refusal

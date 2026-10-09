@@ -4,11 +4,11 @@ import Link from "next/link";
 import CategoryTile from "@/components/CategoryTile";
 import ProductCard from "@/components/ProductCard";
 import ProductImage from "@/components/ProductImage";
-import { listCategories, listProductsWithSales } from "@/lib/catalogue";
+import { getProduct, listCategories, listProductsWithSales } from "@/lib/catalogue";
 import { loadPromotions, resolveDiscountForOrder } from "@/lib/discounts-server";
 import { resolveHero } from "@/lib/hero";
 import { resolveAllMedia } from "@/lib/media-manifest";
-import { resolveCampaign } from "@/data/landing";
+import { resolveCampaignFromCatalogue } from "@/data/landing";
 import { pageMetadata } from "@/lib/seo";
 
 /**
@@ -49,7 +49,11 @@ export default async function HomePage({
   searchParams: Promise<{ product?: string }>;
 }) {
   const { product } = await searchParams;
-  const landing = resolveCampaign(product);
+  // The campaign is validated against the DATABASE, not the static arrays: a
+  // campaign naming a product that is gone resolves to `null` and the hero falls
+  // back to its standing copy rather than promising something the shop no longer
+  // sells (Requirement 8.2, 9.3).
+  const landing = await resolveCampaignFromCatalogue(product, null, getProduct);
 
   const [products, categories, promotions] = await Promise.all([
     listProductsWithSales(),
