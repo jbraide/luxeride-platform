@@ -95,24 +95,102 @@ function isIsoDateTime(value: string): boolean {
 }
 
 /**
- * A date, as the database stores it.
+ * The business timezone. Every customer-facing timestamp in this app is Lagos — the
+ * audit log and the order list pin it explicitly — so a time the operator types on the
+ * admin form has to mean the same thing here.
+ */
+const LAGOS_TZ = "Africa/Lagos";
+
+/**
+ * Minutes that Africa/Lagos is ahead of UTC at `instant`.
  *
- * `datetime-local` has NO timezone, and "Black Friday ends at 23:59 on the 28th" is a
- * statement about Lagos, not about UTC. So a bare `YYYY-MM-DDTHH:MM` is read as UTC and
- * anything with an offset or a `Z` is taken at its word — which means the admin types
- * the same time the shop means, rather than a time eight hours out.
+ * Nigeria has no daylight saving today, so this is +60 — but it is COMPUTED rather than
+ * written down as a constant, because a hard-coded `+1` is correct until the day it is
+ * not, and when it is wrong it shifts a promotion's entire window.
+ */
+function lagosOffsetMinutes(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: LAGOS_TZ,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const wallClockAsUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+  return Math.round((wallClockAsUtc - instant.getTime()) / 60_000);
+}
+
+/**
+ * A `datetime-local` value, read as LAGOS wall-clock time.
+ *
+ * ── WHY THIS IS NOT UTC, WHICH IS WHAT IT USED TO BE ────────────────────────
+ *
+ * The field used to read a bare `YYYY-MM-DDTHH:MM` as UTC, on the reasoning that this
+ * made "the admin type the same time the shop means". For THIS business it does the
+ * opposite: the operator is in Lagos (UTC+1), so a start typed as `15:42` meaning "start
+ * now" was stored as `15:42Z` — 16:42 in Lagos — and an offer switched on appeared not
+ * to run for another hour. Measured, not guessed: on 2026-10-10 a site-wide promotion
+ * saved at 15:42 Lagos stored `startsAt = 15:42Z`, and `/offer` showed its "no offer
+ * running" fallback while the row read `active: true`.
+ *
+ * So a bare `datetime-local` value is Lagos wall-clock, and anything that carries its
+ * own offset or a `Z` is still taken at its word (that is a deliberate choice by
+ * whoever wrote it, not a bare picker).
  */
 export function parseDateInput(raw: string): Date | null {
   const value = raw.trim();
   if (value === "") return null;
   if (!isIsoDateTime(value)) return null;
-  const parsed = new Date(value.length <= 10 ? `${value}T00:00:00Z` : `${value}:00Z`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+
+  const bare = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(value);
+  if (!bare) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const [, datePart, hh = "00", mm = "00"] = bare;
+  const hour = Number(hh);
+  const minute = Number(mm);
+  // A time outside the clock is a refusal, not a roll-over: `Date.UTC` would happily
+  // carry `25:00` into the next day, which is exactly the kind of silent correction
+  // this guard exists to avoid.
+  if (hour > 23 || minute > 59) return null;
+
+  const [y, mo, d] = datePart.split("-").map(Number);
+  const wallClockAsUtc = Date.UTC(y, mo - 1, d, hour, minute, 0);
+
+  // Two passes, because the offset can itself depend on the instant near a DST change
+  // (Lagos has none today — this is so the function stays correct if that ever changes).
+  let instant = new Date(wallClockAsUtc - lagosOffsetMinutes(new Date(wallClockAsUtc)) * 60_000);
+  instant = new Date(wallClockAsUtc - lagosOffsetMinutes(instant) * 60_000);
+  return Number.isNaN(instant.getTime()) ? null : instant;
 }
 
-/** The format a `datetime-local` input needs, from a `DateTime`. */
+/** The format a `datetime-local` input needs, in LAGOS wall-clock time. */
 export function toDateTimeInput(value: Date | null): string {
-  return value ? value.toISOString().slice(0, 16) : "";
+  if (!value) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: LAGOS_TZ,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(value);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
 
 export function validatePromotion(
