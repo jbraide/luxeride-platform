@@ -25,6 +25,24 @@ import { messageFor, readFailures } from "./catalogue-guard";
  *                 answer different questions and adding them together would be a
  *                 number about nothing.
  *
+ * ── THE SHAPE OF THIS SCREEN, AND WHY IT CHANGED ─────────────────────────────
+ *
+ * The first version answered "what is in the database" and gave every answer the same
+ * weight: ten `StatCard`s of identical size, a fold of essay-length prose, and no
+ * distinction between a number you can act on and a number that is merely correct. That
+ * is a database inspector, not a dashboard — you had to read all of it to find the one
+ * line that mattered.
+ *
+ * This version answers "what needs me" first and demotes the rest:
+ *
+ *   1. ONE dominant figure — the launch metric, the only number that changes what the
+ *      business can do. Nothing else is allowed to compete with it.
+ *   2. THREE GROUPS of supporting figures, each a job rather than a table: Fitment,
+ *      The shop, Orders. Ten loose cards become ten rows inside three headings, which is
+ *      what a reader can actually scan.
+ *   3. The sourcing queue, the storefront control, and the diagnostics — in that order
+ *      of usefulness, with the diagnostics folded away.
+ *
  * MOVED, NOT REWRITTEN
  *
  * This file was `src/app/admin/page.tsx` until the console moved into the
@@ -53,15 +71,18 @@ import { messageFor, readFailures } from "./catalogue-guard";
 export const dynamic = "force-dynamic";
 
 /**
- * ONE FIGURE, in a card.
+ * ONE FIGURE, as a row inside a group.
  *
- * `StatCard`, not `Row`. A `Row` is a pair of labels separated by a rule, which is
- * right for a list of six facts of the same importance. This dashboard has ONE number
- * that matters and a ring of supporting ones, and rendering them all at the same
- * weight is why the previous version of this page read like a database inspector
- * rather than something you can act on in the first two seconds.
+ * A row and not a card. A card says "this stands alone"; these do not — they are three
+ * or four readings of the same table, and a heading over them is the honest structure.
+ * The whole row is the link when there is a screen to open, so the tap target is the
+ * thing a reader is already looking at rather than the label alone.
+ *
+ * `tone` is the same two-way signal it always was: "warn" is a number you want to bring
+ * down to zero, "good" is one you want to grow, and "plain" is neither — a reading that
+ * is correct and needs no judgement.
  */
-function StatCard({
+function Stat({
   label,
   value,
   hint,
@@ -71,7 +92,6 @@ function StatCard({
   label: string;
   value: string | number;
   hint?: string;
-  /** "good" is for the number you want to grow, "warn" for the one you want to shrink. */
   tone?: "plain" | "good" | "warn";
   href?: string;
 }) {
@@ -80,24 +100,59 @@ function StatCard({
 
   const body = (
     <>
-      <p className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">{label}</p>
-      <p className={`mt-1 font-mono text-3xl font-bold ${valueClass}`}>{value}</p>
-      {hint && <p className="mt-1 text-[11px] leading-relaxed text-fg-muted">{hint}</p>}
+      <span className="min-w-0">
+        <span className="block text-sm text-fg/85 group-hover/link:text-accent">{label}</span>
+        {hint && <span className="mt-0.5 block text-[11px] text-fg-muted">{hint}</span>}
+      </span>
+      <span className={`shrink-0 font-mono text-xl font-semibold ${valueClass}`}>{value}</span>
     </>
   );
 
+  const row = "flex items-baseline justify-between gap-4 py-2.5";
+
   return href ? (
-    <Link
-      href={href}
-      className="rounded-xl border border-border bg-surface/60 px-4 py-3 transition-colors hover:border-accent/60"
-    >
+    <Link href={href} className={`group/link ${row}`}>
       {body}
     </Link>
   ) : (
-    <div className="rounded-xl border border-border bg-surface/60 px-4 py-3">{body}</div>
+    <div className={row}>{body}</div>
   );
 }
 
+/**
+ * A GROUP OF FIGURES, under one heading.
+ *
+ * The heading is the job ("Fitment", "The shop", "Orders"), which is the same four-way
+ * split the sidebar uses — so the dashboard and the nav describe the console the same
+ * way, and a figure is never an orphan. `href` opens the screen the group is about, so
+ * the group is a doorway rather than a dead end.
+ */
+function StatGroup({
+  title,
+  href,
+  children,
+}: {
+  title: string;
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-surface/60 px-5 py-4">
+      <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
+        <h2 className="font-display text-base font-semibold">{title}</h2>
+        <Link
+          href={href}
+          className="text-[11px] text-fg-muted underline-offset-4 hover:text-accent hover:underline"
+        >
+          Open →
+        </Link>
+      </div>
+      <div className="divide-y divide-border">{children}</div>
+    </section>
+  );
+}
+
+/** A plain label/value row, for the folded diagnostics. */
 function Row({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-t border-border py-3">
@@ -121,6 +176,10 @@ function Row({ label, value, hint }: { label: string; value: string | number; hi
  * because it did not exist, and the reason it did not exist is that "which layout is
  * that?" was answerable only by opening `globals.css`. A radio whose effect cannot be
  * pictured is how a switch gets set once and then ignored.
+ *
+ * `summary` is what is shown; `detail` is the longer explanation, carried as a title
+ * attribute so it is available on hover without putting three paragraphs of prose back
+ * into the fold.
  */
 const HERO_LAYOUT_OPTIONS: ReadonlyArray<{
   value: HeroLayout;
@@ -159,7 +218,7 @@ function HeroLayoutDiagram({ option }: { option: (typeof HERO_LAYOUT_OPTIONS)[nu
   return (
     <span
       aria-hidden
-      className="flex h-9 w-full shrink-0 overflow-hidden rounded border border-border bg-surface-2"
+      className="flex h-7 w-full shrink-0 overflow-hidden rounded border border-border bg-surface-2"
     >
       <span
         className={`h-full ${full ? "bg-accent/25" : "bg-accent/45"}`}
@@ -251,8 +310,25 @@ export default async function AdminPage({
   const databaseLive = await liveLayoutCountLive();
   const databaseNames = await confirmedCustomerNamesLive();
 
+  const liveLayoutLabel =
+    HERO_LAYOUT_OPTIONS.find((o) => o.value === heroLayout)?.label ?? heroLayout;
+
+  /*
+   * A PREVIEW OF THE CONFIRMED NAMES, NOT THE WHOLE LIST.
+   *
+   * `databaseNames` is one name per LAYOUT, and a car has a layout per year range, so
+   * the same name repeats and the list runs to hundreds of entries. Printing it into the
+   * headline is a data dump: it turns the one screen that is supposed to answer "can I
+   * say yes to this car" into a wall of text you have to scroll past to reach anything
+   * else. Deduped, then shown as four examples with the rest behind a disclosure, so the
+   * list is still there for whoever wants it — just not between you and the dashboard.
+   */
+  const confirmedNames = Array.from(new Set(databaseNames));
+  const previewNames = confirmedNames.slice(0, 4);
+  const remainingNames = confirmedNames.length - previewNames.length;
+
   return (
-    <div>
+    <div className="space-y-6">
       {/* ── THE HEADLINE ────────────────────────────────────────────────────
           *
           * ONE number, at the top, at a size nothing else on the page competes with.
@@ -267,81 +343,134 @@ export default async function AdminPage({
           * equal-weight rows, which is a fair description of the console and useless
           * as a dashboard.
           */}
-      <section className="rounded-xl border border-accent/30 bg-gradient-to-b from-surface to-surface-2 px-5 py-5">
+      <section className="rounded-xl border border-accent/30 bg-linear-to-b from-surface to-surface-2 px-6 py-6">
         <p className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
           Cars you can honestly say yes to
         </p>
-        <p className="mt-1 font-mono text-5xl font-bold text-accent">
-          {databaseLive}
-          <span className="ml-2 text-lg font-normal text-fg-muted">
-            of {vehicles} in the catalogue
-          </span>
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <p className="font-mono text-5xl font-bold leading-none text-accent">{databaseLive}</p>
+          <p className="text-sm text-fg-muted">of {vehicles} in the catalogue</p>
+        </div>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-fg-muted">
+          {databaseLive === 0 ? (
+            "Nothing is confirmed yet, so the Fit Finder refuses every car and every refusal lands in the demand log below. That is the honest starting state, not a fault — a yes is only worth something because the no's are reliable."
+          ) : (
+            <>
+              Confirmed for {previewNames.join(", ")}
+              {remainingNames > 0 && <> and {remainingNames} more</>}. Everything else refuses.
+            </>
+          )}
         </p>
-        <p className="mt-2 max-w-prose text-sm leading-relaxed text-fg-muted">
-          {databaseLive === 0
-            ? "Nothing is confirmed yet, so the Fit Finder refuses every car and every refusal goes into the demand log below. That is the honest starting state, not a fault — a yes is only worth something because the no's are reliable."
-            : `Confirmed for: ${databaseNames.join(", ")}. Everything else refuses.`}
-        </p>
+        {confirmedNames.length > previewNames.length && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-fg-muted underline-offset-4 marker:content-none hover:text-accent hover:underline">
+              See all {confirmedNames.length} confirmed cars
+            </summary>
+            <p className="mt-2 max-w-3xl text-xs leading-relaxed text-accent-dim">
+              {confirmedNames.join(", ")}
+            </p>
+          </details>
+        )}
       </section>
 
-      {/* ── THE RING ───────────────────────────────────────────────────────
+      {/* ── THE GROUPS ──────────────────────────────────────────────────────
           *
-          * What to do next, as four figures a person can act on. Each one links to the
-          * screen that does the thing, so a number is never a dead end.
+          * Ten figures, in three headings that each name a job. Every row links to the
+          * screen that does the thing, so a number is never a dead end, and the warn
+          * colour is spent only on the two counts that are genuinely a to-do.
           */}
-      <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Cars still to do"
-          value={unmapped}
-          tone={unmapped > 0 ? "warn" : "good"}
-          hint="in the catalogue with no floor pan assigned"
-          href="/admin/vehicles?f=unmapped"
-        />
-        <StatCard
-          label="Year ranges to price"
-          value={layouts - inferredLayouts - confirmedLayouts}
-          hint="neither inferred nor confirmed"
-          href="/admin/layouts"
-        />
-        <StatCard
-          label="Prices set"
-          value={mapped}
-          tone="good"
-          hint="cars mapped onto a floor pan"
-          href="/admin/vehicles?f=mapped"
-        />
-        <StatCard
-          label="Refusals logged"
-          value={refusalTotal}
-          hint="every one is a car someone wanted"
-          href="/admin/demand"
-        />
-      </section>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <StatGroup title="Fitment" href="/admin/vehicles">
+          <Stat
+            label="Cars still to do"
+            value={unmapped}
+            tone={unmapped > 0 ? "warn" : "good"}
+            hint="in the catalogue with no floor pan assigned"
+            href="/admin/vehicles?f=unmapped"
+          />
+          <Stat
+            label="Year ranges to price"
+            value={layouts - inferredLayouts - confirmedLayouts}
+            hint="neither inferred nor confirmed"
+            href="/admin/layouts"
+          />
+          <Stat
+            label="Prices set"
+            value={mapped}
+            tone="good"
+            hint="cars mapped onto a floor pan"
+            href="/admin/vehicles?f=mapped"
+          />
+          <Stat
+            label="Refusals logged"
+            value={refusalTotal}
+            hint="every one is a car someone wanted"
+            href="/admin/demand"
+          />
+        </StatGroup>
+
+        <StatGroup title="The shop" href="/admin/products">
+          <Stat
+            label="Categories"
+            value={categories}
+            hint="each one is a real /shop page"
+            href="/admin/categories"
+          />
+          <Stat label="Products" value={products} hint="items the shop sells" href="/admin/products" />
+          <Stat label="Variations" value={variationCount} hint="the options on those products" />
+        </StatGroup>
+
+        {/* The number the owner could not see before `/admin/orders` existed. "Pending"
+            is the one that is a to-do: every one of those is a person who has paid or
+            promised to, and has not been spoken to yet. */}
+        <StatGroup title="Orders" href="/admin/orders">
+          <Stat
+            label="Orders placed"
+            value={orderCount}
+            hint="every order through checkout"
+            href="/admin/orders"
+          />
+          <Stat
+            label="Pending"
+            value={pendingOrders}
+            tone={pendingOrders > 0 ? "warn" : "good"}
+            hint="nobody has spoken to the customer yet"
+            href="/admin/orders?s=pending"
+          />
+          <Stat
+            label="Fulfilled"
+            value={fulfilledOrders}
+            tone="good"
+            hint="delivered and complete"
+            href="/admin/orders?s=fulfilled"
+          />
+        </StatGroup>
+      </div>
 
       {/* ── THE SOURCING QUEUE ──────────────────────────────────────────── */}
-      <section className="mt-8">
+      <section className="rounded-xl border border-border bg-surface/60 px-5 py-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold">Most wanted</h2>
+          <h2 className="font-display text-base font-semibold">Most wanted</h2>
           <Link
             href="/admin/demand"
-            className="text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
+            className="text-[11px] text-fg-muted underline-offset-4 hover:text-accent hover:underline"
           >
             The full demand log →
           </Link>
         </div>
-        <p className="mt-1 max-w-prose text-xs leading-relaxed text-fg-muted">
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-fg-muted">
           The cars people asked for that we cannot yet fit. This is the sourcing roadmap: the
           second one is the cheapest thing to confirm next.
         </p>
 
         {topDemand.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-border bg-surface/60 px-5 py-4 text-sm text-fg-muted">
+          <p className="mt-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-fg-muted">
             No refusals logged yet, so there is no signal about what to source.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-line rounded-xl border border-border bg-surface/60">
+          <ul className="mt-3 divide-y divide-border">
             {topDemand.map((row) => (
-              <li key={`${row.make}::${row.model}`} className="flex items-baseline justify-between gap-4 px-4 py-2.5">
+              <li key={`${row.make}::${row.model}`} className="flex items-baseline justify-between gap-4 py-2.5">
                 <span className="text-sm text-fg/85">
                   {row.make} {row.model}
                 </span>
@@ -355,68 +484,6 @@ export default async function AdminPage({
             ))}
           </ul>
         )}
-      </section>
-
-      {/* ── THE SHOP ────────────────────────────────────────────────────── */}
-      <section className="mt-8">
-        <h2 className="font-display text-lg font-semibold">The shop</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <StatCard
-            label="Categories"
-            value={categories}
-            href="/admin/categories"
-            hint="each one is a real /shop page"
-          />
-          <StatCard
-            label="Products"
-            value={products}
-            href="/admin/products"
-            hint="items the shop sells"
-          />
-          <StatCard
-            label="Variations"
-            value={variationCount}
-            hint="the options on those products"
-          />
-        </div>
-      </section>      {/* ── ORDERS ────────────────────────────────────────────────────────
-          *
-          * The number the owner could not see before `/admin/orders` existed. "Pending"
-          * is the one that is a to-do: every one of those is a person who has paid or
-          * promised to, and has not been spoken to yet.
-          */}
-      <section className="mt-8">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold">Orders</h2>
-          <Link
-            href="/admin/orders"
-            className="text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
-          >
-            The full order book →
-          </Link>
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <StatCard
-            label="Orders placed"
-            value={orderCount}
-            href="/admin/orders"
-            hint="every order through checkout"
-          />
-          <StatCard
-            label="Pending"
-            value={pendingOrders}
-            tone={pendingOrders > 0 ? "warn" : "good"}
-            href="/admin/orders?s=pending"
-            hint="nobody has spoken to the customer yet"
-          />
-          <StatCard
-            label="Fulfilled"
-            value={fulfilledOrders}
-            tone="good"
-            href="/admin/orders?s=fulfilled"
-            hint="delivered and complete"
-          />
-        </div>
       </section>
 
       {/* ── STOREFRONT APPEARANCE ───────────────────────────────────────── ──
@@ -437,33 +504,43 @@ export default async function AdminPage({
           * cookie describes one person — setting it here would have changed the layout
           * on the operator's own screen and on nobody else's.
           */}
-      <section className="mt-8">
-        <h2 className="font-display text-lg font-semibold">Storefront appearance</h2>
-        <p className="mt-1 max-w-prose text-xs leading-relaxed text-fg-muted">
-          How the photograph and the words sit together at the top of the homepage. This
-          changes the layout for everyone who visits, not just for you.
+      <section className="rounded-xl border border-border bg-surface/60 px-5 py-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="font-display text-base font-semibold">Storefront appearance</h2>
+          <span className="text-[11px] text-fg-muted">
+            Live: <span className="font-mono text-accent">{liveLayoutLabel}</span>
+            <span className="mx-1.5 text-accent-dim">·</span>
+            <Link href="/" target="_blank" className="underline underline-offset-4 hover:text-accent">
+              see the homepage ↗
+            </Link>
+          </span>
+        </div>
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-fg-muted">
+          How the photograph and the words sit together at the top of the homepage — for everyone
+          who visits, not just for you. Hover an option for the detail.
         </p>
 
         {heroFailures.has("heroLayout") && (
-          <p className="mt-3 rounded-xl border border-[#FF6B35] px-4 py-3 text-sm text-[#FF6B35]">
+          <p className="mt-3 rounded-lg border border-[#FF6B35] px-4 py-3 text-sm text-[#FF6B35]">
             <span className="font-mono">heroLayout</span> —{" "}
             {messageFor(heroFailures.get("heroLayout") as string)}
           </p>
         )}
 
-        <form method="post" action={setHeroLayout} className="mt-4">
+        <form method="post" action={setHeroLayout} className="mt-3">
           <fieldset>
             <legend className="sr-only">Homepage hero layout</legend>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2.5 sm:grid-cols-3">
               {HERO_LAYOUT_OPTIONS.map((option) => {
                 const checked = heroLayout === option.value;
                 return (
                   <label
                     key={option.value}
-                    className={`flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-4 transition-colors ${
+                    title={option.detail}
+                    className={`flex cursor-pointer flex-col gap-2 rounded-lg border px-3 py-3 transition-colors ${
                       checked
                         ? "border-accent bg-accent/5"
-                        : "border-border bg-surface/60 hover:border-accent/50"
+                        : "border-border bg-surface hover:border-accent/50"
                     }`}
                   >
                     <span className="flex items-center gap-2">
@@ -472,40 +549,24 @@ export default async function AdminPage({
                         name="heroLayout"
                         value={option.value}
                         defaultChecked={checked}
-                        className="accent-gold"
+                        className="accent-accent shrink-0"
                       />
                       <span className="font-display text-sm font-semibold">{option.label}</span>
                     </span>
                     <HeroLayoutDiagram option={option} />
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-accent-dim">
-                      {option.summary}
-                    </span>
-                    <span className="text-xs leading-relaxed text-fg-muted">{option.detail}</span>
+                    <span className="text-[11px] leading-snug text-fg-muted">{option.summary}</span>
                   </label>
                 );
               })}
             </div>
           </fieldset>
 
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            <button
-              type="submit"
-              className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-            >
-              Save layout
-            </button>
-            <span className="text-xs text-fg-muted">
-              Live now:{" "}
-              <span className="font-mono text-accent">
-                {HERO_LAYOUT_OPTIONS.find((o) => o.value === heroLayout)?.label ?? heroLayout}
-              </span>
-              <span className="ml-2">
-                <Link href="/" target="_blank" className="underline underline-offset-4 hover:text-accent">
-                  see the homepage ↗
-                </Link>
-              </span>
-            </span>
-          </div>
+          <button
+            type="submit"
+            className="mt-3 rounded-lg border border-accent bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
+          >
+            Save layout
+          </button>
         </form>
       </section>
 
@@ -514,17 +575,17 @@ export default async function AdminPage({
           * The counts below are real and worth keeping, but they are diagnostics, not
           * decisions. Folding them means the dashboard opens on what to do rather than
           * on twelve numbers that are all currently correct and none of which you can
-          * act on. `force-dynamic` below is why they are true the moment you open it.
+          * act on. `force-dynamic` above is why they are true the moment you open it.
           */}
-      <details className="mt-8 rounded-xl border border-border bg-surface/60">
-        <summary className="cursor-pointer px-4 py-3 text-sm text-fg/85 marker:content-none">
+      <details className="rounded-xl border border-border bg-surface/60">
+        <summary className="cursor-pointer px-5 py-3 text-sm text-fg/85 marker:content-none">
           Everything else
           <span className="ml-2 text-xs text-fg-muted">
             catalogue counts, exclusions, popular cars, and what the site reads
           </span>
         </summary>
 
-        <div className="space-y-6 border-t border-border px-4 py-4">
+        <div className="space-y-6 border-t border-border px-5 py-4">
           <div className="rounded-xl border border-border bg-surface/60 px-5 py-2">
             <Row label="Makes" value={makes} />
             <Row label="Vehicles" value={vehicles} hint="every car in the catalogue" />
@@ -575,9 +636,11 @@ export default async function AdminPage({
           {/* Both name lists, for the same reason. `storefrontNames` is the compile-time
               table's answer and is empty by construction; it is shown so that a future
               change which starts writing there is visible rather than silent. */}
-          {databaseNames.length > 0 && (
+          {confirmedNames.length > 0 && (
             <p className="text-xs text-fg-muted">
-              Currently confirmed for customers: {databaseNames.join(", ")}
+              Currently confirmed for customers ({confirmedNames.length}):{" "}
+              {confirmedNames.slice(0, 12).join(", ")}
+              {confirmedNames.length > 12 && ` … +${confirmedNames.length - 12} more`}
             </p>
           )}
           {storefrontNames.length > 0 && (
@@ -634,7 +697,7 @@ export default async function AdminPage({
         </div>
       </details>
 
-      <p className="mt-8 text-[11px] text-accent-dim">
+      <p className="text-[11px] text-accent-dim">
         Nothing links here from the public site, and this page is not indexed. The whole subtree is
         behind HTTP Basic Auth.
       </p>
