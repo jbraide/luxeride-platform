@@ -995,9 +995,26 @@ export default function FitFinder({
               const base = option[tier];
               const rowApplicable = option.rowApplicable ?? product?.rowApplicable ?? false;
               const surcharge = option.threeRowSurcharge ?? product?.threeRowSurcharge ?? 0;
-              const priceNote = rowApplicable
-                ? `${fmtNaira(base)} (2-row) / ${fmtNaira(base + surcharge)} (3-row)`
-                : fmtNaira(base);
+              /*
+               * THE PRICE NOTE FOLLOWS THE CAR, NOT THE PRODUCT.
+               *
+               * It read "(2-row) / (3-row)" for every row-dependent product, whatever
+               * car was chosen — so a car the owner had set to TWO rows was still shown a
+               * 3-row price as though it were on offer. That is exactly what the row rule
+               * in `@/lib/seat-rows` exists to prevent, printed on a screen the rule did
+               * not reach: the step above it had already stopped asking, and this step was
+               * still advertising the count it had stopped asking about.
+               *
+               * `offeredRows` is what THIS car may be sold. A one-count car states that
+               * one count and never mentions the other; a car sold as both (or one nobody
+               * has told us about) keeps the pair.
+               */
+              const priceNote =
+                !rowApplicable
+                  ? fmtNaira(base)
+                  : offeredRows.length === 1
+                    ? `${fmtNaira(base)} (${offeredRows[0]}-row)`
+                    : `${fmtNaira(base)} (2-row) / ${fmtNaira(base + surcharge)} (3-row)`;
               return (
                 <Chip
                   key={kind}
