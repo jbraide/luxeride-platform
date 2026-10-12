@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { cached, TTL_FITMENT_MS } from "@/lib/isolate-cache";
 import { resolveLeadTime } from "@/lib/lead-time";
 import {
   FIT_REFUSAL,
@@ -214,8 +215,13 @@ export function validateLiveLayout(layout: Layout): string[] {
   return problems;
 }
 
-/** Load everything the lookup needs, in one round of queries. */
-export async function loadLiveFitment(): Promise<LiveFitment> {
+/**
+ * Load everything the lookup needs, in one round of queries.
+ *
+ * NOT EXPORTED. Callers use `loadLiveFitment()` below, which is this same load behind
+ * the per-isolate cache — the change that fixed Error 1102.
+ */
+async function loadLiveFitmentFromDb(): Promise<LiveFitment> {
   const [layouts, mappings, vehicles, exclusions, images] = await Promise.all([
     prisma.layout.findMany({
       // `active` IS THE GATE, and `status` no longer is.
@@ -454,6 +460,23 @@ export async function loadLiveFitment(): Promise<LiveFitment> {
       reason: exclusion.reason,
     })),
   };
+}
+
+/**
+ * THE fitment lookup, cached for the isolate.
+ *
+ * Every `/api/fit-check` used to rebuild this whole graph — 231 layouts, 693 variants,
+ * 1,281 range prices, 413 mappings, 423 vehicles — once per request. Under an ad burst
+ * several of those land on one isolate at the same time, and their combined allocations
+ * blow the 128 MB isolate limit: that was Error 1102. Caching it means concurrent
+ * requests share ONE copy, which is safe because `checkFitLive` only reads from it.
+ *
+ * `TTL_FITMENT_MS` bounds how long a newly confirmed car can still look unconfirmed.
+ * The admin cannot push an invalidation to every isolate, so the TTL is the mechanism —
+ * the reasoning is in `src/lib/isolate-cache.ts`.
+ */
+export function loadLiveFitment(): Promise<LiveFitment> {
+  return cached("fitment:live", TTL_FITMENT_MS, loadLiveFitmentFromDb);
 }
 
 /**

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import type { Category, Product, ProductBundle, ProductBundleItem, ProductVariation } from "@/data/products";
 import { resolveDiscount } from "@/lib/discounts";
 import { loadPromotions } from "@/lib/discounts-server";
+import { cached, TTL_CATALOGUE_MS, TTL_CATEGORIES_MS } from "@/lib/isolate-cache";
 
 /**
  * The catalogue, read from the DATABASE. Added 2026-10-04.
@@ -252,7 +253,7 @@ function toCategory(row: {
  * `/shop`, the sitemap, the featured row and the related strip, and its PDP falls to
  * `not-found.tsx` — the same disappearance a delete causes, but reversible.
  */
-export async function listProducts(): Promise<Product[]> {
+async function listProductsFromDb(): Promise<Product[]> {
   const rows = await prisma.product.findMany({
     where: { archivedAt: null },
     select: productSelect,
@@ -261,7 +262,18 @@ export async function listProducts(): Promise<Product[]> {
   return rows.map(toProduct);
 }
 
-export async function listCategories(): Promise<Category[]> {
+/**
+ * `listProducts`, cached for the isolate.
+ *
+ * The catalogue is the same for every visitor and changes only when the owner edits
+ * the admin, so re-reading it per request was pure waste. Cached because it runs from
+ * the root layout's footer on every page — see `src/lib/isolate-cache.ts`.
+ */
+export function listProducts(): Promise<Product[]> {
+  return cached("catalogue:products", TTL_CATALOGUE_MS, listProductsFromDb);
+}
+
+async function listCategoriesFromDb(): Promise<Category[]> {
   const rows = await prisma.category.findMany({
     select: { slug: true, name: true, blurb: true, seoTitle: true, seoDescription: true, heroLine: true },
     orderBy: { name: "asc" },
@@ -269,7 +281,19 @@ export async function listCategories(): Promise<Category[]> {
   return rows.map(toCategory);
 }
 
-export async function getProduct(slug: string): Promise<Product | undefined> {
+/**
+ * `listCategories`, cached for the isolate with a long TTL.
+ *
+ * This one runs on EVERY page — the header nav and the footer both read it — so it is
+ * the most-called query in the app. It is also the slowest-changing: a category is
+ * created by hand, rarely. `TTL_CATEGORIES_MS` is minutes rather than seconds for
+ * exactly that reason.
+ */
+export function listCategories(): Promise<Category[]> {
+  return cached("catalogue:categories", TTL_CATEGORIES_MS, listCategoriesFromDb);
+}
+
+async function getProductFromDb(slug: string): Promise<Product | undefined> {
   // `findFirst` rather than `findUnique`, because the filter is `slug AND not
   // archived` and `findUnique` only takes the unique key. An archived slug therefore
   // returns undefined and its PDP falls to `not-found.tsx`.
@@ -277,7 +301,12 @@ export async function getProduct(slug: string): Promise<Product | undefined> {
   return row ? toProduct(row) : undefined;
 }
 
-export async function getCategory(slug: string): Promise<Category | undefined> {
+/** `getProduct`, cached per slug. The PDP is a common ad destination. */
+export function getProduct(slug: string): Promise<Product | undefined> {
+  return cached(`catalogue:product:${slug}`, TTL_CATALOGUE_MS, () => getProductFromDb(slug));
+}
+
+async function getCategoryFromDb(slug: string): Promise<Category | undefined> {
   const row = await prisma.category.findUnique({
     where: { slug },
     select: { slug: true, name: true, blurb: true, seoTitle: true, seoDescription: true, heroLine: true },
@@ -285,14 +314,26 @@ export async function getCategory(slug: string): Promise<Category | undefined> {
   return row ? toCategory(row) : undefined;
 }
 
+/** `getCategory`, cached per slug. */
+export function getCategory(slug: string): Promise<Category | undefined> {
+  return cached(`catalogue:category:${slug}`, TTL_CATEGORIES_MS, () => getCategoryFromDb(slug));
+}
+
 /** Products in one category. Used by `/shop/<slug>`. */
-export async function listProductsInCategory(categorySlug: string): Promise<Product[]> {
+async function listProductsInCategoryFromDb(categorySlug: string): Promise<Product[]> {
   const rows = await prisma.product.findMany({
     where: { category: { slug: categorySlug }, archivedAt: null },
     select: productSelect,
     orderBy: { name: "asc" },
   });
   return rows.map(toProduct);
+}
+
+/** `listProductsInCategory`, cached per category slug. */
+export function listProductsInCategory(categorySlug: string): Promise<Product[]> {
+  return cached(`catalogue:category-products:${categorySlug}`, TTL_CATALOGUE_MS, () =>
+    listProductsInCategoryFromDb(categorySlug),
+  );
 }
 
 /**
@@ -330,13 +371,18 @@ export async function listCategoryWithSales(
  * your car yet" is a fact about our knowledge, and the second belongs in the Fit
  * Finder's refusal, not in the shop's catalogue.
  */
-export async function listGenericProducts(): Promise<Product[]> {
+async function listGenericProductsFromDb(): Promise<Product[]> {
   const rows = await prisma.product.findMany({
     where: { isCarSpecific: false, archivedAt: null },
     select: productSelect,
     orderBy: { name: "asc" },
   });
   return rows.map(toProduct);
+}
+
+/** `listGenericProducts`, cached for the isolate. */
+export function listGenericProducts(): Promise<Product[]> {
+  return cached("catalogue:generic-products", TTL_CATALOGUE_MS, listGenericProductsFromDb);
 }
 
 /**
