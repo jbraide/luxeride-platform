@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { prisma } from "@/lib/db";
-import { deleteVehicle, deleteVehicles, setVehicleActive, setVehiclesActive } from "../actions";
+import { deleteVehicle, deleteVehicles, setVehicleActive, setVehiclesActive, withdrawCar } from "../actions";
 
 /**
  * `/admin/vehicles` — the reviewable car list (`fitment-engine` §8.3).
@@ -327,48 +327,77 @@ export default async function VehiclesPage({
                       </summary>
 
                       {/*
-                        THE CAR'S BATCH FORM. It is EMPTY of data — it holds the three
+                        {/*
+                        THE CAR'S BATCH ROW.
+
+                        The first form is EMPTY of data — it holds the three ticked-range
                         buttons and nothing else; the checkboxes live in the table below and
-                        point at it by id. That is what keeps the per-range forms from being
+                        point at it by id, which is what keeps the per-range forms from being
                         nested inside it.
+
+                        The second form takes the WHOLE CAR with nothing ticked. It is a
+                        separate form rather than a fourth button in the first, because
+                        buttons in one form submit one `vehicleIds` set: sharing it would make
+                        "Withdraw selected" also carry every range, and the two could never
+                        disagree about what was meant. It posts only the make and the model —
+                        `withdrawCar` reads the car's ranges from the database — so it means
+                        the same thing in a filtered view as it does in "All", which the
+                        on-screen ids could not promise.
                       */}
-                      <form
-                        id={batchFormId}
-                        method="post"
-                        action={setVehiclesActive}
-                        className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2"
-                      >
-                        <input type="hidden" name="back" value={back} />
-                        <button
-                          type="submit"
-                          name="active"
-                          value="off"
-                          formNoValidate
-                          className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                      <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
+                        <form
+                          id={batchFormId}
+                          method="post"
+                          action={setVehiclesActive}
+                          className="contents"
                         >
-                          Withdraw selected
-                        </button>
-                        <button
-                          type="submit"
-                          name="active"
-                          value="on"
-                          formNoValidate
-                          className="rounded-lg border border-accent px-3 py-1 text-xs text-accent transition-colors hover:bg-accent hover:text-on-accent"
-                        >
-                          Put live selected
-                        </button>
-                        <button
-                          type="submit"
-                          formAction={deleteVehicles}
-                          formNoValidate
-                          className="rounded-lg border border-[#FF6B35]/60 px-3 py-1 text-xs text-[#FF6B35] transition-colors hover:bg-[#FF6B35] hover:text-on-accent"
-                        >
-                          Delete selected
-                        </button>
+                          <input type="hidden" name="back" value={back} />
+                          <button
+                            type="submit"
+                            name="active"
+                            value="off"
+                            formNoValidate
+                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                          >
+                            Withdraw selected
+                          </button>
+                          <button
+                            type="submit"
+                            name="active"
+                            value="on"
+                            formNoValidate
+                            className="rounded-lg border border-accent px-3 py-1 text-xs text-accent transition-colors hover:bg-accent hover:text-on-accent"
+                          >
+                            Put live selected
+                          </button>
+                          <button
+                            type="submit"
+                            formAction={deleteVehicles}
+                            formNoValidate
+                            className="rounded-lg border border-[#FF6B35]/60 px-3 py-1 text-xs text-[#FF6B35] transition-colors hover:bg-[#FF6B35] hover:text-on-accent"
+                          >
+                            Delete selected
+                          </button>
+                        </form>
+
                         <span className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">
                           tick the ranges you mean
                         </span>
-                      </form>
+
+                        <form method="post" action={withdrawCar} className="contents">
+                          <input type="hidden" name="back" value={back} />
+                          <input type="hidden" name="makeId" value={group.make.id} />
+                          <input type="hidden" name="model" value={car.model} />
+                          <button
+                            type="submit"
+                            formNoValidate
+                            title={`Stop offering every year range of the ${car.model}. Prices and photographs are kept, and each range comes back with Put live.`}
+                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                          >
+                            Withdraw every range
+                          </button>
+                        </form>
+                      </div>
 
                       <table className="w-full border-t border-border text-left text-sm">
                         <thead>

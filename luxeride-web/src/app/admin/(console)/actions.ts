@@ -711,6 +711,67 @@ export async function setVehiclesActive(formData: FormData): Promise<void> {
 }
 
 /**
+ * WITHDRAW EVERY YEAR RANGE OF ONE CAR, in one submission.
+ *
+ * The owner's ask: "a button to withdraw all the vehicles for a particular car".
+ *
+ * KEYED BY MAKE + MODEL, NOT BY A LIST OF IDS, and that is the whole point rather than
+ * a shortcut. `/admin/vehicles` can be FILTERED (unmapped / mapped / excluded), and a
+ * filter narrows each car to the ranges that match it — so a button built from the ids
+ * on screen would withdraw only the matching subset while its label said "every range".
+ * That is the kind of quiet half-action this console exists to avoid. Reading the car's
+ * ranges from the database means "every range" cannot disagree with what it does.
+ *
+ * Only ranges that are still live are touched, and each one is audited as its own row —
+ * the same per-row trail `setVehiclesActive` leaves, so a bulk withdrawal is never a
+ * blank in the log. A car whose ranges are all already withdrawn is a success that
+ * changed nothing, and says so (`bulkUnchanged`) rather than reporting a withdrawal
+ * that did not happen.
+ */
+export async function withdrawCar(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const back = text(formData, "back") || "/admin/vehicles";
+  const makeId = text(formData, "makeId");
+  const model = text(formData, "model").trim();
+  if (makeId === "" || model === "") {
+    backTo(back, refusalParams(values, [{ field: "model", code: "required" }]));
+  }
+
+  const rows = await prisma.vehicle.findMany({
+    where: { makeId, model, active: true },
+    select: { id: true },
+  });
+
+  if (rows.length > 0) {
+    const who = process.env.ADMIN_USER ?? null;
+    await prisma.$transaction([
+      prisma.vehicle.updateMany({ where: { id: { in: rows.map((row) => row.id) } }, data: { active: false } }),
+      prisma.auditEntry.createMany({
+        data: rows.map((row) => ({
+          entity: "Vehicle",
+          entityId: row.id,
+          action: "update",
+          field: "active",
+          before: true,
+          after: false,
+          note: "every range of this car withdrawn at once — its prices and photographs are kept",
+          who,
+        })),
+      }),
+    ]);
+  }
+
+  revalidatePath("/admin/vehicles");
+  revalidatePath("/admin");
+  revalidatePath("/admin/layouts");
+  revalidatePath("/fit-finder");
+
+  await flashBack(back, rows.length === 0 ? "bulkUnchanged" : "bulkWithdrawn");
+}
+
+/**
  * Remove ONE year range from the catalogue — the destructive half of the pair the
  * owner asked for on `/admin/vehicles` ("a withdraw button and a delete button … so I
  * can remove what I don't need").
