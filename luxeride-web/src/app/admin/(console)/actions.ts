@@ -778,6 +778,73 @@ export async function setCarActive(formData: FormData): Promise<void> {
 }
 
 /**
+ * TURN EVERY YEAR RANGE OF ONE MAKE on or off, in one submission.
+ *
+ * The owner's ask, in their words: "for all the fords I'd want to just withdraw all at
+ * once — doing each type is fine but not it". A make is the unit a brand decision is
+ * made in: if we stop offering Ford, we stop offering every Ford, and clicking through
+ * Focus, Fiesta, Ranger and the rest one model at a time is the same decision made N
+ * times.
+ *
+ * The same three rules as `setCarActive`, because this is the same problem one level up
+ * and a second implementation that drifted would be worse than a second function:
+ *
+ *   - ONE ACTION with an `active` flag, not a near-identical pair.
+ *   - KEYED BY `makeId`, NOT BY THE IDS ON SCREEN. `/admin/vehicles` is filterable
+ *     (unmapped / mapped / excluded), so the ids the page happens to render are a
+ *     SUBSET of the make — a button built from them would act on that subset while its
+ *     label said "every Ford". Reading the make's ranges from the database means "every
+ *     range" cannot disagree with what it does.
+ *   - ONLY THE ROWS THAT ACTUALLY NEED TO MOVE, each audited on its own row, so pressing
+ *     the button a second time records nothing and reports `bulkUnchanged`, and a
+ *     make-wide change is never a blank in the log.
+ */
+export async function setMakeActive(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const values = submittedValues(formData);
+  const back = text(formData, "back") || "/admin/vehicles";
+  const requested = text(formData, "active") === "on";
+  const makeId = text(formData, "makeId");
+  if (makeId === "") {
+    backTo(back, refusalParams(values, [{ field: "makeId", code: "required" }]));
+  }
+
+  const rows = await prisma.vehicle.findMany({
+    where: { makeId, active: !requested },
+    select: { id: true },
+  });
+
+  if (rows.length > 0) {
+    const who = process.env.ADMIN_USER ?? null;
+    await prisma.$transaction([
+      prisma.vehicle.updateMany({ where: { id: { in: rows.map((row) => row.id) } }, data: { active: requested } }),
+      prisma.auditEntry.createMany({
+        data: rows.map((row) => ({
+          entity: "Vehicle",
+          entityId: row.id,
+          action: "update",
+          field: "active",
+          before: !requested,
+          after: requested,
+          note: requested
+            ? "every range of this make offered again (whole make)"
+            : "every range of this make withdrawn at once (whole make) — its prices and photographs are kept",
+          who,
+        })),
+      }),
+    ]);
+  }
+
+  revalidatePath("/admin/vehicles");
+  revalidatePath("/admin");
+  revalidatePath("/admin/layouts");
+  revalidatePath("/fit-finder");
+
+  await flashBack(back, rows.length === 0 ? "bulkUnchanged" : requested ? "bulkLive" : "bulkWithdrawn");
+}
+
+/**
  * Remove ONE year range from the catalogue — the destructive half of the pair the
  * owner asked for on `/admin/vehicles` ("a withdraw button and a delete button … so I
  * can remove what I don't need").

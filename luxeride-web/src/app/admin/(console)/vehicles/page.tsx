@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { prisma } from "@/lib/db";
-import { deleteVehicle, deleteVehicles, setCarActive, setVehicleActive, setVehiclesActive } from "../actions";
+import { deleteVehicle, deleteVehicles, setCarActive, setMakeActive, setVehicleActive, setVehiclesActive } from "../actions";
 import PageHeader from "@/components/admin/PageHeader";
 import EmptyState from "@/components/admin/EmptyState";
 import StatusChip from "@/components/admin/StatusChip";
@@ -253,9 +253,9 @@ export default async function VehiclesPage({
         Open a make, then a car. Each row is one{" "}
         <span className="text-fg/80">year range</span> — the unit a floor pan covers.{" "}
         <span className="text-fg/80">Withdraw</span> stops offering it and keeps its prices and
-        photographs; <span className="text-fg/80">Delete</span> removes it for good. Take the
-        whole car at once with the <span className="text-fg/80">whole car</span> buttons, or tick
-        ranges to act on just those.
+        photographs; <span className="text-fg/80">Delete</span> removes it for good. Take a whole
+        car with the <span className="text-fg/80">whole car</span> buttons, a whole make with{" "}
+        <span className="text-fg/80">whole make</span>, or tick ranges to act on just those.
       </p>
 
       {vehicles.length === 0 ? (
@@ -307,6 +307,50 @@ export default async function VehiclesPage({
                 {group.unmapped > 0 && <StatusChip tone="warn">{group.unmapped} unmapped</StatusChip>}
                 {group.excluded > 0 && <StatusChip tone="neutral">{group.excluded} excluded</StatusChip>}
               </summary>
+
+              {/*
+                THE WHOLE MAKE, ON ITS OWN BAND ABOVE THE CARS.
+
+                "for all the fords I'd want to just withdraw all at once" — one row, one
+                decision, every model under it. Placed OUTSIDE the `<summary>`, not in it,
+                because a `<button>` inside a `<summary>` also toggles the disclosure: every
+                press would withdraw the make AND collapse the panel it was pressed in.
+
+                A SEPARATE FORM PER DIRECTION, the same as the car toolbar below — buttons in
+                one form share one `active` value, so a shared form would make one of the two
+                act on the other's flag.
+              */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-surface-2/40 px-4 py-2">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">
+                  whole make
+                </span>
+                <form method="post" action={setMakeActive} className="contents">
+                  <input type="hidden" name="back" value={back} />
+                  <input type="hidden" name="makeId" value={group.make.id} />
+                  <input type="hidden" name="active" value="off" />
+                  <button
+                    type="submit"
+                    formNoValidate
+                    title={`Stop offering every ${group.make.name} in the catalogue — every model, every year range. Their prices and photographs are kept, and "Put all live" brings them back.`}
+                    className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-danger hover:text-danger"
+                  >
+                    Withdraw all {group.make.name}
+                  </button>
+                </form>
+                <form method="post" action={setMakeActive} className="contents">
+                  <input type="hidden" name="back" value={back} />
+                  <input type="hidden" name="makeId" value={group.make.id} />
+                  <input type="hidden" name="active" value="on" />
+                  <button
+                    type="submit"
+                    formNoValidate
+                    title={`Offer every ${group.make.name} again.`}
+                    className="rounded-lg border border-accent/50 px-3 py-1 text-xs text-accent transition-colors hover:bg-accent hover:text-on-accent"
+                  >
+                    Put all live
+                  </button>
+                </form>
+              </div>
 
               <div className="space-y-2 border-t border-border p-3">
                 {group.cars.map((car) => {
