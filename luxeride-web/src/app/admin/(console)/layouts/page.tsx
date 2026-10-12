@@ -35,9 +35,9 @@ export default async function LayoutsPage({
         ? {}
         : { OR: [{ customerName: query }, { internalCode: query }, { make: { name: query } }] };
 
-  const [all, confirmed, layouts] = await Promise.all([
+  const [statusCounts, all, layouts] = await Promise.all([
+    prisma.layout.groupBy({ by: ["status"], _count: { _all: true } }),
     prisma.layout.count(),
-    prisma.layout.count({ where: { status: "confirmed" } }),
     prisma.layout.findMany({
       where,
       include: {
@@ -47,6 +47,15 @@ export default async function LayoutsPage({
       orderBy: [{ make: { name: "asc" } }, { customerName: "asc" }],
     }),
   ]);
+
+  /**
+   * The count behind each filter chip, so the bar carries the size of the queue
+   * rather than making the operator click into a filter to find out it is empty —
+   * the same thing `/admin/vehicles` does. `""` is the unfiltered total.
+   */
+  const countFor = (value: string): number =>
+    value === "" ? all : (statusCounts.find((row) => row.status === value)?._count._all ?? 0);
+  const confirmed = countFor("confirmed");
 
   const statusHref = (next: string): string => {
     const nextParams = new URLSearchParams();
@@ -65,20 +74,26 @@ export default async function LayoutsPage({
         </span>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-        {["", "inferred", "confirmed", "draft", "retired"].map((value) => (
-          <Link
-            key={value || "all"}
-            href={statusHref(value)}
-            aria-current={value === status ? "page" : undefined}
-            className={`font-mono text-xs uppercase tracking-widest ${
-              value === status ? "text-accent" : "text-fg-muted hover:text-accent"
-            }`}
-          >
-            {value || "all"}
-          </Link>
-        ))}
-      </div>
+      <nav aria-label="Filter layouts" className="mt-4 flex flex-wrap items-center gap-2">
+        {["", "inferred", "confirmed", "draft", "retired"].map((value) => {
+          const active = value === status;
+          return (
+            <Link
+              key={value || "all"}
+              href={statusHref(value)}
+              aria-current={active ? "page" : undefined}
+              className={`flex items-baseline gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors ${
+                active
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-border text-fg-muted hover:border-accent/50 hover:text-accent"
+              }`}
+            >
+              {value || "all"}
+              <span className={active ? "text-accent" : "text-accent-dim"}>{countFor(value)}</span>
+            </Link>
+          );
+        })}
+      </nav>
 
       <form method="get" action="/admin/layouts" className="mt-4 flex max-w-md gap-2">
         {status !== "" && <input type="hidden" name="s" value={status} />}

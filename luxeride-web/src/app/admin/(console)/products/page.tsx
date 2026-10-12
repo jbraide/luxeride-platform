@@ -47,7 +47,7 @@ export default async function ProductsPage({
   const echo = readEcho(query);
   const filter = typeof query.category === "string" ? query.category : "";
 
-  const [products, categories] = await Promise.all([
+  const [products, categories, perCategory] = await Promise.all([
     prisma.product.findMany({
       where: filter ? { category: { slug: filter } } : {},
       include: {
@@ -58,12 +58,32 @@ export default async function ProductsPage({
       orderBy: { name: "asc" },
     }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
+    prisma.product.groupBy({ by: ["categoryId"], _count: { _all: true } }),
   ]);
+
+  /*
+   * The count behind each filter chip and behind "All", so the bar carries the size
+   * of each set before a click — the same thing `/admin/vehicles` now does. `All` is
+   * the sum of the per-category counts, which is the number of products that exist
+   * regardless of which category is showing.
+   */
+  const totalProducts = perCategory.reduce((sum, row) => sum + row._count._all, 0);
+  const countForCategory = (id: string): number =>
+    perCategory.find((row) => row.categoryId === id)?._count._all ?? 0;
 
   const label = "block text-xs uppercase tracking-widest text-accent-dim";
   const input =
     "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none";
   const fieldFailed = (field: string) => (failures.has(field) ? "border-[#FF6B35]" : "");
+
+  // The filter chip, in one place so `All` and each category cannot drift apart —
+  // the same shape `/admin/vehicles` uses.
+  const chip = (active: boolean) =>
+    `flex items-baseline gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors ${
+      active
+        ? "border-accent bg-accent/10 text-accent"
+        : "border-border text-fg-muted hover:border-accent/50 hover:text-accent"
+    }`;
 
   const refusal = (field: string) => {
     const code = failures.get(field);
@@ -86,31 +106,28 @@ export default async function ProductsPage({
         here always creates its first variation too — add the rest on its own page.
       </p>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href="/admin/products"
-          className={`rounded-full border px-4 py-1.5 text-sm ${
-            filter === ""
-              ? "border-accent text-accent"
-              : "border-border text-fg/70 hover:border-accent hover:text-accent"
-          }`}
-        >
+      <nav aria-label="Filter products" className="mt-4 flex flex-wrap items-center gap-2">
+        <Link href="/admin/products" aria-current={filter === "" ? "page" : undefined} className={chip(filter === "")}>
           All
+          <span className={filter === "" ? "text-accent" : "text-accent-dim"}>{totalProducts}</span>
         </Link>
-        {categories.map((category) => (
-          <Link
-            key={category.id}
-            href={`/admin/products?category=${encodeURIComponent(category.slug)}`}
-            className={`rounded-full border px-4 py-1.5 text-sm ${
-              filter === category.slug
-                ? "border-accent text-accent"
-                : "border-border text-fg/70 hover:border-accent hover:text-accent"
-            }`}
-          >
-            {category.name}
-          </Link>
-        ))}
-      </div>
+        {categories.map((category) => {
+          const active = filter === category.slug;
+          return (
+            <Link
+              key={category.id}
+              href={`/admin/products?category=${encodeURIComponent(category.slug)}`}
+              aria-current={active ? "page" : undefined}
+              className={chip(active)}
+            >
+              {category.name}
+              <span className={active ? "text-accent" : "text-accent-dim"}>
+                {countForCategory(category.id)}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
 
 
       {failures.size > 0 && (
