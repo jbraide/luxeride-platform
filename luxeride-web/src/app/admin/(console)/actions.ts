@@ -711,28 +711,32 @@ export async function setVehiclesActive(formData: FormData): Promise<void> {
 }
 
 /**
- * WITHDRAW EVERY YEAR RANGE OF ONE CAR, in one submission.
+ * TURN EVERY YEAR RANGE OF ONE CAR on or off, in one submission.
  *
- * The owner's ask: "a button to withdraw all the vehicles for a particular car".
+ * The owner's ask: "a button to withdraw all the vehicles for a particular car". It is
+ * one action with an `active` flag rather than two, because the withdraw and the put-back
+ * differ only in that flag — and a pair of near-identical actions is how the two halves
+ * of a toggle drift apart.
  *
  * KEYED BY MAKE + MODEL, NOT BY A LIST OF IDS, and that is the whole point rather than
  * a shortcut. `/admin/vehicles` can be FILTERED (unmapped / mapped / excluded), and a
  * filter narrows each car to the ranges that match it — so a button built from the ids
- * on screen would withdraw only the matching subset while its label said "every range".
- * That is the kind of quiet half-action this console exists to avoid. Reading the car's
- * ranges from the database means "every range" cannot disagree with what it does.
+ * on screen would act on only that subset while its label said "every range". That is the
+ * kind of quiet half-action this console exists to avoid. Reading the car's ranges from
+ * the database means "every range" cannot disagree with what it does.
  *
- * Only ranges that are still live are touched, and each one is audited as its own row —
- * the same per-row trail `setVehiclesActive` leaves, so a bulk withdrawal is never a
- * blank in the log. A car whose ranges are all already withdrawn is a success that
- * changed nothing, and says so (`bulkUnchanged`) rather than reporting a withdrawal
- * that did not happen.
+ * Only the ranges that actually need to move are touched — the `active: !requested`
+ * filter is `toFlip` from `setVehiclesActive` — so pressing a button twice records
+ * nothing the second time and reports `bulkUnchanged` rather than a change that did not
+ * happen. Each moved range audits its own row, the same per-row trail the other bulk
+ * action leaves, so a car-wide change is never a blank in the log.
  */
-export async function withdrawCar(formData: FormData): Promise<void> {
+export async function setCarActive(formData: FormData): Promise<void> {
   requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
 
   const values = submittedValues(formData);
   const back = text(formData, "back") || "/admin/vehicles";
+  const requested = text(formData, "active") === "on";
   const makeId = text(formData, "makeId");
   const model = text(formData, "model").trim();
   if (makeId === "" || model === "") {
@@ -740,23 +744,25 @@ export async function withdrawCar(formData: FormData): Promise<void> {
   }
 
   const rows = await prisma.vehicle.findMany({
-    where: { makeId, model, active: true },
+    where: { makeId, model, active: !requested },
     select: { id: true },
   });
 
   if (rows.length > 0) {
     const who = process.env.ADMIN_USER ?? null;
     await prisma.$transaction([
-      prisma.vehicle.updateMany({ where: { id: { in: rows.map((row) => row.id) } }, data: { active: false } }),
+      prisma.vehicle.updateMany({ where: { id: { in: rows.map((row) => row.id) } }, data: { active: requested } }),
       prisma.auditEntry.createMany({
         data: rows.map((row) => ({
           entity: "Vehicle",
           entityId: row.id,
           action: "update",
           field: "active",
-          before: true,
-          after: false,
-          note: "every range of this car withdrawn at once — its prices and photographs are kept",
+          before: !requested,
+          after: requested,
+          note: requested
+            ? "every range of this car offered again (whole car)"
+            : "every range of this car withdrawn at once (whole car) — its prices and photographs are kept",
           who,
         })),
       }),
@@ -768,7 +774,7 @@ export async function withdrawCar(formData: FormData): Promise<void> {
   revalidatePath("/admin/layouts");
   revalidatePath("/fit-finder");
 
-  await flashBack(back, rows.length === 0 ? "bulkUnchanged" : "bulkWithdrawn");
+  await flashBack(back, rows.length === 0 ? "bulkUnchanged" : requested ? "bulkLive" : "bulkWithdrawn");
 }
 
 /**

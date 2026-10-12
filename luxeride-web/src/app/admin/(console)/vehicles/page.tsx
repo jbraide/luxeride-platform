@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { prisma } from "@/lib/db";
-import { deleteVehicle, deleteVehicles, setVehicleActive, setVehiclesActive, withdrawCar } from "../actions";
+import { deleteVehicle, deleteVehicles, setCarActive, setVehicleActive, setVehiclesActive } from "../actions";
 
 /**
  * `/admin/vehicles` — the reviewable car list (`fitment-engine` §8.3).
@@ -193,7 +193,15 @@ export default async function VehiclesPage({
         </span>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+      {/*
+        THE FILTERS, AS CHIPS RATHER THAN UNDERLINED WORDS.
+
+        They were a row of mono links, which read as three more pieces of text beside
+        the search form rather than as the one control that changes what the page is
+        showing. A bordered chip with its count carries the state (`aria-current`) and the
+        size of the queue in the same glance, which is what §8.2 asks the counts to do.
+      */}
+      <nav aria-label="Filter vehicles" className="mt-4 flex flex-wrap items-center gap-2">
         {FILTERS.map((option) => {
           const count =
             option.value === "all"
@@ -209,15 +217,18 @@ export default async function VehiclesPage({
               key={option.value}
               href={filterHref(option.value, rawQuery)}
               aria-current={active ? "page" : undefined}
-              className={`font-mono text-xs uppercase tracking-widest ${
-                active ? "text-accent" : "text-fg-muted hover:text-accent"
+              className={`flex items-baseline gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors ${
+                active
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-border text-fg-muted hover:border-accent/50 hover:text-accent"
               }`}
             >
-              {option.label} <span className="text-accent-dim">{count}</span>
+              {option.label}
+              <span className={active ? "text-accent" : "text-accent-dim"}>{count}</span>
             </Link>
           );
         })}
-      </div>
+      </nav>
 
       {/* A GET form, so it works with scripting disabled and the value ends up in
           the URL. No submit button: pressing Enter is enough, and the links above
@@ -241,11 +252,12 @@ export default async function VehiclesPage({
       </form>
 
       <p className="mt-3 max-w-3xl text-xs leading-relaxed text-fg-muted">
-        Open a make, then a car. Each row is one YEAR RANGE — the unit a floor pan
-        covers. <span className="text-fg/80">Withdraw</span> stops offering those years
-        and keeps their prices and photographs; <span className="text-fg/80">Delete</span>{" "}
-        removes the range for good. Tick several ranges and use the buttons at the top of
-        the car to do it in one go.
+        Open a make, then a car. Each row is one{" "}
+        <span className="text-fg/80">year range</span> — the unit a floor pan covers.{" "}
+        <span className="text-fg/80">Withdraw</span> stops offering it and keeps its prices and
+        photographs; <span className="text-fg/80">Delete</span> removes it for good. Take the
+        whole car at once with the <span className="text-fg/80">whole car</span> buttons, or tick
+        ranges to act on just those.
       </p>
 
       {vehicles.length === 0 ? (
@@ -327,24 +339,57 @@ export default async function VehiclesPage({
                       </summary>
 
                       {/*
-                        {/*
-                        THE CAR'S BATCH ROW.
+                        THE CAR'S TOOLBAR, in two labelled groups.
 
-                        The first form is EMPTY of data — it holds the three ticked-range
-                        buttons and nothing else; the checkboxes live in the table below and
-                        point at it by id, which is what keeps the per-range forms from being
-                        nested inside it.
+                        WHOLE CAR comes first, because it is the owner's one-click answer to
+                        "stop offering this car". It is a SEPARATE FORM per direction rather
+                        than more buttons in the ticked group: buttons in one form submit one
+                        `active` value and one `vehicleIds` set, so sharing it would make
+                        "Withdraw" depend on ranges nobody ticked.
 
-                        The second form takes the WHOLE CAR with nothing ticked. It is a
-                        separate form rather than a fourth button in the first, because
-                        buttons in one form submit one `vehicleIds` set: sharing it would make
-                        "Withdraw selected" also carry every range, and the two could never
-                        disagree about what was meant. It posts only the make and the model —
-                        `withdrawCar` reads the car's ranges from the database — so it means
-                        the same thing in a filtered view as it does in "All", which the
-                        on-screen ids could not promise.
+                        TICKED is the original trio, whose checkboxes live in the table below
+                        and point at this form by id — which is what keeps the per-range forms
+                        from being nested inside it (illegal, and the classic reason a
+                        one-click button silently stops working).
                       */}
-                      <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border px-3 py-2">
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">
+                          whole car
+                        </span>
+                        <form method="post" action={setCarActive} className="contents">
+                          <input type="hidden" name="back" value={back} />
+                          <input type="hidden" name="makeId" value={group.make.id} />
+                          <input type="hidden" name="model" value={car.model} />
+                          <input type="hidden" name="active" value="off" />
+                          <button
+                            type="submit"
+                            formNoValidate
+                            title={`Stop offering every year range of the ${car.model}. Its prices and photographs are kept, and "Put all live" brings them back.`}
+                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                          >
+                            Withdraw all
+                          </button>
+                        </form>
+                        <form method="post" action={setCarActive} className="contents">
+                          <input type="hidden" name="back" value={back} />
+                          <input type="hidden" name="makeId" value={group.make.id} />
+                          <input type="hidden" name="model" value={car.model} />
+                          <input type="hidden" name="active" value="on" />
+                          <button
+                            type="submit"
+                            formNoValidate
+                            title={`Offer every year range of the ${car.model} again.`}
+                            className="rounded-lg border border-accent/50 px-3 py-1 text-xs text-accent transition-colors hover:bg-accent hover:text-on-accent"
+                          >
+                            Put all live
+                          </button>
+                        </form>
+
+                        <span aria-hidden className="hidden h-4 w-px bg-border sm:block" />
+
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">
+                          ticked
+                        </span>
                         <form
                           id={batchFormId}
                           method="post"
@@ -359,16 +404,16 @@ export default async function VehiclesPage({
                             formNoValidate
                             className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
                           >
-                            Withdraw selected
+                            Withdraw
                           </button>
                           <button
                             type="submit"
                             name="active"
                             value="on"
                             formNoValidate
-                            className="rounded-lg border border-accent px-3 py-1 text-xs text-accent transition-colors hover:bg-accent hover:text-on-accent"
+                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-accent hover:text-accent"
                           >
-                            Put live selected
+                            Put live
                           </button>
                           <button
                             type="submit"
@@ -376,25 +421,7 @@ export default async function VehiclesPage({
                             formNoValidate
                             className="rounded-lg border border-[#FF6B35]/60 px-3 py-1 text-xs text-[#FF6B35] transition-colors hover:bg-[#FF6B35] hover:text-on-accent"
                           >
-                            Delete selected
-                          </button>
-                        </form>
-
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">
-                          tick the ranges you mean
-                        </span>
-
-                        <form method="post" action={withdrawCar} className="contents">
-                          <input type="hidden" name="back" value={back} />
-                          <input type="hidden" name="makeId" value={group.make.id} />
-                          <input type="hidden" name="model" value={car.model} />
-                          <button
-                            type="submit"
-                            formNoValidate
-                            title={`Stop offering every year range of the ${car.model}. Prices and photographs are kept, and each range comes back with Put live.`}
-                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
-                          >
-                            Withdraw every range
+                            Delete
                           </button>
                         </form>
                       </div>
