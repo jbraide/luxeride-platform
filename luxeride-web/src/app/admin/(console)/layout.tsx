@@ -20,26 +20,25 @@ import { readFlash } from "./flash";
  * path, and that two groups must not resolve to the same URL: `(console)/page.tsx`
  * therefore REPLACES `src/app/admin/page.tsx` rather than sitting beside it.
  *
- * NO `'use client'` ANYWHERE IN THIS CONSOLE
+ * ALMOST NO `'use client'` IN THIS CONSOLE
  *
- * Not an accident and not laziness. There is no `useActionState`, no client-side
- * validation and no optimistic UI, so the server is the only implementation of the
- * evidence gate and there is no second code path that only runs when JavaScript
- * does. It also means every refusal renders as the same HTML whether the browser
- * has script or not, which is what makes the confirm form verifiable at all.
+ * The rule is that every screen works with scripting disabled: no `useActionState`, no
+ * client-side validation, no optimistic UI, so the server is the only implementation of
+ * the evidence gate and every refusal renders as the same HTML whether the browser has
+ * script or not. `AdminNotice` is the one deliberate exception — the flash has to time
+ * itself out — which is why this says "almost".
  *
- * THE COST, STATED PLAINLY: no active-link highlighting, because knowing the current
- * route in a Server Component means reading the pathname from the client. The nav
- * is short enough that not knowing which one is current costs very little.
+ * ACTIVE-LINK HIGHLIGHTING IS DONE HERE, ON THE SERVER. The pathname arrives in a header
+ * Next already sets (`x-invoke-path` on a Server Action POST, `next-url` on a render), so
+ * marking the current link costs no client component and no round trip. This used to be
+ * recorded as a cost we had accepted; the header made it free.
  *
- * WHY THE SIGN-OUT IS A BUTTON NOW
+ * WHY THE SIGN-OUT IS A BUTTON
  *
- * It used to be a paragraph explaining that there was no logout route, because
- * there was no session — only HTTP Basic Auth, which the browser holds until it
- * closes. There is a session now (`src/lib/admin-session.ts`), so there is
- * something to end, so there is a form that posts to `/admin/logout`. Still no
- * client component: it is a plain `<form method="post">`, because the console has
- * no `'use client'` anywhere and a logout button is not worth breaking that for.
+ * It used to be a paragraph explaining that there was no logout route, because there was
+ * no session — only HTTP Basic Auth, which the browser holds until it closes. There is a
+ * session now (`src/lib/admin-session.ts`), so there is something to end, so there is a
+ * plain `<form method="post">` that posts to `/admin/logout`.
  */
 export const metadata: Metadata = {
   title: "Admin",
@@ -122,11 +121,10 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
         anything else was. A tool with this many screens wants its navigation in one
         place, stacked, where the groups are headings rather than separators.
 
-        NO ACTIVE-LINK HIGHLIGHTING, and that is a real cost stated rather than hidden:
-        a Server Component cannot read the pathname without a client component, and the
-        console has none. Everything here still works with scripting disabled — which is
-        why the sidebar below `lg` is a `<details>` disclosure and not a hamburger
-        button. See the header of this file for why the console has no `'use client'`.
+        THE ACTIVE ITEM IS MARKED WITH AN ACCENT BAR AND BOLD, from `currentPath` above —
+        no client component, because the pathname arrives in a header Next already sets.
+        Everything here still works with scripting disabled, which is why the sidebar
+        below `lg` is a `<details>` disclosure and not a hamburger button.
 
         THE LAYOUT IS A GRID, NOT A FIXED SIDEBAR. `sticky top-0` on the column means
         the nav stays put while a long list scrolls past it, and `self-start` is what
@@ -135,9 +133,12 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
       <aside className="lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:overflow-hidden lg:border-r lg:border-border">
         <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border px-5 py-6 lg:shrink-0 lg:block">
           <div className="lg:pb-5">
-            <h1 className="font-display text-xl font-semibold">
+            {/* The brand lockup, not a heading: each screen owns the page's single
+                `<h1>` through `PageHeader`, so the document outline lists the page,
+                not the logo repeated on all eleven. */}
+            <div className="font-display text-xl font-semibold">
               LuxeRide <span className="text-accent">admin</span>
-            </h1>
+            </div>
             <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-accent-dim">
               {confirmed} confirmed — one operator
             </p>
@@ -147,7 +148,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
           <form method="post" action="/admin/logout">
             <button
               type="submit"
-              className="font-mono text-[11px] uppercase tracking-widest text-fg-muted underline-offset-4 hover:text-accent hover:underline"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs text-fg-muted transition-colors hover:border-accent hover:text-accent"
             >
               Sign out
             </button>
@@ -158,7 +159,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
             closes with no JavaScript — the same reason the year ranges and the seat-row
             buttons are `<details>` and `<form>`. */}
         <details className="mt-4 px-5 lg:hidden" open>
-          <summary className="cursor-pointer list-none rounded-lg border border-border px-3 py-2 text-sm text-fg/85 marker:content-none">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-lg border border-border px-3 text-sm text-fg/85 marker:content-none hover:border-accent">
             Menu
           </summary>
           <nav className="mt-3">
@@ -172,7 +173,12 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        className="block rounded-lg px-3 py-2 text-sm text-fg-muted hover:bg-surface-2 hover:text-accent"
+                        aria-current={item.href === currentPath ? "page" : undefined}
+                        className={`flex min-h-11 items-center rounded-lg px-3 text-sm transition-colors ${
+                          item.href === currentPath
+                            ? "bg-accent/10 font-medium text-accent"
+                            : "text-fg-muted hover:bg-surface-2 hover:text-accent"
+                        }`}
                       >
                         {item.label}
                       </Link>
@@ -223,12 +229,15 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
                     <Link
                       href={item.href}
                       aria-current={item.href === currentPath ? "page" : undefined}
-                      className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
+                      className={`relative block rounded-lg px-3 py-2 text-sm transition-colors ${
                         item.href === currentPath
                           ? "bg-accent/10 font-medium text-accent"
                           : "text-fg-muted hover:bg-surface-2 hover:text-accent"
                       }`}
                     >
+                      {item.href === currentPath && (
+                        <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent" />
+                      )}
                       {item.label}
                     </Link>
                   </li>

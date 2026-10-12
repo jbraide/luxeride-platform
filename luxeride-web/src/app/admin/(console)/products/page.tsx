@@ -1,6 +1,23 @@
 import Link from "next/link";
 
 import { prisma } from "@/lib/db";
+import EmptyState from "@/components/admin/EmptyState";
+import FieldErrors from "@/components/admin/FieldErrors";
+import PageHeader from "@/components/admin/PageHeader";
+import StatusChip from "@/components/admin/StatusChip";
+import {
+  BTN_GHOST,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  CARD,
+  FIELD_ERROR,
+  INPUT,
+  LABEL,
+  SECTION_HINT,
+  SECTION_TITLE,
+  chip,
+  inputState,
+} from "@/components/admin/ui";
 import { createProduct } from "../catalogue-actions";
 import { messageFor, readEcho, readFailures, slugify } from "../catalogue-guard";
 
@@ -71,25 +88,18 @@ export default async function ProductsPage({
   const countForCategory = (id: string): number =>
     perCategory.find((row) => row.categoryId === id)?._count._all ?? 0;
 
-  const label = "block text-xs uppercase tracking-widest text-accent-dim";
-  const input =
-    "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none";
-  const fieldFailed = (field: string) => (failures.has(field) ? "border-[#FF6B35]" : "");
+  // The filter chip now comes from `@/components/admin/ui`, in one place so `All` and
+  // each category cannot drift apart — the same shape `/admin/vehicles` uses.
 
-  // The filter chip, in one place so `All` and each category cannot drift apart —
-  // the same shape `/admin/vehicles` uses.
-  const chip = (active: boolean) =>
-    `flex items-baseline gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors ${
-      active
-        ? "border-accent bg-accent/10 text-accent"
-        : "border-border text-fg-muted hover:border-accent/50 hover:text-accent"
-    }`;
-
+  /*
+   * The per-field refusal stays a local helper — it needs THIS screen's `failures` map
+   * and `messageFor` — but it renders the shared `FIELD_ERROR` class now.
+   */
   const refusal = (field: string) => {
     const code = failures.get(field);
     if (!code) return null;
     return (
-      <p className="mt-1 text-xs leading-relaxed text-[#FF6B35]">
+      <p className={FIELD_ERROR}>
         <span className="font-mono">{field}</span> — {messageFor(code)}
       </p>
     );
@@ -100,11 +110,15 @@ export default async function ProductsPage({
 
   return (
     <div>
-      <h2 className="font-display text-lg font-semibold">Products</h2>
-      <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-        Everything the shop sells. A product with no variation has nothing to price, so creating one
-        here always creates its first variation too — add the rest on its own page.
-      </p>
+      <PageHeader
+        title="Products"
+        meta="Everything the shop sells. A product with no variation has nothing to price, so creating one here always creates its first variation too — add the rest on its own page."
+        actions={
+          <a href="#add-product" className={BTN_SECONDARY}>
+            Add a product
+          </a>
+        }
+      />
 
       <nav aria-label="Filter products" className="mt-4 flex flex-wrap items-center gap-2">
         <Link href="/admin/products" aria-current={filter === "" ? "page" : undefined} className={chip(filter === "")}>
@@ -130,36 +144,31 @@ export default async function ProductsPage({
       </nav>
 
 
-      {failures.size > 0 && (
-        <div className="mt-4 rounded-xl border border-[#FF6B35] px-4 py-3 text-sm">
-          <p className="text-[#FF6B35]">
-            Not saved. {failures.size} field{failures.size === 1 ? "" : "s"} refused:
-          </p>
-          <ul className="mt-2 space-y-1 text-xs text-fg-muted">
-            {[...failures].map(([field, code]) => (
-              <li key={field}>
-                <span className="font-mono text-fg/80">{field}</span> — {messageFor(code)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <FieldErrors failures={failures} message={messageFor} />
 
       {/* ── Existing products ────────────────────────────────────────────── */}
       <section className="mt-8">
-        <h3 className="font-display text-base font-semibold">
+        <h3 className={SECTION_TITLE}>
           In the shop{" "}
           <span className="font-mono text-xs text-accent-dim">{products.length}</span>
         </h3>
 
         {products.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-border bg-surface/60 px-5 py-5 text-sm text-fg-muted">
-            No products{filter ? ` in ${filter}` : ""} yet.
-          </p>
+          filter ? (
+            <EmptyState className="mt-4">
+              No products in {filter} yet.{" "}
+              <Link href="/admin/products" className={BTN_GHOST}>
+                Clear the filter
+              </Link>{" "}
+              to see all {totalProducts}.
+            </EmptyState>
+          ) : (
+            <EmptyState className="mt-4">No products yet. Add the first one below.</EmptyState>
+          )
         ) : (
           <ul className="mt-4 space-y-2">
             {products.map((product) => (
-              <li key={product.id} className="rounded-xl border border-border bg-surface/60 px-4 py-4">
+              <li key={product.id} className={`${CARD} px-4 py-4`}>
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <span className="text-sm text-fg/80">
                     {product.name}
@@ -170,12 +179,8 @@ export default async function ProductsPage({
                   <div className="flex items-center gap-3">
                     {/* The flag, always visible, because it is the decision that
                         changes where the product can be bought. */}
-                    <span
-                      className={`rounded-md border px-2 py-0.5 font-mono text-[10px] uppercase ${
-                        product.isCarSpecific
-                          ? "border-accent/50 text-accent"
-                          : "border-border text-fg-muted"
-                      }`}
+                    <StatusChip
+                      tone={product.isCarSpecific ? "accent" : "neutral"}
                       title={
                         product.isCarSpecific
                           ? "In the Fit Finder — offered for a car."
@@ -183,11 +188,8 @@ export default async function ProductsPage({
                       }
                     >
                       {product.isCarSpecific ? "in Fit Finder" : "shop only"}
-                    </span>
-                    <Link
-                      href={`/admin/products/${product.id}`}
-                      className="text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
-                    >
+                    </StatusChip>
+                    <Link href={`/admin/products/${product.id}`} className={BTN_GHOST}>
                       Edit &amp; variations →
                     </Link>
                   </div>
@@ -195,7 +197,7 @@ export default async function ProductsPage({
 
                 <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-xs text-fg-muted">
                   <span>{product.category.name}</span>
-                  <span className="font-mono text-accent">
+                  <span className="tabular font-mono text-accent">
                     ₦{product.regular.toLocaleString("en-NG")} regular / ₦
                     {product.premium.toLocaleString("en-NG")} premium
                   </span>
@@ -220,9 +222,9 @@ export default async function ProductsPage({
       </section>
 
       {/* ── Add one ──────────────────────────────────────────────────────── */}
-      <section className="mt-10">
-        <h3 className="font-display text-base font-semibold">Add a product</h3>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+      <section id="add-product" className="mt-10">
+        <h3 className={SECTION_TITLE}>Add a product</h3>
+        <p className={SECTION_HINT}>
           For gear covers, accessories or anything else that is not cut to a floor pan: tick{" "}
           <span className="text-fg/80">generic</span> and it is bought straight from{" "}
           <code className="font-mono text-accent-dim">/shop</code> with no car and no year. Leave it
@@ -230,19 +232,19 @@ export default async function ProductsPage({
         </p>
 
         {categories.length === 0 && (
-          <p className="mt-4 rounded-xl border border-border bg-surface/60 px-5 py-5 text-sm text-fg-muted">
+          <EmptyState className="mt-4">
             There is no category to put it in yet. Create one on{" "}
-            <Link href="/admin/categories" className="text-accent underline-offset-4 hover:underline">
+            <Link href="/admin/categories" className={BTN_GHOST}>
               /admin/categories
             </Link>{" "}
             first.
-          </p>
+          </EmptyState>
         )}
 
         {categories.length > 0 && (
           <form method="post" action={createProduct} className="mt-4 grid gap-4 sm:grid-cols-3">
             <div>
-              <label htmlFor="p-name" className={label}>
+              <label htmlFor="p-name" className={LABEL}>
                 Name — required
               </label>
               <input
@@ -251,13 +253,13 @@ export default async function ProductsPage({
                 required
                 defaultValue={echo("name")}
                 placeholder="Gear Lever Cover"
-                className={`${input} ${fieldFailed("name")}`}
+                className={`${INPUT} ${inputState(failures.has("name"))}`}
               />
               {refusal("name")}
             </div>
 
             <div>
-              <label htmlFor="p-slug" className={label}>
+              <label htmlFor="p-slug" className={LABEL}>
                 Slug — required
               </label>
               <input
@@ -266,7 +268,7 @@ export default async function ProductsPage({
                 required
                 defaultValue={echo("slug")}
                 placeholder="gear-lever-cover"
-                className={`${input} ${fieldFailed("slug")} font-mono`}
+                className={`${INPUT} ${inputState(failures.has("slug"))} font-mono`}
               />
               {refusal("slug")}
               <p className="mt-1 text-[11px] text-fg-muted">
@@ -277,7 +279,7 @@ export default async function ProductsPage({
             </div>
 
             <div>
-              <label htmlFor="p-category" className={label}>
+              <label htmlFor="p-category" className={LABEL}>
                 Category — required
               </label>
               <select
@@ -285,7 +287,7 @@ export default async function ProductsPage({
                 name="categorySlug"
                 required
                 defaultValue={echo("categorySlug")}
-                className={`${input} ${fieldFailed("categorySlug")}`}
+                className={`${INPUT} ${inputState(failures.has("categorySlug"))}`}
               >
                 <option value="">Choose…</option>
                 {categories.map((category) => (
@@ -298,7 +300,7 @@ export default async function ProductsPage({
             </div>
 
             <div>
-              <label htmlFor="p-regular" className={label}>
+              <label htmlFor="p-regular" className={LABEL}>
                 Regular price — required
               </label>
               <input
@@ -308,13 +310,13 @@ export default async function ProductsPage({
                 inputMode="numeric"
                 required
                 defaultValue={defaultRegular}
-                className={`${input} ${fieldFailed("regular")} font-mono`}
+                className={`${INPUT} ${inputState(failures.has("regular"))} font-mono`}
               />
               {refusal("regular")}
             </div>
 
             <div>
-              <label htmlFor="p-premium" className={label}>
+              <label htmlFor="p-premium" className={LABEL}>
                 Premium price — required
               </label>
               <input
@@ -324,7 +326,7 @@ export default async function ProductsPage({
                 inputMode="numeric"
                 required
                 defaultValue={defaultPremium}
-                className={`${input} ${fieldFailed("premium")} font-mono`}
+                className={`${INPUT} ${inputState(failures.has("premium"))} font-mono`}
               />
               {refusal("premium")}
               <p className="mt-1 text-[11px] text-fg-muted">
@@ -334,19 +336,14 @@ export default async function ProductsPage({
             </div>
 
             <div>
-              <label htmlFor="p-note" className={label}>
+              <label htmlFor="p-note" className={LABEL}>
                 Short line shown under the name
               </label>
-              <input
-                id="p-note"
-                name="note"
-                defaultValue={echo("note")}
-                className={input}
-              />
+              <input id="p-note" name="note" defaultValue={echo("note")} className={INPUT} />
             </div>
 
             <div className="sm:col-span-3">
-              <label htmlFor="p-availability" className={label}>
+              <label htmlFor="p-availability" className={LABEL}>
                 Availability sentence
               </label>
               <input
@@ -354,7 +351,7 @@ export default async function ProductsPage({
                 name="availability"
                 defaultValue={echo("availability")}
                 placeholder="Made to order. Fits any car with the same gear lever."
-                className={`${input} ${fieldFailed("availability")}`}
+                className={`${INPUT} ${inputState(failures.has("availability"))}`}
               />
               {refusal("availability")}
               <p className="mt-1 text-[11px] text-fg-muted">
@@ -391,7 +388,7 @@ export default async function ProductsPage({
             </div>
 
             <div className="sm:col-span-3">
-              <label htmlFor="p-surcharge" className={label}>
+              <label htmlFor="p-surcharge" className={LABEL}>
                 3-row surcharge
               </label>
               <input
@@ -400,7 +397,7 @@ export default async function ProductsPage({
                 type="number"
                 inputMode="numeric"
                 defaultValue={echo("threeRowSurcharge")}
-                className={`${input} ${fieldFailed("threeRowSurcharge")} font-mono`}
+                className={`${INPUT} ${inputState(failures.has("threeRowSurcharge"))} font-mono`}
               />
               {refusal("threeRowSurcharge")}
               <p className="mt-1 text-[11px] text-fg-muted">
@@ -411,10 +408,7 @@ export default async function ProductsPage({
             </div>
 
             <div className="sm:col-span-3">
-              <button
-                type="submit"
-                className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-              >
+              <button type="submit" className={BTN_PRIMARY}>
                 Create product
               </button>
             </div>

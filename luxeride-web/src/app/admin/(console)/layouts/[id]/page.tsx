@@ -25,6 +25,26 @@ import {
 } from "../../confirm-guard";
 import { DEFAULT_LEAD_TIME } from "@/lib/copy";
 import { FLOOR_MAT_GENERATIONS } from "@/data/floor-mats-generations";
+import PageHeader from "@/components/admin/PageHeader";
+import FieldErrors from "@/components/admin/FieldErrors";
+import EmptyState from "@/components/admin/EmptyState";
+import StatusChip, { type StatusTone } from "@/components/admin/StatusChip";
+import {
+  BTN_GHOST,
+  BTN_PRIMARY,
+  BTN_ROW,
+  BTN_SECONDARY,
+  CARD,
+  EYEBROW,
+  FIELD_ERROR,
+  INPUT,
+  INSET,
+  LABEL,
+  NUM,
+  SECTION_HINT,
+  SECTION_TITLE,
+  inputState,
+} from "@/components/admin/ui";
 
 
 /**
@@ -107,23 +127,24 @@ export default async function LayoutDetailPage({
   const isConfirmed = layout.status === "confirmed";
   const retired = layout.status === "retired";
 
+  /**
+   * The layout's own status as a chip tone, matching `/admin/layouts`: a confirmed car
+   * reads affirmative, the unverified `inferred` state reads as a to-do, and `draft` /
+   * `retired` / anything unknown read quiet.
+   */
+  const statusTone: StatusTone =
+    layout.status === "confirmed" ? "good" : layout.status === "inferred" ? "warn" : "neutral";
+
   /** One refusal line, placed under the field it names and repeated in the banner. */
   const refusal = (field: string) => {
     const code = failures.get(field);
     if (!code) return null;
     return (
-      <p className="mt-1 text-xs leading-relaxed text-[#FF6B35]">
+      <p className={FIELD_ERROR}>
         <span className="font-mono">{field}</span> — {messageFor(code)}
       </p>
     );
   };
-
-  const label = "block text-xs uppercase tracking-widest text-accent-dim";
-  const input =
-    "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none";
-  const inputFailed = "border-[#FF6B35]";
-
-  const fieldFailed = (field: string) => (failures.has(field) ? inputFailed : "");
 
   // Ranges, newest first is meaningless here; earliest covered year first so the
   // page reads like a timeline. A span-less range (never expected on a new range)
@@ -198,95 +219,83 @@ export default async function LayoutDetailPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h2 className="font-display text-lg font-semibold">{layout.customerName}</h2>
+      <PageHeader
+        title={layout.customerName}
+        meta={
+          <>
+            One car.{" "}
+            {ranges.length === 0
+              ? "No year range is mapped yet, so nobody can be answered for it."
+              : `${ranges.length} range${ranges.length === 1 ? "" : "s"} — the years this floor pan covers.`}
+          </>
+        }
+        actions={
+          <>
+            <StatusChip tone={layout.active ? "good" : "neutral"}>
+              {layout.active ? "live" : "withdrawn"}
+            </StatusChip>
 
-        {/*
-          THE CAR SWITCH — the single control that decides whether this car is offered.
+            {/*
+              THE CAR SWITCH — the single control that decides whether this car is offered.
 
-          It is at the TOP of the page, above the years and the prices, because it is the
-          question that matters first: "do we supply this car at all?" Everything below
-          it is detail about a car that is on.
+              It is at the TOP of the page, above the years and the prices, because it is the
+              question that matters first: "do we supply this car at all?" Everything below
+              it is detail about a car that is on.
 
-          `formNoValidate` on the OFF button, because that button lives INSIDE the
-          confirmation form and a browser would otherwise validate every field in it —
-          blank prices included — and refuse to submit a one-click withdrawal. That is the
-          same trap as the nested form: a control that silently stops working because of
-          where it sits in the DOM.
-        */}
-        <div className="flex items-center gap-3">
-          <span
-            className={`rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase ${
-              layout.active ? "border-accent/50 text-accent" : "border-border text-fg-muted"
-            }`}
-          >
-            {layout.active ? "live" : "withdrawn"}
-          </span>
-          <form method="post" action={setLayoutActive} className="contents">
-            <input type="hidden" name="layoutId" value={layout.id} />
-            <input type="hidden" name="active" value={layout.active ? "off" : "on"} />
-            <button
-              type="submit"
-              formNoValidate
-              className={`rounded-lg border px-4 py-1.5 text-sm transition-colors ${
-                layout.active
-                  ? "border-border text-fg-muted hover:border-[#FF6B35] hover:text-[#FF6B35]"
-                  : "border-accent bg-accent text-on-accent"
-              }`}
-            >
-              {layout.active ? "Withdraw this car" : "Put it live"}
-            </button>
-          </form>
-        </div>
-      </div>
-      <p className="mt-1 font-mono text-xs text-accent-dim">
+              `formNoValidate` on the OFF button, because that button lives INSIDE the
+              confirmation form and a browser would otherwise validate every field in it —
+              blank prices included — and refuse to submit a one-click withdrawal. That is the
+              same trap as the nested form: a control that silently stops working because of
+              where it sits in the DOM.
+            */}
+            <form method="post" action={setLayoutActive} className="contents">
+              <input type="hidden" name="layoutId" value={layout.id} />
+              <input type="hidden" name="active" value={layout.active ? "off" : "on"} />
+              <button
+                type="submit"
+                formNoValidate
+                className={`rounded-lg border px-4 py-1.5 text-sm transition-colors ${
+                  layout.active
+                    ? "border-border text-fg-muted hover:border-danger hover:text-danger"
+                    : "border-accent bg-accent text-on-accent"
+                }`}
+              >
+                {layout.active ? "Withdraw this car" : "Put it live"}
+              </button>
+            </form>
+          </>
+        }
+      />
+      <p className="mt-2 font-mono text-xs text-accent-dim">
         {layout.internalCode} · {layout.id}
       </p>
-      <p className="mt-2 text-sm text-fg-muted">
-        One car.{" "}
-        {ranges.length === 0
-          ? "No year range is mapped yet, so nobody can be answered for it."
-          : `${ranges.length} range${ranges.length === 1 ? "" : "s"} — the years this floor pan covers.`}
-      </p>
 
 
-      {failures.size > 0 && (
-        <div className="mt-4 rounded-xl border border-[#FF6B35] px-4 py-3 text-sm">
-          <p className="text-[#FF6B35]">
-            Not saved. {failures.size} field{failures.size === 1 ? "" : "s"} refused:
-          </p>
-          <ul className="mt-2 space-y-1 text-xs text-fg-muted">
-            {[...failures].map(([field, code]) => (
-              <li key={field}>
-                <span className="font-mono text-fg/80">{field}</span> — {messageFor(code)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <FieldErrors failures={failures} message={messageFor} />
 
       {/* ── Ranges ────────────────────────────────────────────────────────── */}
       <section className="mt-8">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h3 className="font-display text-base font-semibold">Ranges</h3>
-          <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
+        <p className={EYEBROW}>01</p>
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-3">
+          <h3 className={SECTION_TITLE}>Ranges</h3>
+          <span className={EYEBROW}>
             {ranges.length} range{ranges.length === 1 ? "" : "s"}
           </span>
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+        <p className={SECTION_HINT}>
           One car, several year ranges. A Corolla 2009–2013 is not a Corolla 2014–2020, so each is
           its own range with its own photographs. Confirm the car once, below — every range is
           written together, and every range&apos;s mapping is raised to confirmed at the same time.
         </p>
 
         {ranges.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-border bg-surface/60 px-5 py-5 text-sm text-fg-muted">
+          <EmptyState className="mt-4">
             This car covers no years, so no customer can be answered for it. Add a range below.
-          </p>
+          </EmptyState>
         ) : (
           <ul className="mt-4 space-y-3">
             {ranges.map(({ mapping, vehicle, images }) => (
-              <li key={mapping.id} className="rounded-xl border border-border bg-surface/60 px-4 py-4">
+              <li key={mapping.id} className={`${CARD} px-4 py-4`}>
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <span className="text-sm text-fg/80">
                     {vehicle.make.name} {vehicle.model}
@@ -302,8 +311,8 @@ export default async function LayoutDetailPage({
                       ) : null;
                     })()}
                     {!vehicle.active && (
-                      <span className="ml-2 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-muted">
-                        withdrawn
+                      <span className="ml-2">
+                        <StatusChip tone="neutral">withdrawn</StatusChip>
                       </span>
                     )}
                   </span>
@@ -330,7 +339,7 @@ export default async function LayoutDetailPage({
                         }
                         className={`rounded-lg border px-3 py-1 text-xs transition-colors ${
                           vehicle.active
-                            ? "border-border text-fg-muted hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                            ? "border-border text-fg-muted hover:border-danger hover:text-danger"
                             : "border-accent bg-accent text-on-accent"
                         }`}
                       >
@@ -338,16 +347,13 @@ export default async function LayoutDetailPage({
                       </button>
                     </form>
                     <form method="post" action={removeRange}>
-                    <input type="hidden" name="layoutId" value={layout.id} />
-                    <input type="hidden" name="vehicleId" value={vehicle.id} />
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent"
-                    >
-                      Remove range
-                    </button>
-                  </form>
-                </div>
+                      <input type="hidden" name="layoutId" value={layout.id} />
+                      <input type="hidden" name="vehicleId" value={vehicle.id} />
+                      <button type="submit" className={BTN_ROW}>
+                        Remove range
+                      </button>
+                    </form>
+                  </div>
                 </div>
 
                 {images.length > 0 ? (
@@ -384,10 +390,7 @@ export default async function LayoutDetailPage({
                                   <form method="post" action={removeRangeImage}>
                                     <input type="hidden" name="layoutId" value={layout.id} />
                                     <input type="hidden" name="imageId" value={image.id} />
-                                    <button
-                                      type="submit"
-                                      className="text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
-                                    >
+                                    <button type="submit" className={BTN_GHOST}>
                                       Remove
                                     </button>
                                   </form>
@@ -427,7 +430,7 @@ export default async function LayoutDetailPage({
                         id={`angle__${vehicle.id}__${option.id}`}
                         name="angle"
                         defaultValue="driver"
-                        className={input}
+                        className={INPUT}
                       >
                         {IMAGE_ANGLES.map((angle) => (
                           <option key={angle} value={angle}>
@@ -444,7 +447,7 @@ export default async function LayoutDetailPage({
                         id={`src__${vehicle.id}__${option.id}`}
                         name="src"
                         placeholder="/fitment/corolla-2009-driver.jpg"
-                        className={input}
+                        className={INPUT}
                       />
                     </div>
                     <div className="min-w-[12rem] flex-1">
@@ -455,13 +458,10 @@ export default async function LayoutDetailPage({
                         id={`alt__${vehicle.id}__${option.id}`}
                         name="alt"
                         placeholder="Driver footwell, 2009 Corolla"
-                        className={input}
+                        className={INPUT}
                       />
                     </div>
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
-                    >
+                    <button type="submit" className={BTN_SECONDARY}>
                       Add photo
                     </button>
                   </form>
@@ -479,7 +479,7 @@ export default async function LayoutDetailPage({
         >
           <input type="hidden" name="layoutId" value={layout.id} />
           <div>
-            <label htmlFor="yearFrom" className={label}>
+            <label htmlFor="yearFrom" className={LABEL}>
               From year
             </label>
             <input
@@ -489,12 +489,12 @@ export default async function LayoutDetailPage({
               inputMode="numeric"
               required
               defaultValue={echo("yearFrom")}
-              className={`${input} ${fieldFailed("yearFrom")}`}
+              className={`${INPUT} ${inputState(failures.has("yearFrom"))}`}
             />
             {refusal("yearFrom")}
           </div>
           <div>
-            <label htmlFor="yearTo" className={label}>
+            <label htmlFor="yearTo" className={LABEL}>
               To year
             </label>
             <input
@@ -504,14 +504,11 @@ export default async function LayoutDetailPage({
               inputMode="numeric"
               required
               defaultValue={echo("yearTo")}
-              className={`${input} ${fieldFailed("yearTo")}`}
+              className={`${INPUT} ${inputState(failures.has("yearTo"))}`}
             />
             {refusal("yearTo")}
           </div>
-          <button
-            type="submit"
-            className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-          >
+          <button type="submit" className={BTN_PRIMARY}>
             Add range
           </button>
           <p className="w-full text-xs leading-relaxed text-fg-muted">
@@ -523,7 +520,8 @@ export default async function LayoutDetailPage({
 
       {/* ── The car as it stands ──────────────────────────────────────────── */}
       <section className="mt-8">
-        <h3 className="font-display text-base font-semibold">The car</h3>
+        <p className={EYEBROW}>02</p>
+        <h3 className={`mt-2 ${SECTION_TITLE}`}>The car</h3>
         <dl className="mt-3 rounded-xl border border-border bg-surface/60 px-5 py-2">
           {[
             ["Customer name", layout.customerName],
@@ -542,15 +540,18 @@ export default async function LayoutDetailPage({
           ].map(([term, value]) => (
             <div key={term} className="flex items-baseline justify-between gap-4 border-t border-border py-2">
               <dt className="text-sm text-fg-muted">{term}</dt>
-              <dd className="text-right text-sm text-fg/80">{value}</dd>
+              <dd className="text-right text-sm text-fg/80">
+                {term === "Status" ? <StatusChip tone={statusTone}>{value}</StatusChip> : value}
+              </dd>
             </div>
           ))}
         </dl>
       </section>
 
       <section className="mt-8">
-        <h3 className="font-display text-base font-semibold">What we offer for this car</h3>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+        <p className={EYEBROW}>03</p>
+        <h3 className={`mt-2 ${SECTION_TITLE}`}>What we offer for this car</h3>
+        <p className={SECTION_HINT}>
           {layout.variants.length} products cut for this floor pan. The naira figure here is the{" "}
           <span className="text-fg/80">default for a newly added year range</span> — what a
           customer is actually quoted is the per-range price in the grid below, and a range with no
@@ -563,7 +564,7 @@ export default async function LayoutDetailPage({
                 {offerLabel(variant)}
                 <span className="ml-2 font-mono text-[11px] text-accent-dim">{variant.kind}</span>
               </span>
-              <span className="font-mono text-accent">₦{variant.priceFrom.toLocaleString("en-NG")}</span>
+              <span className={`font-mono text-accent ${NUM}`}>₦{variant.priceFrom.toLocaleString("en-NG")}</span>
             </li>
           ))}
         </ul>
@@ -598,23 +599,24 @@ export default async function LayoutDetailPage({
           * so there is nothing to type.
           */}
       <section className="mt-10">
-        <h3 className="font-display text-base font-semibold">
+        <p className={EYEBROW}>04</p>
+        <h3 className={`mt-2 ${SECTION_TITLE}`}>
           {isConfirmed ? "Update this car" : "Confirm this car"}
         </h3>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+        <p className={SECTION_HINT}>
           Type the years this car is covered for, and what each one costs. That is the whole form.
           Everything else is optional and is tucked away underneath.
         </p>
 
         {retired && (
-          <p className="mt-4 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm text-fg-muted">
+          <p className={`mt-4 text-sm text-fg-muted ${INSET}`}>
             This car is retired. It is kept so an old WhatsApp reference still resolves to something
             useful, and it cannot be confirmed again.
           </p>
         )}
 
         {ranges.length === 0 && (
-          <p className="mt-4 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm text-fg-muted">
+          <p className={`mt-4 text-sm text-fg-muted ${INSET}`}>
             Add at least one range above before confirming — a car with no years cannot be quoted.
           </p>
         )}
@@ -646,7 +648,7 @@ export default async function LayoutDetailPage({
           * that says "we do not know yet" and a two-state control cannot express it.
           */}
         <fieldset>
-          <legend className={label}>How many rows of seats does this car have?</legend>
+          <legend className={LABEL}>How many rows of seats does this car have?</legend>
           <div className="mt-2 flex flex-wrap gap-2">
             {(
               [
@@ -661,11 +663,7 @@ export default async function LayoutDetailPage({
                 <button
                   type="submit"
                   aria-pressed={layout.seatRows === option.value}
-                  className={`rounded-lg border px-4 py-2 text-sm ${
-                    layout.seatRows === option.value
-                      ? "border-accent bg-accent font-semibold text-on-accent"
-                      : "border-border text-fg/80 hover:border-accent"
-                  }`}
+                  className={layout.seatRows === option.value ? BTN_PRIMARY : BTN_SECONDARY}
                 >
                   {option.label}
                 </button>
@@ -685,7 +683,7 @@ export default async function LayoutDetailPage({
 
           {/* ── 1. THE YEARS ──────────────────────────────────────────────── */}
           <fieldset>
-            <legend className={label}>Which years this car is covered for</legend>
+            <legend className={LABEL}>Which years this car is covered for</legend>
             <p className="mt-1 text-xs text-fg-muted">
               We refuse any year outside these, so what you type is what the customer is told.
             </p>
@@ -710,7 +708,7 @@ export default async function LayoutDetailPage({
                           echo(fromField) ||
                           (vehicle.yearFrom === null ? "" : String(vehicle.yearFrom))
                         }
-                        className={`${input} ${fieldFailed(fromField)} max-w-[8rem] font-mono`}
+                        className={`${INPUT} ${inputState(failures.has(fromField))} max-w-[8rem] font-mono ${NUM}`}
                       />
                       <span className="text-fg-muted">to</span>
                       <input
@@ -723,7 +721,7 @@ export default async function LayoutDetailPage({
                         defaultValue={
                           echo(toField) || (vehicle.yearTo === null ? "" : String(vehicle.yearTo))
                         }
-                        className={`${input} ${fieldFailed(toField)} max-w-[8rem] font-mono`}
+                        className={`${INPUT} ${inputState(failures.has(toField))} max-w-[8rem] font-mono ${NUM}`}
                       />
                     </div>
                     {refusal(fromField)}
@@ -737,14 +735,14 @@ export default async function LayoutDetailPage({
 
           {/* ── 3. THE PRICES ─────────────────────────────────────────────── */}
           <fieldset>
-            <legend className={label}>What each year costs</legend>
+            <legend className={LABEL}>What each year costs</legend>
             <p className="mt-1 text-xs text-fg-muted">
               This is the number a customer is quoted, and it is why every box is filled. Boxes open
               showing what is already on that year, or the default where there is none.
             </p>
 
             {ranges.map(({ vehicle }) => (
-              <div key={vehicle.id} className="mt-3 rounded-xl border border-border bg-surface/60 px-4 py-4">
+              <div key={vehicle.id} className={`mt-3 ${CARD} px-4 py-4`}>
                 <p className="flex flex-wrap items-baseline gap-2 text-sm text-fg/80">
                   <span className="font-mono text-accent">
                     {vehicle.yearFrom ?? "?"}–{vehicle.yearTo ?? "?"}
@@ -772,7 +770,7 @@ export default async function LayoutDetailPage({
                             echo(field) ||
                             (existing ? String(existing.priceFrom) : String(variant.priceFrom))
                           }
-                          className={`${input} ${fieldFailed(field)} font-mono`}
+                          className={`${INPUT} ${inputState(failures.has(field))} font-mono ${NUM}`}
                         />
                         {refusal(field)}
                       </div>
@@ -821,7 +819,7 @@ export default async function LayoutDetailPage({
                   two cars whose ticker collides. `CLA-2000-2026` is both a Corolla and
                   a Mercedes CLA, so this genuinely happens. */}
               <div>
-                <label className={label}>Reference code</label>
+                <label className={LABEL}>Reference code</label>
                 <p className="mt-1 rounded-lg border border-border bg-surface/2 px-3 py-2 font-mono text-sm text-accent-dim">
                   {derivedCode ?? "— set a year range above —"}
                 </p>
@@ -840,7 +838,7 @@ export default async function LayoutDetailPage({
                       type="text"
                       defaultValue={echo("internalCode")}
                       placeholder={derivedCode ?? "CRY-2009-2013"}
-                      className={`${input} ${fieldFailed("internalCode")} font-mono`}
+                      className={`${INPUT} ${inputState(failures.has("internalCode"))} font-mono`}
                     />
                     <p className="mt-1 text-xs text-fg-muted">
                       Only if two cars would get the same code. This car currently carries{" "}
@@ -851,7 +849,7 @@ export default async function LayoutDetailPage({
               </div>
 
               <div>
-                <label htmlFor="leadTime" className={label}>
+                <label htmlFor="leadTime" className={LABEL}>
                   Lead time for this car — leave blank unless it differs
                 </label>
                 <input
@@ -861,7 +859,7 @@ export default async function LayoutDetailPage({
                   maxLength={MAX_LEAD_TIME_LENGTH}
                   defaultValue={echo("leadTime") || (isConfirmed ? layout.leadTime ?? "" : "")}
                   placeholder={`Leave blank — we quote ${DEFAULT_LEAD_TIME}`}
-                  className={`${input} ${fieldFailed("leadTime")}`}
+                  className={`${INPUT} ${inputState(failures.has("leadTime"))}`}
                 />
                 {refusal("leadTime")}
                 <p className="mt-1 text-xs text-fg-muted">
@@ -872,7 +870,7 @@ export default async function LayoutDetailPage({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="confirmedOn" className={label}>
+                  <label htmlFor="confirmedOn" className={LABEL}>
                     Date checked — defaults to today
                   </label>
                   <input
@@ -880,19 +878,19 @@ export default async function LayoutDetailPage({
                     name="confirmedOn"
                     type="date"
                     defaultValue={echo("confirmedOn")}
-                    className={`${input} ${fieldFailed("confirmedOn")}`}
+                    className={`${INPUT} ${inputState(failures.has("confirmedOn"))}`}
                   />
                   {refusal("confirmedOn")}
                 </div>
                 <div>
-                  <label htmlFor="evidence" className={label}>
+                  <label htmlFor="evidence" className={LABEL}>
                     How you checked it
                   </label>
                   <select
                     id="evidence"
                     name="evidence"
                     defaultValue={echo("evidence") || layout.evidence || ""}
-                    className={`${input} ${fieldFailed("evidence")}`}
+                    className={`${INPUT} ${inputState(failures.has("evidence"))}`}
                   >
                     <option value="">Not recorded</option>
                     {EVIDENCE_VALUES.map((value) => (
@@ -906,7 +904,7 @@ export default async function LayoutDetailPage({
               </div>
 
               <div>
-                <label htmlFor="confirmationNote" className={label}>
+                <label htmlFor="confirmationNote" className={LABEL}>
                   Your own note — optional
                 </label>
                 <textarea
@@ -916,7 +914,7 @@ export default async function LayoutDetailPage({
                   maxLength={MAX_NOTE_LENGTH}
                   defaultValue={echo("confirmationNote") || (isConfirmed ? layout.confirmationNote ?? "" : "")}
                   placeholder="What you actually did, on what car, and when."
-                  className={`${input} ${fieldFailed("confirmationNote")}`}
+                  className={`${INPUT} ${inputState(failures.has("confirmationNote"))}`}
                 />
                 {refusal("confirmationNote")}
               </div>
@@ -925,7 +923,7 @@ export default async function LayoutDetailPage({
                   from. Optional, and tucked in here rather than in the main grid
                   because it is not about this car's current prices at all. */}
               <fieldset className="border-t border-border pt-4">
-                <legend className={label}>Starting price for a newly added year — optional</legend>
+                <legend className={LABEL}>Starting price for a newly added year — optional</legend>
                 <p className="mt-1 text-xs text-fg-muted">
                   Only used when you add a year range later. It changes nothing that already has a
                   price.
@@ -945,7 +943,7 @@ export default async function LayoutDetailPage({
                           type="number"
                           inputMode="numeric"
                           defaultValue={echo(field) || String(variant.priceFrom)}
-                          className={`${input} ${fieldFailed(field)} font-mono`}
+                          className={`${INPUT} ${inputState(failures.has(field))} font-mono ${NUM}`}
                         />
                         {refusal(field)}
                       </div>
@@ -956,18 +954,11 @@ export default async function LayoutDetailPage({
             </div>
           </details>
 
-          <div className="flex items-center gap-4">
-            <button
-              type="submit"
-              disabled={retired || ranges.length === 0}
-              className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent disabled:cursor-not-allowed disabled:opacity-40"
-            >
+          <div className="flex flex-wrap items-center gap-4">
+            <button type="submit" disabled={retired || ranges.length === 0} className={BTN_PRIMARY}>
               {isConfirmed ? "Save again" : "Confirm this car"}
             </button>
-            <Link
-              href="/admin/layouts"
-              className="text-sm text-fg-muted underline-offset-4 hover:text-accent hover:underline"
-            >
+            <Link href="/admin/layouts" className={BTN_GHOST}>
               Back to layouts
             </Link>
           </div>

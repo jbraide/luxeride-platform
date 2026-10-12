@@ -3,6 +3,19 @@ import { headers } from "next/headers";
 
 import { LOCATIONS } from "@/data/locations";
 import { fmtNaira } from "@/lib/pricing";
+import PageHeader from "@/components/admin/PageHeader";
+import {
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  EYEBROW,
+  INPUT,
+  LABEL,
+  NUM,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_HEAD_CELL,
+  TABLE_ROW,
+} from "@/components/admin/ui";
 import { updateDeliveryZone } from "./actions";
 
 export const metadata: Metadata = {
@@ -11,76 +24,78 @@ export const metadata: Metadata = {
 };
 
 export default async function DeliveryPage() {
-  const pathname = (await headers()).get("x-invoke-path") ?? "/admin/delivery";
+  // Reading a request header here is what keeps this route dynamic rather than
+  // prerendered — the same job the `dynamic = "force-dynamic"` export does on the
+  // screens that read Postgres. The value itself is not used on this page.
+  await headers();
 
   return (
     <div>
-      <h2 className="font-display text-xl font-semibold tracking-tight">Delivery zones</h2>
-      <p className="mt-1 text-sm text-fg-muted">
-        The four zones the checkout uses, the footer sources, and the delivery policy.
-        Every figure in `policies/[slug]` `delivery` section and `CheckoutView.tsx`
-        comes from this same `LOCATIONS` register — the single-source rule (`storefront-catalog`
-        §5.5 / M4.7 verified).
-      </p>
+      <PageHeader
+        title="Delivery zones"
+        meta="The four zones the checkout uses, the footer sources, and the delivery policy. Every figure comes from this same LOCATIONS register — the single-source rule."
+        actions={
+          <a href="#configure-zone" className={BTN_SECONDARY}>
+            Configure a zone
+          </a>
+        }
+      />
 
-      <table className="w-full text-sm mt-6 overflow-x-auto rounded-lg border border-border">
+      <table className={`${TABLE} mt-6 overflow-x-auto rounded-lg border border-border`}>
         <thead className="bg-surface-2">
-          <tr>
-            <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-accent-dim">Zone</th>
-            <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-accent-dim">Fee</th>
-            <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-accent-dim">Fastest ETA</th>
-            <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-accent-dim">Slowest ETA</th>
+          <tr className={TABLE_HEAD}>
+            <th className={`${TABLE_HEAD_CELL} px-4 text-left`}>Zone</th>
+            <th className={`${TABLE_HEAD_CELL} px-4 text-right`}>Fee</th>
+            <th className={`${TABLE_HEAD_CELL} px-4 text-right`}>Fastest ETA</th>
+            <th className={`${TABLE_HEAD_CELL} px-4 text-right`}>Slowest ETA</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody>
           {LOCATIONS.map((zone) => (
-            <tr key={zone.name}>
+            <tr key={zone.name} className={TABLE_ROW}>
               <td className="px-4 py-3 font-medium">{zone.name}</td>
-              <td className="px-4 py-3 text-right font-mono">{fmtNaira(zone.fee)}</td>
-              <td className="px-4 py-3 text-right text-fg-muted">{zone.eta.split("–")[0]?.trim()}</td>
-              <td className="px-4 py-3 text-right text-fg-muted">{zone.eta.split("–")[1]?.trim()}</td>
+              <td className={`${NUM} px-4 py-3 font-mono`}>{fmtNaira(zone.fee)}</td>
+              <td className={`${NUM} px-4 py-3 text-fg-muted`}>{zone.eta.split("–")[0]?.trim()}</td>
+              <td className={`${NUM} px-4 py-3 text-fg-muted`}>{zone.eta.split("–")[1]?.trim()}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <form method="post" action={updateDeliveryZone} className="mt-4 rounded-xl border border-dashed border-border bg-surface/40 px-4 py-4">
-        <p className="text-xs font-mono uppercase tracking-widest text-accent-dim mb-3">Configure zone</p>
+      <form id="configure-zone" method="post" action={updateDeliveryZone} className="mt-4 rounded-xl border border-dashed border-border bg-surface/40 px-4 py-4">
+        <p className={`${EYEBROW} mb-3`}>Configure zone</p>
         <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label htmlFor="zoneName" className="text-xs text-fg-muted">Zone</label>
-            <select id="zoneName" name="name" defaultValue="" className="mt-1 w-48 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none font-mono">
+          <div className="w-48">
+            <label htmlFor="zoneName" className={LABEL}>Zone</label>
+            <select id="zoneName" name="name" defaultValue="" className={`${INPUT} font-mono`}>
               <option value="">Select zone</option>
               {LOCATIONS.map((z) => (
                 <option key={z.name} value={z.name}>{z.name}</option>
               ))}
             </select>
           </div>
-          <div>
-            <label htmlFor="zoneFee" className="text-xs text-fg-muted">Fee (NGN)</label>
+          <div className="w-40">
+            <label htmlFor="zoneFee" className={LABEL}>Fee (NGN)</label>
             <input
               id="zoneFee"
               name="fee"
               type="number"
               inputMode="numeric"
               placeholder="e.g. 9000"
-              className="mt-1 w-40 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg font-mono focus:border-accent focus:outline-none"
+              className={`${INPUT} font-mono`}
             />
           </div>
-          <div>
-            <label htmlFor="zoneEta" className="text-xs text-fg-muted">ETA text</label>
+          <div className="w-48">
+            <label htmlFor="zoneEta" className={LABEL}>ETA text</label>
             <input
               id="zoneEta"
               name="etaText"
               type="text"
               placeholder="e.g. 24–48 hours"
-              className="mt-1 w-48 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+              className={INPUT}
             />
           </div>
-          <button
-            type="submit"
-            className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent hover:bg-accent/90"
-          >
+          <button type="submit" className={BTN_PRIMARY}>
             Save zone
           </button>
         </div>

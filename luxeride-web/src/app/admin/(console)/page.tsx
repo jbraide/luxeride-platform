@@ -6,6 +6,9 @@ import { liveLayoutCountLive, confirmedCustomerNamesLive } from "@/lib/fitment-l
 import { getHeroLayout, type HeroLayout } from "@/lib/settings";
 import { setHeroLayout } from "./actions";
 import { messageFor, readFailures } from "./catalogue-guard";
+import EmptyState from "@/components/admin/EmptyState";
+import PageHeader from "@/components/admin/PageHeader";
+import StatusChip from "@/components/admin/StatusChip";
 
 /**
  * `/admin` — the console dashboard (`fitment-engine` §8.2, milestone M9.3).
@@ -96,7 +99,7 @@ function Stat({
   href?: string;
 }) {
   const valueClass =
-    tone === "warn" ? "text-[#FF6B35]" : tone === "good" ? "text-accent" : "text-fg/85";
+    tone === "warn" ? "text-danger" : tone === "good" ? "text-accent" : "text-fg/85";
 
   const body = (
     <>
@@ -329,6 +332,11 @@ export default async function AdminPage({
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="Dashboard"
+        meta="What needs you first, then how the catalogue and the shop are doing. Every figure links to the screen that changes it."
+      />
+
       {/* ── THE HEADLINE ────────────────────────────────────────────────────
           *
           * ONE number, at the top, at a size nothing else on the page competes with.
@@ -464,9 +472,9 @@ export default async function AdminPage({
         </p>
 
         {topDemand.length === 0 ? (
-          <p className="mt-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-fg-muted">
+          <EmptyState className="mt-3">
             No refusals logged yet, so there is no signal about what to source.
-          </p>
+          </EmptyState>
         ) : (
           <ul className="mt-3 divide-y divide-border">
             {topDemand.map((row) => (
@@ -521,7 +529,10 @@ export default async function AdminPage({
         </p>
 
         {heroFailures.has("heroLayout") && (
-          <p className="mt-3 rounded-lg border border-[#FF6B35] px-4 py-3 text-sm text-[#FF6B35]">
+          <p
+            role="alert"
+            className="mt-3 rounded-lg border border-danger bg-danger-soft px-4 py-3 text-sm text-danger"
+          >
             <span className="font-mono">heroLayout</span> —{" "}
             {messageFor(heroFailures.get("heroLayout") as string)}
           </p>
@@ -664,13 +675,9 @@ export default async function AdminPage({
                   <span>
                     {vehicle.make.name} {vehicle.model}
                   </span>
-                  <span
-                    className={`font-mono text-[11px] uppercase ${
-                      vehicle.status === "excluded" ? "text-[#FF6B35]" : "text-accent-dim"
-                    }`}
-                  >
+                  <StatusChip tone={vehicle.status === "excluded" ? "warn" : "neutral"}>
                     {vehicle.status}
-                  </span>
+                  </StatusChip>
                 </li>
               ))}
             </ul>
@@ -699,7 +706,7 @@ export default async function AdminPage({
 
       <p className="text-[11px] text-accent-dim">
         Nothing links here from the public site, and this page is not indexed. The whole subtree is
-        behind HTTP Basic Auth.
+        behind a signed-in session and refuses every request without one.
       </p>
     </div>
   );

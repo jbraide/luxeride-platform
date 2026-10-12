@@ -9,6 +9,24 @@ import { ORDER_STATUSES, orderStatusHint, orderStatusLabel } from "@/lib/order-s
 import { messageFor, readFailures } from "../../confirm-guard";
 import { setOrderStatus } from "../../order-actions";
 import CopyButton from "./CopyButton";
+import PageHeader from "@/components/admin/PageHeader";
+import FieldErrors from "@/components/admin/FieldErrors";
+import StatusChip, { type StatusTone } from "@/components/admin/StatusChip";
+import {
+  BTN_GHOST,
+  BTN_PRIMARY,
+  BTN_ROW,
+  EYEBROW,
+  INPUT,
+  LABEL,
+  NUM,
+  SECTION_HINT,
+  SECTION_TITLE,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_HEAD_CELL,
+  TABLE_ROW,
+} from "@/components/admin/ui";
 
 /**
  * `/admin/orders/[id]` — one order, and the only place its status changes.
@@ -48,10 +66,26 @@ const TIMESTAMP = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
+/** The status as a chip tone; a value written by a future workstream falls through as neutral. */
+function statusTone(status: string): StatusTone {
+  switch (status) {
+    case "pending":
+      return "warn";
+    case "confirmed":
+      return "accent";
+    case "fulfilled":
+      return "good";
+    case "cancelled":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-border py-3">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">{label}</p>
+      <p className={EYEBROW}>{label}</p>
       <div className="mt-1 text-sm text-fg/90">{children}</div>
     </div>
   );
@@ -110,52 +144,46 @@ export default async function OrderDetailPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">Order</p>
-          <h2 className="font-mono text-lg font-semibold text-accent">{order.reference}</h2>
-        </div>
-        <Link
-          href="/admin/orders"
-          className="text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
-        >
-          ← All orders
-        </Link>
-      </div>
+      <PageHeader
+        title={
+          <>
+            <span className={`${EYEBROW} block`}>Order</span>
+            <span className="font-mono text-accent">{order.reference}</span>
+          </>
+        }
+        meta={
+          <>
+            Placed {TIMESTAMP.format(order.createdAt)} · Lagos time. Currently{" "}
+            <StatusChip tone={statusTone(order.status)}>{orderStatusLabel(order.status)}</StatusChip>.
+          </>
+        }
+        actions={
+          <Link href="/admin/orders" className={BTN_GHOST}>
+            ← All orders
+          </Link>
+        }
+      />
 
-      <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-        Placed {TIMESTAMP.format(order.createdAt)} · Lagos time. Currently{" "}
-        <span className="font-mono uppercase text-accent-dim">{orderStatusLabel(order.status)}</span>.
-      </p>
-
-      {failures.size > 0 && (
-        <div className="mt-4 space-y-1 rounded-xl border border-[#FF6B35] px-4 py-3">
-          {[...failures.entries()].map(([field, code]) => (
-            <p key={field} className="text-sm text-[#FF6B35]">
-              <span className="font-mono">{field}</span> — {messageFor(code)}
-            </p>
-          ))}
-        </div>
-      )}
+      <FieldErrors failures={failures} message={messageFor} />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── LEFT: what was ordered ─────────────────────────────────────── */}
         <div>
-          <h3 className="font-display text-base font-semibold">What was ordered</h3>
+          <h3 className={SECTION_TITLE}>What was ordered</h3>
 
-          <table className="mt-3 w-full text-left text-sm">
+          <table className={`mt-3 ${TABLE}`}>
             <thead>
-              <tr className="border-b border-border font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-                <th className="py-2 pr-4 font-normal">Item</th>
-                <th className="py-2 pr-4 font-normal">Fit</th>
-                <th className="py-2 pr-4 font-normal">Qty</th>
-                <th className="py-2 pr-4 font-normal">Unit</th>
-                <th className="py-2 font-normal">Line</th>
+              <tr className={TABLE_HEAD}>
+                <th className={TABLE_HEAD_CELL}>Item</th>
+                <th className={TABLE_HEAD_CELL}>Fit</th>
+                <th className={`${TABLE_HEAD_CELL} ${NUM}`}>Qty</th>
+                <th className={`${TABLE_HEAD_CELL} ${NUM}`}>Unit</th>
+                <th className={`${TABLE_HEAD_CELL} ${NUM}`}>Line</th>
               </tr>
             </thead>
             <tbody>
               {order.items.map((item) => (
-                <tr key={item.id} className="border-t border-border align-top">
+                <tr key={item.id} className={TABLE_ROW}>
                   <td className="py-2 pr-4">
                     {item.product.name}
                     {/* WHICH OPTION. A Floor Mats order that does not say which layer
@@ -174,11 +202,11 @@ export default async function OrderDetailPage({
                       {item.rows ? ` · ${item.rows}-row` : ""}
                     </span>
                   </td>
-                  <td className="py-2 pr-4 font-mono text-sm">{item.qty}</td>
-                  <td className="py-2 pr-4 font-mono text-sm text-fg-muted">
+                  <td className={`py-2 pr-4 font-mono text-sm ${NUM}`}>{item.qty}</td>
+                  <td className={`py-2 pr-4 font-mono text-sm text-fg-muted ${NUM}`}>
                     {fmtNaira(item.unitPrice)}
                   </td>
-                  <td className="py-2 font-mono text-sm text-accent">{fmtNaira(item.lineTotal)}</td>
+                  <td className={`py-2 font-mono text-sm text-accent ${NUM}`}>{fmtNaira(item.lineTotal)}</td>
                 </tr>
               ))}
             </tbody>
@@ -188,23 +216,23 @@ export default async function OrderDetailPage({
           <div className="mt-4 rounded-xl border border-border bg-surface/60 px-4 py-2">
             <div className="flex justify-between border-t border-border py-2 text-sm">
               <span className="text-fg-muted">Subtotal</span>
-              <span className="font-mono">{fmtNaira(order.subtotal)}</span>
+              <span className={`font-mono ${NUM}`}>{fmtNaira(order.subtotal)}</span>
             </div>
             <div className="flex justify-between border-t border-border py-2 text-sm">
               <span className="text-fg-muted">Delivery</span>
-              <span className="font-mono">
+              <span className={`font-mono ${NUM}`}>
                 {order.shippingFee > 0 ? fmtNaira(order.shippingFee) : ZERO_FEE_LABEL}
               </span>
             </div>
             {order.discount > 0 && (
               <div className="flex justify-between border-t border-border py-2 text-sm">
                 <span className="text-fg-muted">Discount</span>
-                <span className="font-mono">− {fmtNaira(order.discount)}</span>
+                <span className={`font-mono ${NUM}`}>− {fmtNaira(order.discount)}</span>
               </div>
             )}
             <div className="flex justify-between border-t border-border py-2 text-base font-semibold">
               <span>Total</span>
-              <span className="font-mono text-accent">{fmtNaira(order.total)}</span>
+              <span className={`font-mono text-accent ${NUM}`}>{fmtNaira(order.total)}</span>
             </div>
           </div>
 
@@ -215,8 +243,8 @@ export default async function OrderDetailPage({
           </p>
 
           {/* ── The exact message the customer was handed ─────────────────── */}
-          <h3 className="mt-8 font-display text-base font-semibold">The message</h3>
-          <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+          <h3 className={`mt-8 ${SECTION_TITLE}`}>The message</h3>
+          <p className={SECTION_HINT}>
             The exact text stored on this order, built from the server&apos;s own figures. Copy it to
             re-send, or open the customer&apos;s thread below.
           </p>
@@ -224,17 +252,12 @@ export default async function OrderDetailPage({
             readOnly
             value={order.whatsappMessage}
             rows={9}
-            className="mt-3 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg/90 focus:border-accent focus:outline-none"
+            className="mt-3 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg/90 focus:border-accent"
           />
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <CopyButton text={order.whatsappMessage} />
             {threadLink ? (
-              <a
-                href={threadLink}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-lg border border-border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted hover:border-accent hover:text-accent"
-              >
+              <a href={threadLink} target="_blank" rel="noreferrer" className={BTN_ROW}>
                 Open WhatsApp thread ↗
               </a>
             ) : (
@@ -247,7 +270,7 @@ export default async function OrderDetailPage({
 
         {/* ── RIGHT: who it is for, and the status control ───────────────── */}
         <div>
-          <h3 className="font-display text-base font-semibold">Customer &amp; delivery</h3>
+          <h3 className={SECTION_TITLE}>Customer &amp; delivery</h3>
           <div className="mt-2 rounded-xl border border-border bg-surface/60 px-4 py-1">
             <Field label="Name">{order.customerName}</Field>
             <Field label="Phone">
@@ -263,8 +286,8 @@ export default async function OrderDetailPage({
             </Field>
           </div>
 
-          <h3 className="mt-8 font-display text-base font-semibold">Status</h3>
-          <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+          <h3 className={`mt-8 ${SECTION_TITLE}`}>Status</h3>
+          <p className={SECTION_HINT}>
             What you record about this order. It does not assert a payment — whether money arrived is
             a separate fact.
           </p>
@@ -300,22 +323,17 @@ export default async function OrderDetailPage({
             </fieldset>
 
             <label className="mt-4 block">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">
-                Note (optional, kept in the audit log)
-              </span>
+              <span className={LABEL}>Note (optional, kept in the audit log)</span>
               <textarea
                 name="note"
                 rows={2}
                 maxLength={500}
                 placeholder="Why this changed — e.g. “customer cancelled, no stock in 3-row”"
-                className="mt-1 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
+                className={`${INPUT} resize-y`}
               />
             </label>
 
-            <button
-              type="submit"
-              className="mt-3 rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-            >
+            <button type="submit" className={`mt-3 ${BTN_PRIMARY}`}>
               Save status
             </button>
           </form>

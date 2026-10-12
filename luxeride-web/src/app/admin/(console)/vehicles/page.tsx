@@ -2,6 +2,10 @@ import Link from "next/link";
 
 import { prisma } from "@/lib/db";
 import { deleteVehicle, deleteVehicles, setCarActive, setVehicleActive, setVehiclesActive } from "../actions";
+import PageHeader from "@/components/admin/PageHeader";
+import EmptyState from "@/components/admin/EmptyState";
+import StatusChip from "@/components/admin/StatusChip";
+import { TABLE, TABLE_HEAD, TABLE_HEAD_CELL, TABLE_ROW, chip } from "@/components/admin/ui";
 
 /**
  * `/admin/vehicles` — the reviewable car list (`fitment-engine` §8.3).
@@ -186,12 +190,10 @@ export default async function VehiclesPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Vehicles</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-          {vehicles.length} shown of {all}
-        </span>
-      </div>
+      <PageHeader
+        title="Vehicles"
+        meta={`${vehicles.length} shown of ${all} — every year range, grouped by make and then car`}
+      />
 
       {/*
         THE FILTERS, AS CHIPS RATHER THAN UNDERLINED WORDS.
@@ -217,11 +219,7 @@ export default async function VehiclesPage({
               key={option.value}
               href={filterHref(option.value, rawQuery)}
               aria-current={active ? "page" : undefined}
-              className={`flex items-baseline gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors ${
-                active
-                  ? "border-accent bg-accent/10 text-accent"
-                  : "border-border text-fg-muted hover:border-accent/50 hover:text-accent"
-              }`}
+              className={chip(active)}
             >
               {option.label}
               <span className={active ? "text-accent" : "text-accent-dim"}>{count}</span>
@@ -241,7 +239,7 @@ export default async function VehiclesPage({
           defaultValue={rawQuery}
           placeholder="Search make or model"
           aria-label="Search make or model"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent"
         />
         <button
           type="submit"
@@ -261,15 +259,22 @@ export default async function VehiclesPage({
       </p>
 
       {vehicles.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-6 text-sm text-fg-muted">
-          {rawQuery !== ""
-            ? `Nothing matches "${rawQuery}" in this filter.`
-            : filter === "unmapped"
-              ? "No unmapped vehicles. Every car in the catalogue has a Mapping row, which is not the same as having been checked — open a layout to see whether it has been confirmed."
-              : filter === "excluded"
-                ? "No vehicles are marked excluded. The Exclusion table is the record of cars somebody looked at and knows we cannot fit."
-                : "Nothing to show."}
-        </p>
+        <EmptyState className="mt-6">
+          {rawQuery !== "" ? (
+            <>
+              {`Nothing matches "${rawQuery}" in this filter.`}{" "}
+              <Link href="/admin/vehicles" className="text-accent underline-offset-4 hover:underline">
+                Clear filters
+              </Link>
+            </>
+          ) : filter === "unmapped" ? (
+            "No unmapped vehicles. Every car in the catalogue has a Mapping row, which is not the same as having been checked — open a layout to see whether it has been confirmed."
+          ) : filter === "excluded" ? (
+            "No vehicles are marked excluded. The Exclusion table is the record of cars somebody looked at and knows we cannot fit."
+          ) : (
+            "Nothing to show."
+          )}
+        </EmptyState>
       ) : (
         <div className="mt-6 space-y-3">
           {groups.map((group) => (
@@ -299,14 +304,8 @@ export default async function VehiclesPage({
                 <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
                   {group.cars.length} car{group.cars.length === 1 ? "" : "s"}
                 </span>
-                {group.unmapped > 0 && (
-                  <span className="rounded-md border border-[#FF6B35]/40 px-1.5 py-0.5 font-mono text-[10px] uppercase text-[#FF6B35]">
-                    {group.unmapped} unmapped
-                  </span>
-                )}
-                {group.excluded > 0 && (
-                  <span className="font-mono text-[10px] uppercase text-fg-muted">{group.excluded} excluded</span>
-                )}
+                {group.unmapped > 0 && <StatusChip tone="warn">{group.unmapped} unmapped</StatusChip>}
+                {group.excluded > 0 && <StatusChip tone="neutral">{group.excluded} excluded</StatusChip>}
               </summary>
 
               <div className="space-y-2 border-t border-border p-3">
@@ -328,14 +327,8 @@ export default async function VehiclesPage({
                         <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
                           {car.vehicles.length} range{car.vehicles.length === 1 ? "" : "s"}
                         </span>
-                        {withdrawn > 0 && (
-                          <span className="font-mono text-[10px] uppercase text-fg-muted">{withdrawn} withdrawn</span>
-                        )}
-                        {car.unmapped > 0 && (
-                          <span className="rounded-md border border-[#FF6B35]/40 px-1.5 py-0.5 font-mono text-[10px] uppercase text-[#FF6B35]">
-                            {car.unmapped} unmapped
-                          </span>
-                        )}
+                        {withdrawn > 0 && <StatusChip tone="neutral">{withdrawn} withdrawn</StatusChip>}
+                        {car.unmapped > 0 && <StatusChip tone="warn">{car.unmapped} unmapped</StatusChip>}
                       </summary>
 
                       {/*
@@ -365,7 +358,7 @@ export default async function VehiclesPage({
                             type="submit"
                             formNoValidate
                             title={`Stop offering every year range of the ${car.model}. Its prices and photographs are kept, and "Put all live" brings them back.`}
-                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-danger hover:text-danger"
                           >
                             Withdraw all
                           </button>
@@ -402,7 +395,7 @@ export default async function VehiclesPage({
                             name="active"
                             value="off"
                             formNoValidate
-                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-danger hover:text-danger"
                           >
                             Withdraw
                           </button>
@@ -419,23 +412,23 @@ export default async function VehiclesPage({
                             type="submit"
                             formAction={deleteVehicles}
                             formNoValidate
-                            className="rounded-lg border border-[#FF6B35]/60 px-3 py-1 text-xs text-[#FF6B35] transition-colors hover:bg-[#FF6B35] hover:text-on-accent"
+                            className="rounded-lg border border-danger/60 px-3 py-1 text-xs text-danger transition-colors hover:bg-danger hover:text-on-accent"
                           >
                             Delete
                           </button>
                         </form>
                       </div>
 
-                      <table className="w-full border-t border-border text-left text-sm">
+                      <table className={`border-t border-border ${TABLE}`}>
                         <thead>
-                          <tr className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
+                          <tr className={TABLE_HEAD}>
                             <th scope="col" className="w-px py-2 pl-3 pr-2 font-normal">
                               <span className="sr-only">Select</span>
                             </th>
-                            <th scope="col" className="py-2 pr-4 font-normal">Years</th>
-                            <th scope="col" className="py-2 pr-4 font-normal">Status</th>
-                            <th scope="col" className="py-2 pr-4 font-normal">Layout</th>
-                            <th scope="col" className="py-2 pr-3 font-normal">Actions</th>
+                            <th scope="col" className={TABLE_HEAD_CELL}>Years</th>
+                            <th scope="col" className={TABLE_HEAD_CELL}>Status</th>
+                            <th scope="col" className={TABLE_HEAD_CELL}>Layout</th>
+                            <th scope="col" className={TABLE_HEAD_CELL}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -446,7 +439,7 @@ export default async function VehiclesPage({
                                 ? `${vehicle.yearFrom}–${vehicle.yearTo}`
                                 : "not set";
                             return (
-                              <tr key={vehicle.id} className="border-t border-border align-top">
+                              <tr key={vehicle.id} className={TABLE_ROW}>
                                 <td className="py-2 pl-3 pr-2">
                                   <input
                                     type="checkbox"
@@ -460,18 +453,18 @@ export default async function VehiclesPage({
                                 <td className="py-2 pr-4 font-mono text-[11px] text-fg-muted">
                                   {span}
                                   {!vehicle.active && (
-                                    <span className="ml-2 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-muted">
-                                      withdrawn
+                                    <span className="ml-2">
+                                      <StatusChip tone="neutral">withdrawn</StatusChip>
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-2 pr-4 font-mono text-[11px] uppercase">
+                                <td className="py-2 pr-4">
                                   {vehicle.status === "excluded" ? (
-                                    <span className="text-[#FF6B35]">excluded</span>
+                                    <StatusChip tone="danger">excluded</StatusChip>
                                   ) : mapping ? (
-                                    <span className="text-fg-muted">{mapping.confidence}</span>
+                                    <StatusChip tone="neutral">{mapping.confidence}</StatusChip>
                                   ) : (
-                                    <span className="text-[#FF6B35]">unmapped</span>
+                                    <StatusChip tone="warn">unmapped</StatusChip>
                                   )}
                                 </td>
                                 <td className="py-2 pr-4">
@@ -509,7 +502,7 @@ export default async function VehiclesPage({
                                         }
                                         className={`rounded-lg border px-3 py-1 text-xs transition-colors ${
                                           vehicle.active
-                                            ? "border-border text-fg-muted hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                                            ? "border-border text-fg-muted hover:border-danger hover:text-danger"
                                             : "border-accent bg-accent text-on-accent"
                                         }`}
                                       >
@@ -525,7 +518,7 @@ export default async function VehiclesPage({
                                         type="submit"
                                         formNoValidate
                                         title="Remove this year range for good. Its prices and photographs go with it."
-                                        className="rounded-lg border border-[#FF6B35]/60 px-3 py-1 text-xs text-[#FF6B35] transition-colors hover:bg-[#FF6B35] hover:text-on-accent"
+                                        className="rounded-lg border border-danger/60 px-3 py-1 text-xs text-danger transition-colors hover:bg-danger hover:text-on-accent"
                                       >
                                         Delete
                                       </button>

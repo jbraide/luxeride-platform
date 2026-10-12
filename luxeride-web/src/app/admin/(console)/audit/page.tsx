@@ -2,6 +2,10 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import PageHeader from "@/components/admin/PageHeader";
+import EmptyState from "@/components/admin/EmptyState";
+import StatusChip, { type StatusTone } from "@/components/admin/StatusChip";
+import { TABLE, TABLE_HEAD, TABLE_HEAD_CELL, TABLE_ROW, chip } from "@/components/admin/ui";
 
 /**
  * `/admin/audit` — the append-only record of who changed what (`fitment-engine`
@@ -71,10 +75,10 @@ function asText(value: Prisma.JsonValue | null): string {
 }
 
 /** `confirm` is the action that matters, so it is the only one that gets the gold. */
-function actionClass(action: string): string {
-  if (action === "confirm") return "text-accent";
-  if (action === "delete" || action === "retire") return "text-[#FF6B35]";
-  return "text-fg-muted";
+function actionTone(action: string): StatusTone {
+  if (action === "confirm") return "good";
+  if (action === "delete" || action === "retire") return "danger";
+  return "neutral";
 }
 
 function entityHref(entity: string): string {
@@ -124,71 +128,68 @@ export default async function AuditPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Audit log</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-          {entries.length} shown of {total}
-        </span>
-      </div>
+      <PageHeader
+        title="Audit log"
+        meta={
+          <>
+            Every decision the console records, newest first. Rows are appended and never rewritten, so
+            nothing here can be tidied up — including by you. There is no edit and no delete control on
+            this page, and none in <code className="font-mono text-accent-dim">actions.ts</code> either.{" "}
+            {entries.length} shown of {total}.
+          </>
+        }
+      />
 
-      <p className="mt-2 max-w-3xl text-xs leading-relaxed text-fg-muted">
-        Every decision the console records, newest first. Rows are appended and never
-        rewritten, so nothing here can be tidied up — including by you. There is no
-        edit and no delete control on this page, and none in{" "}
-        <code className="font-mono text-accent-dim">actions.ts</code> either.
-      </p>
-
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-        <Link
-          href="/admin/audit"
-          aria-current={filter === "" ? "page" : undefined}
-          className={`font-mono text-xs uppercase tracking-widest ${
-            filter === "" ? "text-accent" : "text-fg-muted hover:text-accent"
-          }`}
-        >
-          All <span className="text-accent-dim">{total}</span>
+      <nav aria-label="Filter audit entries" className="mt-4 flex flex-wrap items-center gap-2">
+        <Link href="/admin/audit" aria-current={filter === "" ? "page" : undefined} className={chip(filter === "")}>
+          All <span className={filter === "" ? "text-accent" : "text-accent-dim"}>{total}</span>
         </Link>
         {byEntity.map((row) => (
           <Link
             key={row.entity}
             href={entityHref(row.entity)}
             aria-current={filter === row.entity ? "page" : undefined}
-            className={`font-mono text-xs uppercase tracking-widest ${
-              filter === row.entity ? "text-accent" : "text-fg-muted hover:text-accent"
-            }`}
+            className={chip(filter === row.entity)}
           >
-            {row.entity} <span className="text-accent-dim">{row._count._all}</span>
+            {row.entity}{" "}
+            <span className={filter === row.entity ? "text-accent" : "text-accent-dim"}>{row._count._all}</span>
           </Link>
         ))}
-      </div>
+      </nav>
 
       {entries.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-6 text-sm leading-relaxed text-fg-muted">
-          {total === 0
-            ? "Nothing has been changed yet, and that is the correct reading of an empty log rather than a broken page — 212 layouts and 212 mappings are loaded as inferred rows and none has been confirmed, so no decision has been taken that would need recording."
-            : `Nothing has been logged against ${filter}. The other entities are in the filter above.`}
-        </p>
+        <EmptyState className="mt-6">
+          {total === 0 ? (
+            "Nothing has been changed yet, and that is the correct reading of an empty log rather than a broken page — 212 layouts and 212 mappings are loaded as inferred rows and none has been confirmed, so no decision has been taken that would need recording."
+          ) : (
+            <>
+              {`Nothing has been logged against ${filter}.`}{" "}
+              <Link href="/admin/audit" className="text-accent underline-offset-4 hover:underline">
+                Clear the filter
+              </Link>{" "}
+              to see the others.
+            </>
+          )}
+        </EmptyState>
       ) : (
-        <table className="mt-6 w-full text-left text-sm">
+        <table className={`mt-6 ${TABLE}`}>
           <thead>
-            <tr className="border-b border-border font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-              <th className="py-2 pr-4 font-normal">When</th>
-              <th className="py-2 pr-4 font-normal">What</th>
-              <th className="py-2 pr-4 font-normal">Field</th>
-              <th className="py-2 pr-4 font-normal">Before</th>
-              <th className="py-2 font-normal">After</th>
+            <tr className={TABLE_HEAD}>
+              <th className={TABLE_HEAD_CELL}>When</th>
+              <th className={TABLE_HEAD_CELL}>What</th>
+              <th className={TABLE_HEAD_CELL}>Field</th>
+              <th className={TABLE_HEAD_CELL}>Before</th>
+              <th className={TABLE_HEAD_CELL}>After</th>
             </tr>
           </thead>
           <tbody>
             {entries.map((entry) => (
-              <tr key={entry.id} className="border-t border-border align-top">
+              <tr key={entry.id} className={TABLE_ROW}>
                 <td className="whitespace-nowrap py-2 pr-4 font-mono text-[11px] text-accent-dim">
                   {TIMESTAMP.format(entry.createdAt)}
                 </td>
                 <td className="py-2 pr-4">
-                  <span className={`font-mono text-[11px] uppercase ${actionClass(entry.action)}`}>
-                    {entry.action}
-                  </span>
+                  <StatusChip tone={actionTone(entry.action)}>{entry.action}</StatusChip>
                   <span className="block text-xs text-fg/80">{entry.entity}</span>
                   {entry.who !== null && (
                     <span className="block font-mono text-[11px] text-accent-dim">{entry.who}</span>

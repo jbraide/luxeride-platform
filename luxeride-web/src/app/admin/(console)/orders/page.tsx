@@ -3,6 +3,10 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { fmtNaira } from "@/lib/pricing";
 import { ORDER_STATUSES, orderStatusLabel } from "@/lib/order-status";
+import PageHeader from "@/components/admin/PageHeader";
+import EmptyState from "@/components/admin/EmptyState";
+import StatusChip, { type StatusTone } from "@/components/admin/StatusChip";
+import { BTN_SECONDARY, NUM, TABLE, TABLE_HEAD, TABLE_HEAD_CELL, TABLE_ROW, chip } from "@/components/admin/ui";
 
 /**
  * `/admin/orders` — every order placed through checkout.
@@ -51,6 +55,26 @@ const TIMESTAMP = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
   minute: "2-digit",
 });
+
+/**
+ * The status as a chip tone. `pending` is the queue (a to-do), `cancelled` is
+ * destructive, and the two settled states read affirmative; anything a future
+ * workstream writes falls through as neutral rather than being mislabelled.
+ */
+function orderTone(status: string): StatusTone {
+  switch (status) {
+    case "pending":
+      return "warn";
+    case "confirmed":
+      return "accent";
+    case "fulfilled":
+      return "good";
+    case "cancelled":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
 
 export default async function OrdersPage({
   searchParams,
@@ -101,44 +125,44 @@ export default async function OrdersPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Orders</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-          {orders.length} shown of {total}
-        </span>
-      </div>
-
-      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-fg-muted">
-        Every order placed through checkout, newest first. The reference is the handle the
-        customer was handed and the key their order page is read by. Open one to change its
-        status, copy the message, or open the WhatsApp thread.
-      </p>
+      <PageHeader
+        title="Orders"
+        meta={
+          `${orders.length} shown of ${total} · Every order placed through checkout, newest first. ` +
+          "The reference is the handle the customer was handed and the key their order page is " +
+          "read by. Open one to change its status, copy the message, or open the WhatsApp thread."
+        }
+        actions={
+          countFor("pending") > 0 ? (
+            <Link href={statusHref("pending")} className={BTN_SECONDARY}>
+              Review pending
+            </Link>
+          ) : undefined
+        }
+      />
 
       {/* The status filter. Counts come from a `groupBy`, so a zero-count status
           still appears — "nothing pending" is a fact worth seeing. */}
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+      <nav aria-label="Filter orders" className="mt-4 flex flex-wrap items-center gap-2">
         <Link
           href={statusHref("")}
           aria-current={status === "" ? "page" : undefined}
-          className={`font-mono text-xs uppercase tracking-widest ${
-            status === "" ? "text-accent" : "text-fg-muted hover:text-accent"
-          }`}
+          className={chip(status === "")}
         >
-          All <span className="text-accent-dim">{total}</span>
+          All <span className={status === "" ? "text-accent" : "text-accent-dim"}>{total}</span>
         </Link>
         {ORDER_STATUSES.map((value) => (
           <Link
             key={value}
             href={statusHref(value)}
             aria-current={status === value ? "page" : undefined}
-            className={`font-mono text-xs uppercase tracking-widest ${
-              status === value ? "text-accent" : "text-fg-muted hover:text-accent"
-            }`}
+            className={chip(status === value)}
           >
-            {orderStatusLabel(value)} <span className="text-accent-dim">{countFor(value)}</span>
+            {orderStatusLabel(value)}{" "}
+            <span className={status === value ? "text-accent" : "text-accent-dim"}>{countFor(value)}</span>
           </Link>
         ))}
-      </div>
+      </nav>
 
       <form method="get" action="/admin/orders" className="mt-4 flex max-w-md gap-2">
         {status !== "" && <input type="hidden" name="s" value={status} />}
@@ -148,7 +172,7 @@ export default async function OrdersPage({
           defaultValue={rawQuery}
           placeholder="Search reference, name or phone"
           aria-label="Search reference, name or phone"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent"
         />
         <button
           type="submit"
@@ -159,34 +183,39 @@ export default async function OrdersPage({
       </form>
 
       {orders.length === 0 ? (
-        <section className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-5">
-          <h3 className="font-display text-base font-semibold text-accent">No orders to show</h3>
-          <p className="mt-2 text-sm leading-relaxed text-fg/80">
-            {total === 0
-              ? "Nothing has been ordered yet. Every order placed through /checkout is written to the Order and OrderItem tables and appears here, so an empty list means an empty order book rather than a broken screen."
-              : "Nothing matches this filter. Clear the status above or search a different reference."}
-          </p>
-        </section>
+        <EmptyState className="mt-6">
+          {total === 0 ? (
+            "Nothing has been ordered yet. Every order placed through /checkout is written to the Order and OrderItem tables and appears here, so an empty list means an empty order book rather than a broken screen."
+          ) : (
+            <>
+              Nothing matches this filter.{" "}
+              <Link href="/admin/orders" className="text-accent underline-offset-4 hover:underline">
+                Clear filters
+              </Link>
+              .
+            </>
+          )}
+        </EmptyState>
       ) : (
-        <table className="mt-6 w-full text-left text-sm">
+        <table className={`mt-6 ${TABLE}`}>
           <thead>
-            <tr className="border-b border-border font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-              <th className="py-2 pr-4 font-normal">Reference</th>
-              <th className="py-2 pr-4 font-normal">Placed</th>
-              <th className="py-2 pr-4 font-normal">Customer</th>
-              <th className="py-2 pr-4 font-normal">Items</th>
-              <th className="py-2 pr-4 font-normal">Total</th>
-              <th className="py-2 pr-4 font-normal">Payment</th>
-              <th className="py-2 font-normal">Status</th>
+            <tr className={TABLE_HEAD}>
+              <th className={TABLE_HEAD_CELL}>Reference</th>
+              <th className={TABLE_HEAD_CELL}>Placed</th>
+              <th className={TABLE_HEAD_CELL}>Customer</th>
+              <th className={`${TABLE_HEAD_CELL} ${NUM}`}>Items</th>
+              <th className={`${TABLE_HEAD_CELL} ${NUM}`}>Total</th>
+              <th className={TABLE_HEAD_CELL}>Payment</th>
+              <th className={TABLE_HEAD_CELL}>Status</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((order) => (
-              <tr key={order.id} className="border-t border-border align-top">
+              <tr key={order.id} className={TABLE_ROW}>
                 <td className="py-2 pr-4 font-mono text-xs">
                   <Link
                     href={`/admin/orders/${encodeURIComponent(order.id)}`}
-                    className="text-accent underline-offset-4 hover:underline"
+                    className="font-medium text-accent underline-offset-4 hover:underline"
                   >
                     {order.reference}
                   </Link>
@@ -198,27 +227,15 @@ export default async function OrdersPage({
                   {order.customerName}
                   <span className="block font-mono text-[11px] text-fg-muted">{order.phone}</span>
                 </td>
-                <td className="py-2 pr-4 font-mono text-[11px] text-fg-muted">
+                <td className={`py-2 pr-4 font-mono text-[11px] text-fg-muted ${NUM}`}>
                   {order._count.items} line{order._count.items === 1 ? "" : "s"}
                 </td>
-                <td className="py-2 pr-4 font-mono text-sm text-accent">{fmtNaira(order.total)}</td>
+                <td className={`py-2 pr-4 font-mono text-sm text-accent ${NUM}`}>{fmtNaira(order.total)}</td>
                 <td className="py-2 pr-4 font-mono text-[11px] uppercase text-fg-muted">
                   {order.paymentMethod === "prepay" ? "Prepay" : "On delivery"}
                 </td>
-                <td className="py-2 font-mono text-[11px] uppercase">
-                  <span
-                    className={
-                      order.status === "cancelled"
-                        ? "text-[#FF6B35]"
-                        : order.status === "fulfilled"
-                          ? "text-accent-dim"
-                          : order.status === "confirmed"
-                            ? "text-accent"
-                            : "text-fg-muted"
-                    }
-                  >
-                    {orderStatusLabel(order.status)}
-                  </span>
+                <td className="py-2">
+                  <StatusChip tone={orderTone(order.status)}>{orderStatusLabel(order.status)}</StatusChip>
                 </td>
               </tr>
             ))}

@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/db";
+import PageHeader from "@/components/admin/PageHeader";
+import EmptyState from "@/components/admin/EmptyState";
+import { NUM, TABLE, TABLE_HEAD, TABLE_HEAD_CELL, TABLE_ROW } from "@/components/admin/ui";
 
 /**
  * `/admin/demand` — refusals ranked by volume (`fitment-engine` §8.7, analytics in
@@ -103,24 +106,23 @@ export default async function DemandPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Demand</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-          {rows.length} refusals logged · {ranked.length} distinct
-        </span>
-      </div>
-      <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-        Refusals only. Nothing here asserts that a car is available, so this table can never be read
-        back as a claim that a fit was sold. Ranked by volume: the top row is the next floor pan
-        worth checking.
-      </p>
+      <PageHeader
+        title="Demand"
+        meta={
+          <>
+            Refusals only. Nothing here asserts that a car is available, so this table can never be read
+            back as a claim that a fit was sold. Ranked by volume: the top row is the next floor pan worth
+            checking. {rows.length} refusals logged · {ranked.length} distinct.
+          </>
+        }
+      />
 
       {rows.length === 0 ? (
-        <section className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-5">
-          <h3 className="font-display text-base font-semibold text-accent">
+        <EmptyState className="mt-6">
+          <span className="block font-display text-base font-semibold text-accent">
             No refusals logged yet
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-fg/80">
+          </span>
+          <span className="mt-2 block text-sm leading-relaxed text-fg/80">
             This table is now the writer&apos;s own.{" "}
             <code className="font-mono text-accent-dim">src/lib/demand-log.ts</code> inserts a{" "}
             <code className="font-mono text-accent-dim">DemandLog</code> row for every refusal from{" "}
@@ -128,40 +130,40 @@ export default async function DemandPage() {
             whether or not a browser is behind it — and from{" "}
             <code className="font-mono text-accent-dim">/api/demand</code> for the locked-product miss
             the client alone can see. Nothing is written anywhere else.
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-fg/80">
-            To fill it: search any car on the Fit Finder that has no confirmed layout, then reload
-            this page. Reloading matters — this screen reads the table on the server and never
-            refetches on its own.
-          </p>
-          <p className="mt-3 text-xs leading-relaxed text-fg-muted">
+          </span>
+          <span className="mt-3 block text-sm leading-relaxed text-fg/80">
+            To fill it: search any car on the Fit Finder that has no confirmed layout, then reload this
+            page. Reloading matters — this screen reads the table on the server and never refetches on
+            its own.
+          </span>
+          <span className="mt-3 block text-xs leading-relaxed text-fg-muted">
             It was an NDJSON file once, outside the repository, read by this page with{" "}
             <code className="font-mono text-accent-dim">readFileSync</code> while the table beside it
-            stayed empty. The file is gone: it existed so refusals would survive before the database
-            did, and since §6.10 the lookup itself needs Postgres — a refusal cannot be recorded
-            without it. No refusals were lost in the move; there were none to lose.
-          </p>
-        </section>
+            stayed empty. The file is gone: it existed so refusals would survive before the database did,
+            and since §6.10 the lookup itself needs Postgres — a refusal cannot be recorded without it.
+            No refusals were lost in the move; there were none to lose.
+          </span>
+        </EmptyState>
       ) : (
-        <table className="mt-6 w-full text-left text-sm">
+        <table className={`mt-6 ${TABLE}`}>
           <thead>
-            <tr className="border-b border-border font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-              <th className="py-2 pr-4 font-normal">#</th>
-              <th className="py-2 pr-4 font-normal">Car</th>
-              <th className="py-2 pr-4 font-normal">Refusals</th>
-              <th className="py-2 pr-4 font-normal">Outcomes</th>
-              <th className="py-2 font-normal">Latest</th>
+            <tr className={TABLE_HEAD}>
+              <th className={`${TABLE_HEAD_CELL} ${NUM}`}>#</th>
+              <th className={TABLE_HEAD_CELL}>Car</th>
+              <th className={`${TABLE_HEAD_CELL} ${NUM}`}>Refusals</th>
+              <th className={TABLE_HEAD_CELL}>Outcomes</th>
+              <th className={TABLE_HEAD_CELL}>Latest</th>
             </tr>
           </thead>
           <tbody>
             {ranked.map((group, index) => (
-              <tr key={`${group.make}-${group.model}-${group.year}`} className="border-t border-border align-top">
-                <td className="py-2 pr-4 font-mono text-accent-dim">{index + 1}</td>
+              <tr key={`${group.make}-${group.model}-${group.year}`} className={TABLE_ROW}>
+                <td className={`py-2 pr-4 font-mono text-accent-dim ${NUM}`}>{index + 1}</td>
                 <td className="py-2 pr-4">
                   {group.make} {group.model}
                   <span className="block font-mono text-[11px] text-accent-dim">{group.year}</span>
                 </td>
-                <td className="py-2 pr-4 font-mono text-accent">{group.count}</td>
+                <td className={`py-2 pr-4 font-mono text-accent ${NUM}`}>{group.count}</td>
                 <td className="py-2 pr-4 font-mono text-[11px] uppercase text-fg-muted">
                   {group.outcomes
                     .map((outcome) => `${outcome.outcome} x${outcome.count}`)

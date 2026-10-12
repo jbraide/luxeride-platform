@@ -3,6 +3,20 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { createExclusion, deleteExclusion } from "../actions";
 import { MAX_REASON_LENGTH, MAX_TRIM_LENGTH, messageFor, readEcho, readFailures } from "../confirm-guard";
+import PageHeader from "@/components/admin/PageHeader";
+import FieldErrors from "@/components/admin/FieldErrors";
+import EmptyState from "@/components/admin/EmptyState";
+import {
+  BTN_PRIMARY,
+  BTN_ROW,
+  FIELD_ERROR,
+  HINT,
+  INPUT,
+  LABEL,
+  SECTION_HINT,
+  SECTION_TITLE,
+  inputState,
+} from "@/components/admin/ui";
 
 /**
  * `/admin/exclusions` — the known non-fits (`fitment-engine` §8.6).
@@ -41,16 +55,11 @@ export default async function ExclusionsPage({
     prisma.layout.findMany({ select: { id: true, internalCode: true }, orderBy: { internalCode: "asc" } }),
   ]);
 
-  const label = "block text-xs uppercase tracking-widest text-accent-dim";
-  const input =
-    "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none";
-  const fieldFailed = (field: string) => (failures.has(field) ? "border-[#FF6B35]" : "");
-
   const refusal = (field: string) => {
     const code = failures.get(field);
     if (!code) return null;
     return (
-      <p className="mt-1 text-xs leading-relaxed text-[#FF6B35]">
+      <p className={FIELD_ERROR}>
         <span className="font-mono">{field}</span> — {messageFor(code)}
       </p>
     );
@@ -58,39 +67,37 @@ export default async function ExclusionsPage({
 
   return (
     <div>
-      <h2 className="font-display text-lg font-semibold">Exclusions</h2>
-      <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-        Cars somebody specifically looked at and knows we cannot fit. Each one short-circuits{" "}
-        <code className="font-mono text-accent-dim">checkFitLive</code> before any layout is considered.
-      </p>
+      <PageHeader
+        title="Exclusions"
+        meta={
+          <>
+            Cars somebody specifically looked at and knows we cannot fit. Each one short-circuits{" "}
+            <code className="font-mono text-accent-dim">checkFitLive</code> before any layout is considered.
+          </>
+        }
+        actions={
+          <Link href="#record" className={BTN_PRIMARY}>
+            Record an exclusion
+          </Link>
+        }
+      />
 
-
-      {failures.size > 0 && (
-        <div className="mt-4 rounded-xl border border-[#FF6B35] px-4 py-3 text-sm">
-          <p className="text-[#FF6B35]">
-            Not saved. {failures.size} field{failures.size === 1 ? "" : "s"} refused:
-          </p>
-          <ul className="mt-2 space-y-1 text-xs text-fg-muted">
-            {[...failures].map(([field, code]) => (
-              <li key={field}>
-                <span className="font-mono text-fg/80">{field}</span> — {messageFor(code)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <FieldErrors failures={failures} message={messageFor} />
 
       <section className="mt-8">
-        <h3 className="font-display text-base font-semibold">
+        <h3 className={SECTION_TITLE}>
           Recorded refusals <span className="font-mono text-xs text-accent-dim">{exclusions.length}</span>
         </h3>
 
         {exclusions.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-border bg-surface/60 px-5 py-6 text-sm text-fg-muted">
+          <EmptyState className="mt-3">
             No exclusions recorded. That is not the same as everything fitting: it means nobody has
             written one down. A refusal that lives only in the owner&apos;s head is a car we will quote
-            by accident.
-          </p>
+            by accident.{" "}
+            <Link href="#record" className="text-accent underline-offset-4 hover:underline">
+              Record one
+            </Link>
+          </EmptyState>
         ) : (
           <ul className="mt-3 space-y-3">
             {exclusions.map((exclusion) => (
@@ -107,10 +114,7 @@ export default async function ExclusionsPage({
                   </span>
                   <form method="post" action={deleteExclusion}>
                     <input type="hidden" name="exclusionId" value={exclusion.id} />
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent"
-                    >
+                    <button type="submit" className={BTN_ROW}>
                       Remove
                     </button>
                   </form>
@@ -134,9 +138,9 @@ export default async function ExclusionsPage({
         )}
       </section>
 
-      <section className="mt-10">
-        <h3 className="font-display text-base font-semibold">Record one</h3>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+      <section id="record" className="mt-10">
+        <h3 className={SECTION_TITLE}>Record one</h3>
+        <p className={SECTION_HINT}>
           An exclusion is often about a car with no{" "}
           <code className="font-mono text-accent-dim">Vehicle</code> row at all — a hybrid variant, a
           3rd-row derivative, a 7-seat against a 5-seat floor pan — which is why this is named as make
@@ -147,7 +151,7 @@ export default async function ExclusionsPage({
         <form method="post" action={createExclusion} className="mt-5 space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="make" className={label}>
+              <label htmlFor="make" className={LABEL}>
                 Make — required
               </label>
               <input
@@ -155,12 +159,12 @@ export default async function ExclusionsPage({
                 name="make"
                 required
                 defaultValue={echo("make")}
-                className={`${input} ${fieldFailed("make")}`}
+                className={`${INPUT} ${inputState(failures.has("make"))}`}
               />
               {refusal("make")}
             </div>
             <div>
-              <label htmlFor="model" className={label}>
+              <label htmlFor="model" className={LABEL}>
                 Model — required
               </label>
               <input
@@ -168,7 +172,7 @@ export default async function ExclusionsPage({
                 name="model"
                 required
                 defaultValue={echo("model")}
-                className={`${input} ${fieldFailed("model")}`}
+                className={`${INPUT} ${inputState(failures.has("model"))}`}
               />
               {refusal("model")}
             </div>
@@ -176,7 +180,7 @@ export default async function ExclusionsPage({
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <label htmlFor="yearFrom" className={label}>
+              <label htmlFor="yearFrom" className={LABEL}>
                 From year — required
               </label>
               <input
@@ -186,12 +190,12 @@ export default async function ExclusionsPage({
                 inputMode="numeric"
                 required
                 defaultValue={echo("yearFrom")}
-                className={`${input} ${fieldFailed("yearFrom")}`}
+                className={`${INPUT} ${inputState(failures.has("yearFrom"))}`}
               />
               {refusal("yearFrom")}
             </div>
             <div>
-              <label htmlFor="yearTo" className={label}>
+              <label htmlFor="yearTo" className={LABEL}>
                 To year — required
               </label>
               <input
@@ -201,12 +205,12 @@ export default async function ExclusionsPage({
                 inputMode="numeric"
                 required
                 defaultValue={echo("yearTo")}
-                className={`${input} ${fieldFailed("yearTo")}`}
+                className={`${INPUT} ${inputState(failures.has("yearTo"))}`}
               />
               {refusal("yearTo")}
             </div>
             <div>
-              <label htmlFor="trim" className={label}>
+              <label htmlFor="trim" className={LABEL}>
                 Trim — optional
               </label>
               <input
@@ -215,21 +219,21 @@ export default async function ExclusionsPage({
                 maxLength={MAX_TRIM_LENGTH}
                 defaultValue={echo("trim")}
                 placeholder="hybrid, 3rd row, 7-seat"
-                className={`${input} ${fieldFailed("trim")}`}
+                className={`${INPUT} ${inputState(failures.has("trim"))}`}
               />
               {refusal("trim")}
             </div>
           </div>
 
           <div>
-            <label htmlFor="layoutId" className={label}>
+            <label htmlFor="layoutId" className={LABEL}>
               Layout it was mistaken for — optional
             </label>
             <select
               id="layoutId"
               name="layoutId"
               defaultValue={echo("layoutId")}
-              className={`${input} ${fieldFailed("layoutId")}`}
+              className={`${INPUT} ${inputState(failures.has("layoutId"))}`}
             >
               <option value="">No particular layout</option>
               {layouts.map((layout) => (
@@ -242,7 +246,7 @@ export default async function ExclusionsPage({
           </div>
 
           <div>
-            <label htmlFor="reason" className={label}>
+            <label htmlFor="reason" className={LABEL}>
               Reason — required, in your own words
             </label>
             <textarea
@@ -253,19 +257,16 @@ export default async function ExclusionsPage({
               maxLength={MAX_REASON_LENGTH}
               defaultValue={echo("reason")}
               placeholder="What you checked, and why it does not work."
-              className={`${input} ${fieldFailed("reason")}`}
+              className={`${INPUT} ${inputState(failures.has("reason"))}`}
             />
             {refusal("reason")}
-            <p className="mt-1 text-xs text-fg-muted">
+            <p className={HINT}>
               This sentence is what the customer reads instead of the generic refusal. Write it so you
               would be willing to defend it.
             </p>
           </div>
 
-          <button
-            type="submit"
-            className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-          >
+          <button type="submit" className={BTN_PRIMARY}>
             Record the exclusion
           </button>
         </form>

@@ -37,7 +37,24 @@
   --border: rgb(216 180 92 / 0.2);
   /* The accent is a LIGHT gold here, so text on it has to be dark. */
   --on-accent: #16130d;
+  /*
+   * DANGER / WARNING. One warm red-orange, named by job rather than by value.
+   *
+   * This was `#FF6B35` written as a literal in dozens of `text-[#FF6B35]` /
+   * `border-[#FF6B35]` classes across the console, which is why it could not be
+   * themed and why half the console could disagree about what "a problem" looks
+   * like. It is `#FF6B35` here so dark mode is byte-identical to before; light mode
+   * steps it down (see below) because the literal failed WCAG AA on white.
+   */
+  --danger: #ff6b35;
+  --danger-soft: rgb(255 107 53 / 0.12);
   --shadow: 0 18px 40px -24px rgb(0 0 0 / 0.9);
+  /*
+   * THE FOCUS RING. Every interactive element shows this on keyboard focus, and it
+   * is a token so the ring and the brand can never drift. See the rule at the foot of
+   * this file for why it is `outline` rather than a box-shadow.
+   */
+  --focus-ring: var(--accent);
 }
 
 /**
@@ -66,7 +83,16 @@
   --border: rgb(25 22 18 / 0.14);
   /* The accent is a DARK gold here, so text on it has to be light. */
   --on-accent: #fdfbf7;
+  /*
+   * DANGER, run through the same contrast filter as the accent above. `#FF6B35` on
+   * `#faf8f5` is about 3.0:1 — under AA for text — so every error message in light
+   * mode was failing contrast. `#c2410c` is the same hue stepped down until it clears
+   * 4.5:1, and it is readable as a warning rather than as decoration.
+   */
+  --danger: #c2410c;
+  --danger-soft: rgb(194 65 12 / 0.1);
   --shadow: 0 18px 40px -28px rgb(25 22 18 / 0.35);
+  --focus-ring: var(--accent);
 }
 
 @theme inline {
@@ -79,6 +105,8 @@
   --color-accent-dim: var(--accent-dim);
   --color-on-accent: var(--on-accent);
   --color-border: var(--border);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
 
   /*
    * THE HERO LAYOUT SWITCH.
@@ -309,4 +337,37 @@ body {
 
 .scrollbar-thin {
   scrollbar-width: thin;
+}
+
+/*
+ * ── VISIBLE FOCUS, FOR EVERY INTERACTIVE ELEMENT ────────────────────────────────
+ *
+ * `outline-offset` and a 2px ring, on `:focus-visible` only, so a mouse click stays
+ * quiet and a Tab press is unmistakable. This is the single most valuable line in the
+ * console: before it, every input carried `focus:outline-none` paired with a thin
+ * border-colour change, which is a colour-only focus cue and fails WCAG 2.4.7.
+ *
+ * IT IS UNLAYERED ON PURPOSE. `@import "tailwindcss"` puts every utility in a cascade
+ * layer, and an unlayered rule beats a layered one REGARDLESS of specificity — which is
+ * what lets this one rule override the `focus:outline-none` those inputs carry, without
+ * an `!important` and without touching a single component.
+ *
+ * `outline` rather than a box-shadow because outline follows `border-radius` in every
+ * current browser and can never be clipped by an ancestor's `overflow`.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/*
+ * A PRESSED STATE, so a control answers the finger that pressed it. Half a pixel is
+ * enough to feel and too little to notice as movement. Disabled buttons do not move,
+ * and neither does anything when the visitor has asked for less motion.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  button:not(:disabled):active,
+  [role="button"]:active {
+    transform: translateY(0.5px);
+  }
 }

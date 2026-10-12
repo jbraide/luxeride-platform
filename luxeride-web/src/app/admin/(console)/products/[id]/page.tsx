@@ -2,6 +2,25 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { prisma } from "@/lib/db";
+import EmptyState from "@/components/admin/EmptyState";
+import FieldErrors from "@/components/admin/FieldErrors";
+import PageHeader from "@/components/admin/PageHeader";
+import StatusChip from "@/components/admin/StatusChip";
+import {
+  BTN_DANGER,
+  BTN_GHOST,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  CARD,
+  EYEBROW,
+  FIELD_ERROR,
+  INPUT,
+  INSET,
+  LABEL,
+  SECTION_HINT,
+  SECTION_TITLE,
+  inputState,
+} from "@/components/admin/ui";
 import {
   addBundleItem,
   archiveProduct,
@@ -161,16 +180,15 @@ export default async function ProductDetailPage({
   const failures = readFailures(query);
   const echo = readEcho(query);
 
-  const label = "block text-xs uppercase tracking-widest text-accent-dim";
-  const input =
-    "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none";
-  const fieldFailed = (field: string) => (failures.has(field) ? "border-[#FF6B35]" : "");
-
+  /*
+   * The per-field refusal stays a local helper — it needs THIS screen's `failures` map
+   * and `messageFor` — but it renders the shared `FIELD_ERROR` class now.
+   */
   const refusal = (field: string) => {
     const code = failures.get(field);
     if (!code) return null;
     return (
-      <p className="mt-1 text-xs leading-relaxed text-[#FF6B35]">
+      <p className={FIELD_ERROR}>
         <span className="font-mono">{field}</span> — {messageFor(code)}
       </p>
     );
@@ -180,40 +198,34 @@ export default async function ProductDetailPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">{product.name}</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-          {product.category.name} · {product.isCarSpecific ? "in Fit Finder" : "shop only"}
-        </span>
-      </div>
-      <p className="mt-1 font-mono text-xs text-accent-dim">/products/{product.slug}</p>
+      <PageHeader
+        title={product.name}
+        meta={
+          <>
+            {product.category.name} · {product.isCarSpecific ? "in Fit Finder" : "shop only"} ·{" "}
+            <span className="font-mono">/products/{product.slug}</span>
+          </>
+        }
+        actions={
+          <Link href="/admin/products" className={BTN_SECONDARY}>
+            Back to products
+          </Link>
+        }
+      />
+
       {product.archivedAt && (
-        <p className="mt-2 inline-block rounded-lg border border-[#FF6B35]/50 px-3 py-1 text-xs text-[#FF6B35]">
-          Archived — off the shop. Its order history and prices are kept, and it can be put back
-          at any time.
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-relaxed text-fg-muted">
+          <StatusChip tone="warn">Archived</StatusChip>
+          Off the shop. Its order history and prices are kept, and it can be put back at any time.
         </p>
       )}
 
-
-      {failures.size > 0 && (
-        <div className="mt-4 rounded-xl border border-[#FF6B35] px-4 py-3 text-sm">
-          <p className="text-[#FF6B35]">
-            Not saved. {failures.size} field{failures.size === 1 ? "" : "s"} refused:
-          </p>
-          <ul className="mt-2 space-y-1 text-xs text-fg-muted">
-            {[...failures].map(([field, code]) => (
-              <li key={field}>
-                <span className="font-mono text-fg/80">{field}</span> — {messageFor(code)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <FieldErrors failures={failures} message={messageFor} />
 
       {/* ── The product ──────────────────────────────────────────────────── */}
       <section className="mt-8">
-        <h3 className="font-display text-base font-semibold">The product</h3>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+        <h3 className={SECTION_TITLE}>The product</h3>
+        <p className={SECTION_HINT}>
           These two prices are what the shop quotes. A floor pan&apos;s per-year price is set
           separately, on the car&apos;s own page, and is not changed by anything on this form.
         </p>
@@ -226,11 +238,14 @@ export default async function ProductDetailPage({
           site being broken.
         */}
         {product.bundle?.derivePricing && (
-          <p className="mt-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-xs leading-relaxed text-accent">
-            This price is worked out from what is inside the bundle, so these two boxes are
-            read-only in effect — change the parts or the discount in the Bundle section
-            below and this figure follows.
-          </p>
+          <div className="mt-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-xs leading-relaxed text-accent">
+            <StatusChip tone="accent">price worked out from the parts</StatusChip>
+            <p className="mt-1.5">
+              This price is worked out from what is inside the bundle, so these two boxes are
+              read-only in effect — change the parts or the discount in the Bundle section
+              below and this figure follows.
+            </p>
+          </div>
         )}
 
         {/* Requirement 7: the catalogue price and the layout's `priceFrom` are two
@@ -238,7 +253,7 @@ export default async function ProductDetailPage({
             Locked decision 3 puts the site's price on the layout, so the layout figure
             is the one that wins wherever a car is involved. */}
         {product.layoutVariants.length > 0 && (
-          <div className="mt-2 rounded-lg border border-border bg-surface/60 px-3 py-2 text-xs leading-relaxed text-fg-muted">
+          <div className={`${INSET} mt-2 text-xs leading-relaxed text-fg-muted`}>
             <p className="text-fg/80">
               For a confirmed car the storefront does not show the two boxes below — it shows
               the floor pan&apos;s own price. That figure is the one the customer is quoted
@@ -263,7 +278,7 @@ export default async function ProductDetailPage({
         <form method="post" action={updateProduct} className="mt-4 grid gap-4 sm:grid-cols-3">
           <input type="hidden" name="id" value={product.id} />
           <div>
-            <label htmlFor="name" className={label}>
+            <label htmlFor="name" className={LABEL}>
               Name — required
             </label>
             <input
@@ -271,12 +286,12 @@ export default async function ProductDetailPage({
               name="name"
               required
               defaultValue={echo("name") || product.name}
-              className={`${input} ${fieldFailed("name")}`}
+              className={`${INPUT} ${inputState(failures.has("name"))}`}
             />
             {refusal("name")}
           </div>
           <div>
-            <label htmlFor="slug" className={label}>
+            <label htmlFor="slug" className={LABEL}>
               Slug — required
             </label>
             <input
@@ -284,12 +299,12 @@ export default async function ProductDetailPage({
               name="slug"
               required
               defaultValue={echo("slug") || product.slug}
-              className={`${input} ${fieldFailed("slug")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("slug"))} font-mono`}
             />
             {refusal("slug")}
           </div>
           <div>
-            <label htmlFor="categorySlug" className={label}>
+            <label htmlFor="categorySlug" className={LABEL}>
               Category — required
             </label>
             <select
@@ -297,7 +312,7 @@ export default async function ProductDetailPage({
               name="categorySlug"
               required
               defaultValue={echo("categorySlug") || product.category.slug}
-              className={`${input} ${fieldFailed("categorySlug")}`}
+              className={`${INPUT} ${inputState(failures.has("categorySlug"))}`}
             >
               {categories.map((category) => (
                 <option key={category.id} value={category.slug}>
@@ -309,7 +324,7 @@ export default async function ProductDetailPage({
           </div>
 
           <div>
-            <label htmlFor="regular" className={label}>
+            <label htmlFor="regular" className={LABEL}>
               Regular price — required
             </label>
             <input
@@ -319,12 +334,12 @@ export default async function ProductDetailPage({
               inputMode="numeric"
               required
               defaultValue={echo("regular") || String(product.regular)}
-              className={`${input} ${fieldFailed("regular")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("regular"))} font-mono`}
             />
             {refusal("regular")}
           </div>
           <div>
-            <label htmlFor="premium" className={label}>
+            <label htmlFor="premium" className={LABEL}>
               Premium price — required
             </label>
             <input
@@ -334,12 +349,12 @@ export default async function ProductDetailPage({
               inputMode="numeric"
               required
               defaultValue={echo("premium") || String(product.premium)}
-              className={`${input} ${fieldFailed("premium")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("premium"))} font-mono`}
             />
             {refusal("premium")}
           </div>
           <div>
-            <label htmlFor="threeRowSurcharge" className={label}>
+            <label htmlFor="threeRowSurcharge" className={LABEL}>
               3-row surcharge
             </label>
             <input
@@ -348,31 +363,31 @@ export default async function ProductDetailPage({
               type="number"
               inputMode="numeric"
               defaultValue={echo("threeRowSurcharge") || (product.threeRowSurcharge ?? "")}
-              className={`${input} ${fieldFailed("threeRowSurcharge")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("threeRowSurcharge"))} font-mono`}
             />
             {refusal("threeRowSurcharge")}
           </div>
 
           <div className="sm:col-span-3">
-            <label htmlFor="note" className={label}>
+            <label htmlFor="note" className={LABEL}>
               Short line under the name
             </label>
             <input
               id="note"
               name="note"
               defaultValue={echo("note") || (product.note ?? "")}
-              className={input}
+              className={INPUT}
             />
           </div>
           <div className="sm:col-span-3">
-            <label htmlFor="availability" className={label}>
+            <label htmlFor="availability" className={LABEL}>
               Availability sentence
             </label>
             <input
               id="availability"
               name="availability"
               defaultValue={echo("availability") || (product.availability ?? "")}
-              className={`${input} ${fieldFailed("availability")}`}
+              className={`${INPUT} ${inputState(failures.has("availability"))}`}
             />
             {refusal("availability")}
           </div>
@@ -410,16 +425,10 @@ export default async function ProductDetailPage({
           </div>
 
           <div className="sm:col-span-3 flex flex-wrap items-center gap-4">
-            <button
-              type="submit"
-              className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-            >
+            <button type="submit" className={BTN_PRIMARY}>
               Save product
             </button>
-            <Link
-              href="/admin/products"
-              className="text-sm text-fg-muted underline-offset-4 hover:text-accent hover:underline"
-            >
+            <Link href="/admin/products" className={BTN_GHOST}>
               Back to products
             </Link>
           </div>
@@ -428,54 +437,54 @@ export default async function ProductDetailPage({
 
       {/* ── Variations ───────────────────────────────────────────────────── */}
       <section className="mt-10">
-        <h3 className="font-display text-base font-semibold">
+        <h3 className={SECTION_TITLE}>
           Variations{" "}
           <span className="font-mono text-xs text-accent-dim">{product.variations.length}</span>
         </h3>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+        <p className={SECTION_HINT}>
           The options on this product, each with its own price. A variation that has been sold
           cannot be deleted — mark it out of stock instead, which stops the sale and keeps the order
           history readable.
         </p>
 
         {product.variations.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-[#FF6B35] px-5 py-5 text-sm text-[#FF6B35]">
+          <EmptyState className="mt-4">
             This product has no variations, so there is nothing for the shop to price or sell. Add
             one below.
-          </p>
+          </EmptyState>
         ) : (
           <ul className="mt-4 space-y-3">
             {product.variations.map((variation) => (
-              <li key={variation.id} className="rounded-xl border border-border bg-surface/60 px-4 py-4">
+              <li key={variation.id} className={`${CARD} px-4 py-4`}>
                 <form method="post" action={updateVariation} className="grid gap-3 sm:grid-cols-6">
                   <input type="hidden" name="id" value={variation.id} />
                   <input type="hidden" name="productId" value={product.id} />
                   <div className="sm:col-span-2">
-                    <label htmlFor={`vname__${variation.id}`} className={label}>
+                    <label htmlFor={`vname__${variation.id}`} className={LABEL}>
                       Name
                     </label>
                     <input
                       id={`vname__${variation.id}`}
                       name={`name__${variation.id}`}
                       defaultValue={echo(`name__${variation.id}`) || variation.name}
-                      className={`${input} ${fieldFailed(`name__${variation.id}`)}`}
+                      className={`${INPUT} ${inputState(failures.has(`name__${variation.id}`))}`}
                     />
                     {refusal(`name__${variation.id}`)}
                   </div>
                   <div>
-                    <label htmlFor={`vslug__${variation.id}`} className={label}>
+                    <label htmlFor={`vslug__${variation.id}`} className={LABEL}>
                       Slug
                     </label>
                     <input
                       id={`vslug__${variation.id}`}
                       name={`slug__${variation.id}`}
                       defaultValue={echo(`slug__${variation.id}`) || variation.slug}
-                      className={`${input} font-mono`}
+                      className={`${INPUT} font-mono`}
                     />
                     {refusal(`slug__${variation.id}`)}
                   </div>
                   <div>
-                    <label htmlFor={`vreg__${variation.id}`} className={label}>
+                    <label htmlFor={`vreg__${variation.id}`} className={LABEL}>
                       Regular
                     </label>
                     <input
@@ -485,12 +494,12 @@ export default async function ProductDetailPage({
                       inputMode="numeric"
                       required
                       defaultValue={echo(`regular__${variation.id}`) || String(variation.regular)}
-                      className={`${input} ${fieldFailed(`regular__${variation.id}`)} font-mono`}
+                      className={`${INPUT} ${inputState(failures.has(`regular__${variation.id}`))} font-mono`}
                     />
                     {refusal(`regular__${variation.id}`)}
                   </div>
                   <div>
-                    <label htmlFor={`vprem__${variation.id}`} className={label}>
+                    <label htmlFor={`vprem__${variation.id}`} className={LABEL}>
                       Premium
                     </label>
                     <input
@@ -500,13 +509,13 @@ export default async function ProductDetailPage({
                       inputMode="numeric"
                       required
                       defaultValue={echo(`premium__${variation.id}`) || String(variation.premium)}
-                      className={`${input} ${fieldFailed(`premium__${variation.id}`)} font-mono`}
+                      className={`${INPUT} ${inputState(failures.has(`premium__${variation.id}`))} font-mono`}
                     />
                     {refusal(`premium__${variation.id}`)}
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label htmlFor={`vstock__${variation.id}`} className={label}>
+                    <label htmlFor={`vstock__${variation.id}`} className={LABEL}>
                       Stock
                     </label>
                     <select
@@ -515,7 +524,7 @@ export default async function ProductDetailPage({
                       defaultValue={
                         echo(`stockState__${variation.id}`) || variation.stockState
                       }
-                      className={`${input} ${fieldFailed(`stockState__${variation.id}`)}`}
+                      className={`${INPUT} ${inputState(failures.has(`stockState__${variation.id}`))}`}
                     >
                       {STOCK_STATES.map((state) => (
                         <option key={state} value={state}>
@@ -526,38 +535,46 @@ export default async function ProductDetailPage({
                     {refusal(`stockState__${variation.id}`)}
                   </div>
                   <div className="sm:col-span-2">
-                    <label htmlFor={`vsku__${variation.id}`} className={label}>
+                    <label htmlFor={`vsku__${variation.id}`} className={LABEL}>
                       SKU (optional, internal)
                     </label>
                     <input
                       id={`vsku__${variation.id}`}
                       name={`sku__${variation.id}`}
                       defaultValue={echo(`sku__${variation.id}`) || (variation.sku ?? "")}
-                      className={`${input} font-mono`}
+                      className={`${INPUT} font-mono`}
                     />
                     {refusal(`sku__${variation.id}`)}
                   </div>
                   <div className="flex items-end">
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
-                    >
+                    <button type="submit" className={BTN_SECONDARY}>
                       Save
                     </button>
                   </div>
 
-                  <div className="sm:col-span-6 flex flex-wrap items-baseline justify-between gap-3 border-t border-border pt-3">
-                    <span className="text-[11px] text-fg-muted">
-                      {variation.archivedAt && (
-                        <span className="text-[#FF6B35]">Archived · </span>
-                      )}
-                      {naira(variation.regular)} regular · {naira(variation.premium)} premium
-                      {variation._count.orderItems > 0 &&
-                        ` · sold ${variation._count.orderItems}×`}
-                      {variation._count.layoutVariants > 0 &&
-                        ` · offered on ${variation._count.layoutVariants} floor pan${
-                          variation._count.layoutVariants === 1 ? "" : "s"
-                        }`}
+                  <div className="sm:col-span-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+                    <span className="flex flex-wrap items-center gap-2 text-[11px] text-fg-muted">
+                      <StatusChip
+                        tone={
+                          variation.stockState === "in_stock"
+                            ? "accent"
+                            : variation.stockState === "out_of_stock"
+                              ? "warn"
+                              : "neutral"
+                        }
+                      >
+                        {variation.stockState.replace(/_/g, " ")}
+                      </StatusChip>
+                      {variation.archivedAt && <StatusChip tone="warn">Archived</StatusChip>}
+                      <span className="tabular">
+                        {naira(variation.regular)} regular · {naira(variation.premium)} premium
+                        {variation._count.orderItems > 0 &&
+                          ` · sold ${variation._count.orderItems}×`}
+                        {variation._count.layoutVariants > 0 &&
+                          ` · offered on ${variation._count.layoutVariants} floor pan${
+                            variation._count.layoutVariants === 1 ? "" : "s"
+                          }`}
+                      </span>
                     </span>
                     <span className="flex flex-wrap items-center gap-3">
                       <button
@@ -569,7 +586,7 @@ export default async function ProductDetailPage({
                             ? "This variation has been sold. Archive it or mark it out of stock instead."
                             : "Delete this variation"
                         }
-                        className="text-xs text-fg-muted underline-offset-4 hover:text-[#FF6B35] hover:text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="text-xs text-fg-muted underline-offset-4 hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         Delete
                       </button>
@@ -583,7 +600,7 @@ export default async function ProductDetailPage({
                             ? "Put this option back on the product page"
                             : "Take this option off the product page without deleting anything"
                         }
-                        className="text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
+                        className={BTN_GHOST}
                       >
                         {variation.archivedAt ? "Put back" : "Archive"}
                       </button>
@@ -603,7 +620,7 @@ export default async function ProductDetailPage({
         >
           <input type="hidden" name="productId" value={product.id} />
           <div className="sm:col-span-2">
-            <label htmlFor="new-v-name" className={label}>
+            <label htmlFor="new-v-name" className={LABEL}>
               Name — required
             </label>
             <input
@@ -612,12 +629,12 @@ export default async function ProductDetailPage({
               required
               defaultValue={echo("name")}
               placeholder="Fits a 5-speed stick"
-              className={`${input} ${fieldFailed("name")}`}
+              className={`${INPUT} ${inputState(failures.has("name"))}`}
             />
             {refusal("name")}
           </div>
           <div>
-            <label htmlFor="new-v-slug" className={label}>
+            <label htmlFor="new-v-slug" className={LABEL}>
               Slug — required
             </label>
             <input
@@ -626,7 +643,7 @@ export default async function ProductDetailPage({
               required
               defaultValue={echo("slug")}
               placeholder="five-speed"
-              className={`${input} ${fieldFailed("slug")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("slug"))} font-mono`}
             />
             {refusal("slug")}
             <p className="mt-1 text-[11px] text-fg-muted">
@@ -634,7 +651,7 @@ export default async function ProductDetailPage({
             </p>
           </div>
           <div>
-            <label htmlFor="new-v-regular" className={label}>
+            <label htmlFor="new-v-regular" className={LABEL}>
               Regular — required
             </label>
             <input
@@ -644,12 +661,12 @@ export default async function ProductDetailPage({
               inputMode="numeric"
               required
               defaultValue={echo("regular") || String(product.regular)}
-              className={`${input} ${fieldFailed("regular")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("regular"))} font-mono`}
             />
             {refusal("regular")}
           </div>
           <div>
-            <label htmlFor="new-v-premium" className={label}>
+            <label htmlFor="new-v-premium" className={LABEL}>
               Premium — required
             </label>
             <input
@@ -659,19 +676,19 @@ export default async function ProductDetailPage({
               inputMode="numeric"
               required
               defaultValue={echo("premium") || String(product.premium)}
-              className={`${input} ${fieldFailed("premium")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("premium"))} font-mono`}
             />
             {refusal("premium")}
           </div>
           <div>
-            <label htmlFor="new-v-stock" className={label}>
+            <label htmlFor="new-v-stock" className={LABEL}>
               Stock
             </label>
             <select
               id="new-v-stock"
               name="stockState"
               defaultValue={echo("stockState") || "made_to_order"}
-              className={`${input} ${fieldFailed("stockState")}`}
+              className={`${INPUT} ${inputState(failures.has("stockState"))}`}
             >
               {STOCK_STATES.map((state) => (
                 <option key={state} value={state}>
@@ -682,10 +699,7 @@ export default async function ProductDetailPage({
             {refusal("stockState")}
           </div>
           <div className="sm:col-span-6">
-            <button
-              type="submit"
-              className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-            >
+            <button type="submit" className={BTN_PRIMARY}>
               Add variation
             </button>
           </div>
@@ -697,7 +711,7 @@ export default async function ProductDetailPage({
 
       {/* ── Danger ───────────────────────────────────────────────────────── */}
       <section className="mt-12 border-t border-border pt-6">
-        <h3 className="font-display text-base font-semibold text-[#FF6B35]">
+        <h3 className={`${SECTION_TITLE} text-danger`}>
           Archive or delete this product
         </h3>
         <p className="mt-1 max-w-prose text-xs leading-relaxed text-fg-muted">
@@ -726,7 +740,7 @@ export default async function ProductDetailPage({
                   ? "This product is referenced, so it cannot be deleted. Archive it instead."
                   : "Delete this product"
               }
-              className="rounded-lg border border-[#FF6B35] px-4 py-2 text-sm text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
+              className={BTN_DANGER}
             >
               Delete product
             </button>
@@ -740,7 +754,7 @@ export default async function ProductDetailPage({
                   ? "Put this product back on the shop"
                   : "Take this product off the shop without deleting anything"
               }
-              className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
+              className={BTN_SECONDARY}
             >
               {product.archivedAt ? "Put back on the shop" : "Archive instead"}
             </button>
@@ -816,15 +830,15 @@ function BundleEditor({
   failures: Map<string, string>;
   echo: (field: string) => string;
 }) {
-  const input =
-    "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none";
-  const label = "block text-xs uppercase tracking-widest text-accent-dim";
-  const fieldFailed = (field: string) => (failures.has(field) ? "border-[#FF6B35]" : "");
+  /*
+   * The per-field refusal stays a local helper — it needs THIS screen's `failures` map
+   * and `messageFor` — but it renders the shared `FIELD_ERROR` class now.
+   */
   const refusal = (field: string) => {
     const code = failures.get(field);
     if (!code) return null;
     return (
-      <p className="mt-1 text-xs leading-relaxed text-[#FF6B35]">
+      <p className={FIELD_ERROR}>
         <span className="font-mono">{field}</span> — {messageFor(code)}
       </p>
     );
@@ -849,8 +863,24 @@ function BundleEditor({
 
   return (
     <section className="mt-10">
-      <h3 className="font-display text-base font-semibold">Bundle</h3>
-      <p className="mt-1 max-w-prose text-xs leading-relaxed text-fg-muted">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className={SECTION_TITLE}>Bundle</h3>
+        {bundle ? (
+          <>
+            <StatusChip tone={bundle.derivePricing ? "accent" : "neutral"}>
+              {bundle.derivePricing ? "price derived from parts" : "hand-priced"}
+            </StatusChip>
+            <StatusChip tone="neutral">
+              {bundle.discountKind === "percent"
+                ? `${bundle.discountValue}% off`
+                : `₦${bundle.discountValue.toLocaleString("en-NG")} off`}
+            </StatusChip>
+          </>
+        ) : (
+          <StatusChip tone="neutral">not a bundle</StatusChip>
+        )}
+      </div>
+      <p className={SECTION_HINT}>
         A bundle is this product <em>made of other products</em>, sold as one thing and
         priced from them. Pick what is in it, set the discount, and the price below is
         worked out for you at both tiers. Unticking this makes it a single product again
@@ -878,7 +908,7 @@ function BundleEditor({
         {/* ── What is in it ─────────────────────────────────────────────── */}
         {parts.length > 0 && (
           <div className="mt-5">
-            <p className={label}>What&apos;s in it</p>
+            <p className={LABEL}>What&apos;s in it</p>
             <ul className="mt-2 space-y-2">
               {parts.map((item) => (
                 <li
@@ -904,13 +934,13 @@ function BundleEditor({
                       min={1}
                       step={1}
                       defaultValue={echo(`qty__${item.id}`) || String(item.qty)}
-                      className={`${input} mt-0.5 font-mono`}
+                      className={`${INPUT} mt-0.5 font-mono`}
                     />
                   </div>
                   <button
                     type="submit"
                     formAction={removeBundleItem}
-                    className="rounded-lg border border-border px-3 py-2 text-sm text-fg hover:border-[#FF6B35] hover:text-[#FF6B35]"
+                    className={BTN_DANGER}
                     title={`Take ${item.product.name} out of this bundle`}
                   >
                     Take out
@@ -923,7 +953,7 @@ function BundleEditor({
 
         {/* ── Add a part ────────────────────────────────────────────────── */}
         <div className="mt-5 rounded-xl border border-dashed border-border px-4 py-4">
-          <p className={label}>Add a part</p>
+          <p className={LABEL}>Add a part</p>
           <div className="mt-2 grid gap-3 sm:grid-cols-3">
             <div>
               <label htmlFor="partProductId" className="text-[11px] text-fg-muted">
@@ -934,7 +964,7 @@ function BundleEditor({
                 name="partProductId"
                 required
                 defaultValue=""
-                className={`${input} mt-0.5 ${fieldFailed("partProductId")}`}
+                className={`${INPUT} mt-0.5 ${inputState(failures.has("partProductId"))}`}
               >
                 <option value="" disabled>
                   Choose a product…
@@ -963,7 +993,7 @@ function BundleEditor({
                 id="partVariationId"
                 name="partVariationId"
                 defaultValue={echo("partVariationId")}
-                className={`${input} mt-0.5 ${fieldFailed("partVariationId")}`}
+                className={`${INPUT} mt-0.5 ${inputState(failures.has("partVariationId"))}`}
               >
                 <option value="">Whichever option it has</option>
                 {candidates.flatMap((candidate) =>
@@ -988,13 +1018,13 @@ function BundleEditor({
                   min={1}
                   step={1}
                   defaultValue={echo("qty") || "1"}
-                  className={`${input} mt-0.5 font-mono ${fieldFailed("qty")}`}
+                  className={`${INPUT} mt-0.5 font-mono ${inputState(failures.has("qty"))}`}
                 />
               </div>
               <button
                 type="submit"
                 formAction={addBundleItem}
-                className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
+                className={BTN_SECONDARY}
               >
                 Add
               </button>
@@ -1011,7 +1041,7 @@ function BundleEditor({
         {/* ── The discount, and the price it produces ───────────────────── */}
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="discountKind" className={label}>
+            <label htmlFor="discountKind" className={LABEL}>
               Discount off the total
             </label>
             <select
@@ -1023,7 +1053,7 @@ function BundleEditor({
                   ? bundle.discountKind
                   : "percent")
               }
-              className={input}
+              className={INPUT}
             >
               {BUNDLE_DISCOUNT_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
@@ -1033,7 +1063,7 @@ function BundleEditor({
             </select>
           </div>
           <div>
-            <label htmlFor="discountValue" className={label}>
+            <label htmlFor="discountValue" className={LABEL}>
               How much
             </label>
             <input
@@ -1044,7 +1074,7 @@ function BundleEditor({
               step="any"
               inputMode="numeric"
               defaultValue={echo("discountValue") || (bundle ? String(bundle.discountValue) : "0")}
-              className={`${input} ${fieldFailed("discountValue")} font-mono`}
+              className={`${INPUT} ${inputState(failures.has("discountValue"))} font-mono`}
             />
             {refusal("discountValue")}
           </div>
@@ -1075,6 +1105,7 @@ function BundleEditor({
           agree even in the half-built state, rather than the screen showing ₦0 and the
           save writing something else.
         */}
+        <p className={`${EYEBROW} mt-5`}>The price this writes</p>
         <BundlePricePreview
           formId="bundle-form"
           parts={previewParts}
@@ -1082,10 +1113,7 @@ function BundleEditor({
         />
 
         <div className="mt-4">
-          <button
-            type="submit"
-            className="rounded-lg border border-accent bg-accent px-5 py-2 text-sm font-semibold text-on-accent"
-          >
+          <button type="submit" className={BTN_PRIMARY}>
             Save bundle
           </button>
         </div>
@@ -1112,7 +1140,7 @@ function BundleEditor({
                   ? "This product has been sold as a bundle. Its composition is kept so the order stays readable."
                   : "Delete the bundle definition; the product stays on the shop"
               }
-              className="mt-3 rounded-lg border border-[#FF6B35] px-4 py-2 text-sm text-[#FF6B35] disabled:cursor-not-allowed disabled:opacity-40"
+              className={BTN_DANGER}
             >
               Remove this bundle
             </button>

@@ -1,6 +1,10 @@
 import Link from "next/link";
 
 import { prisma } from "@/lib/db";
+import PageHeader from "@/components/admin/PageHeader";
+import EmptyState from "@/components/admin/EmptyState";
+import StatusChip from "@/components/admin/StatusChip";
+import { TABLE, TABLE_HEAD, TABLE_HEAD_CELL, TABLE_ROW, chip } from "@/components/admin/ui";
 
 /**
  * `/admin/layouts` — every floor pan on file (`fitment-engine` §8.5).
@@ -67,12 +71,7 @@ export default async function LayoutsPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Layouts</h2>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-          {layouts.length} shown of {all} · {confirmed} confirmed
-        </span>
-      </div>
+      <PageHeader title="Layouts" meta={`${layouts.length} shown of ${all} · ${confirmed} confirmed`} />
 
       <nav aria-label="Filter layouts" className="mt-4 flex flex-wrap items-center gap-2">
         {["", "inferred", "confirmed", "draft", "retired"].map((value) => {
@@ -82,11 +81,7 @@ export default async function LayoutsPage({
               key={value || "all"}
               href={statusHref(value)}
               aria-current={active ? "page" : undefined}
-              className={`flex items-baseline gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors ${
-                active
-                  ? "border-accent bg-accent/10 text-accent"
-                  : "border-border text-fg-muted hover:border-accent/50 hover:text-accent"
-              }`}
+              className={chip(active)}
             >
               {value || "all"}
               <span className={active ? "text-accent" : "text-accent-dim"}>{countFor(value)}</span>
@@ -103,7 +98,7 @@ export default async function LayoutsPage({
           defaultValue={rawQuery}
           placeholder="Search code, name or make"
           aria-label="Search code, name or make"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent"
         />
         <button
           type="submit"
@@ -114,22 +109,25 @@ export default async function LayoutsPage({
       </form>
 
       {layouts.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-border bg-surface/60 px-5 py-6 text-sm text-fg-muted">
-          Nothing matches this filter.
-        </p>
+        <EmptyState className="mt-6">
+          Nothing matches this filter.{" "}
+          <Link href="/admin/layouts" className="text-accent underline-offset-4 hover:underline">
+            Clear filters
+          </Link>
+        </EmptyState>
       ) : (
-        <table className="mt-6 w-full text-left text-sm">
+        <table className={`mt-6 ${TABLE}`}>
           <thead>
-            <tr className="border-b border-border font-mono text-[11px] uppercase tracking-widest text-accent-dim">
-              <th className="py-2 pr-4 font-normal">Code</th>
-              <th className="py-2 pr-4 font-normal">Customer name</th>
-              <th className="py-2 pr-4 font-normal">Status</th>
-              <th className="py-2 font-normal">Mapped</th>
+            <tr className={TABLE_HEAD}>
+              <th className={TABLE_HEAD_CELL}>Code</th>
+              <th className={TABLE_HEAD_CELL}>Customer name</th>
+              <th className={TABLE_HEAD_CELL}>Status</th>
+              <th className={TABLE_HEAD_CELL}>Mapped</th>
             </tr>
           </thead>
           <tbody>
             {layouts.map((layout) => (
-              <tr key={layout.id} className="border-t border-border align-top">
+              <tr key={layout.id} className={TABLE_ROW}>
                 <td className="py-2 pr-4 font-mono text-xs">
                   <Link
                     href={`/admin/layouts/${encodeURIComponent(layout.id)}`}
@@ -142,8 +140,14 @@ export default async function LayoutsPage({
                   {layout.customerName}
                   <span className="block text-[11px] text-fg-muted">{layout.make.name}</span>
                 </td>
-                <td className="py-2 pr-4 font-mono text-[11px] uppercase text-fg-muted">
-                  {layout.status}
+                <td className="py-2 pr-4">
+                  <StatusChip
+                    tone={
+                      layout.status === "confirmed" ? "good" : layout.status === "inferred" ? "warn" : "neutral"
+                    }
+                  >
+                    {layout.status}
+                  </StatusChip>
                 </td>
                 <td className="py-2 font-mono text-[11px] text-accent-dim">
                   {layout._count.mappings} vehicle{layout._count.mappings === 1 ? "" : "s"} ·{" "}
