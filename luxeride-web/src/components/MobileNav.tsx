@@ -74,8 +74,25 @@ export default function MobileNav({ categories }: { categories: Category[] }) {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
+    /*
+     * RELEASE THE LOCK WHEN THE PANEL CAN NO LONGER BE SEEN.
+     *
+     * The panel is `sm:hidden`, so a viewport crossing into `sm` hides it — but the
+     * body was still locked, and the cleanup below only runs when `open` changes. The
+     * page was therefore left unscrollable with no menu to close: rotate a phone into
+     * landscape, or open the menu and widen the window, and the site looked frozen.
+     * Closing the menu on that crossing releases the lock through the normal cleanup,
+     * and is also just correct — there is no menu at that width.
+     */
+    const wide = window.matchMedia("(min-width: 640px)");
+    function onWide(event: MediaQueryListEvent) {
+      if (event.matches) setOpenedPath(null);
+    }
+    wide.addEventListener("change", onWide);
+
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      wide.removeEventListener("change", onWide);
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);
@@ -100,10 +117,16 @@ export default function MobileNav({ categories }: { categories: Category[] }) {
         <span aria-hidden>{open ? "✕" : "☰"}</span>
       </button>
 
+      {/*
+        `z-40`, NOT `z-30`. The sticky buy bar (StickyBuyBar) is `fixed … z-30`, and the
+        open panel was `z-30` too — same layer, and the bar sits LATER in the document,
+        so on a product page it painted over the bottom of the open menu and hid the
+        Cart and Help links. One step above the bar, one below the lightbox (`z-50`).
+      */}
       <div
         id="mobile-nav-panel"
         hidden={!open}
-        className="fixed inset-0 z-30 sm:hidden"
+        className="fixed inset-0 z-40 sm:hidden"
         role="dialog"
         aria-modal="true"
         aria-label="Site menu"
