@@ -94,6 +94,16 @@ function browseHref(filter: Filter, query: string, makeId: string | null): strin
 }
 
 /**
+ * The anchor a make's panel carries, so opening or closing it returns the operator to
+ * THAT make instead of the top of a long list. A browser scrolls to a fragment on
+ * navigation even inside the console's scrolling content pane, which is why this works
+ * with no JavaScript and no scroll restoration.
+ */
+function makeAnchor(makeId: string): string {
+  return `#make-${makeId}`;
+}
+
+/**
  * `searchParams` is a Promise in Next 16 — verified in
  * `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/page.md`
  * and in `layouts-and-pages.md`. Reading it also opts the route into dynamic
@@ -160,7 +170,9 @@ export default async function VehiclesPage({
    * dump the operator back on the unfiltered list — and so a withdraw inside an open make
    * returns to that same open make rather than collapsing it under them.
    */
-  const back = browseHref(filter, rawQuery, openMake === "" ? null : openMake);
+  const back =
+    browseHref(filter, rawQuery, openMake === "" ? null : openMake) +
+    (openMake === "" ? "" : makeAnchor(openMake));
 
   /*
    * GROUPED BY MAKE, THEN BY CAR, in the order the query already returned them.
@@ -327,14 +339,16 @@ export default async function VehiclesPage({
              * render, and an instant toggle is worth keeping where it is cheap.
              */
             const isOpen = group.make.id === openMake || autoOpenSearch;
+            const anchor = makeAnchor(group.make.id);
             return (
             <div
               key={group.make.id}
-              className="rounded-xl border border-border bg-surface/60"
+              id={`make-${group.make.id}`}
+              className="scroll-mt-4 rounded-xl border border-border bg-surface/60"
             >
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3">
                 <Link
-                  href={browseHref(filter, rawQuery, group.make.id)}
+                  href={browseHref(filter, rawQuery, group.make.id) + anchor}
                   aria-current={isOpen ? "true" : undefined}
                   className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1"
                 >
@@ -346,7 +360,7 @@ export default async function VehiclesPage({
                   {group.excluded > 0 && <StatusChip tone="neutral">{group.excluded} excluded</StatusChip>}
                 </Link>
                 <Link
-                  href={isOpen ? browseHref(filter, rawQuery, null) : browseHref(filter, rawQuery, group.make.id)}
+                  href={(isOpen ? browseHref(filter, rawQuery, null) : browseHref(filter, rawQuery, group.make.id)) + anchor}
                   className="shrink-0 text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
                 >
                   {isOpen ? "Close" : "Open"}
