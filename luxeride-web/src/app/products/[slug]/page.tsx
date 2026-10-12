@@ -158,7 +158,13 @@ export default async function ProductPage({
         title: "Choose your option",
         body:
           optionNames.length > 1
-            ? `Pick from the options on this page — ${optionNames.join(", ")} — and the choice travels into the Fit Finder with you.`
+            ? // NAMED when there are only a few, COUNTED when there are many. Seat Covers
+              // has eighteen, and `join(", ")` printed all of them — a wall of colourways
+              // in the middle of a paragraph, which reads as a rendering fault rather
+              // than as instructions.
+              optionNames.length <= 4
+              ? `Pick from the options on this page — ${optionNames.join(", ")} — and the choice travels into the Fit Finder with you.`
+              : `Pick the option you want from the ${optionNames.length} on this page, and the choice travels into the Fit Finder with you.`
             : "The option you pick on this page travels into the Fit Finder with you.",
       },
       {

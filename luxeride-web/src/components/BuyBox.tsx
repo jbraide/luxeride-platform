@@ -7,6 +7,7 @@ import ProductFaq from "@/components/ProductFaq";
 import { describeBundleContents } from "@/lib/bundle-price";
 import { fmtNaira } from "@/lib/pricing";
 import { MAT_TYPE_VARIATION } from "@/data/fitment-catalogue";
+import VariationSelect from "@/components/VariationSelect";
 
 /**
  * Whether these options are the two mat LAYERS, rather than options of some other
@@ -17,6 +18,18 @@ import { MAT_TYPE_VARIATION } from "@/data/fitment-catalogue";
  * than being hard-coded to one product.
  */
 const LAYER_OPTION_SLUGS: ReadonlySet<string> = new Set(Object.values(MAT_TYPE_VARIATION));
+
+/**
+ * HOW MANY OPTIONS THE CHIP ROW CAN HOLD before a dropdown is the better control.
+ *
+ * Six pills fit two comfortable rows on a phone and all of them visible at once, which
+ * is what a shape choice wants. Beyond that the row becomes a wall: Seat Covers' eighteen
+ * pushed the price, the delivery lines and the CTA below the first screen, so the choice
+ * was crowding out the thing it was selling. The cut is by COUNT rather than by product,
+ * because the next product to gain options should not need a code change to be treated
+ * well.
+ */
+const MAX_CHIP_OPTIONS = 6;
 
 /**
  * The PDP buy column (`storefront-catalog` §10.2).
@@ -104,6 +117,8 @@ export function BuyBox({
    */
   const contents = bundle && bundle.items.length > 0 ? describeBundleContents(bundle.items) : [];
   const saved = bundle ? Math.max(0, bundle.listRegular - product.regular) : 0;
+  // If every option costs the same, the dropdown should not repeat one figure.
+  const optionsPriceVaries = new Set(options.map((option) => option.regular)).size > 1;
 
   return (
     <div>
@@ -121,7 +136,7 @@ export function BuyBox({
         a different question from "what does it save", and burying the choice under a
         bundle figure is how a customer ends up saving money on the wrong layer.
       */}
-      {options.length > 1 && (
+      {options.length > 1 && options.length <= MAX_CHIP_OPTIONS && (
         <fieldset className="mt-5">
           <legend className="font-mono text-[11px] uppercase tracking-widest text-accent-dim">
             {options.length === 2 && options.some((o) => LAYER_OPTION_SLUGS.has(o.slug))
@@ -156,6 +171,20 @@ export function BuyBox({
               : "Prices vary by option, and by your car. Pick one and the Fit Finder will confirm the fit and the exact price."}
           </p>
         </fieldset>
+      )}
+
+      {/* The same choice, as a dropdown, once there are too many options for pills —
+          Seat Covers' eighteen colourways being the case that forced it. */}
+      {options.length > MAX_CHIP_OPTIONS && (
+        <VariationSelect
+          productSlug={product.slug}
+          selectedSlug={selectedSlug}
+          options={options.map((option) => ({
+            slug: option.slug,
+            name: option.name,
+            price: optionsPriceVaries ? fmtNaira(option.regular) : null,
+          }))}
+        />
       )}
 
       {/*
