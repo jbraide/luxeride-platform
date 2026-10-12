@@ -56,6 +56,13 @@
 
 generator client {
   provider = "prisma-client-js"
+  // `native` is whatever machine runs `prisma generate` (the dev laptop, the CI box);
+  // `rhel-openssl-3.0.x` is the Vercel function runtime, which is Amazon Linux 2023.
+  // Listing both means the same generated client runs under `next dev`, under
+  // `next build`, and on Vercel without a deploy-time `prisma generate` mismatch.
+  // Cloudflare Workers never uses this binary — it goes through `@prisma/adapter-pg`
+  // (see `src/lib/db.ts`) — so this is additive and changes nothing there.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

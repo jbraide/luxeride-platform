@@ -252,8 +252,19 @@ const workersClientForRequest = cache(createWorkersClient);
  */
 const globalForPrisma = globalThis as unknown as { __luxeridePrisma?: PrismaClient };
 
-/** One process, one small pool: enough to render a page's queries, far below the ceiling. */
-const NODE_CONNECTION_LIMIT = process.env.NEXT_PHASE === "phase-production-build" ? "1" : "5";
+/**
+ * One process, one small pool: enough to render a page's queries, far below the ceiling.
+ *
+ * It is **1** on a serverless Node host as well as during the build, and that is not
+ * caution — it is the number that host requires. Vercel runs many short-lived instances,
+ * each with its own pool, in front of a Supabase pooler whose whole job is to keep the
+ * origin's connection count low. A pool of five per instance, times the instances a burst
+ * spins up, is exactly how a pooler is defeated. One connection per instance, recycled by
+ * the pooler, is the intended shape. A long-lived local server keeps a real pool, because
+ * there is only one of it.
+ */
+const NODE_CONNECTION_LIMIT =
+  process.env.NEXT_PHASE === "phase-production-build" || process.env.VERCEL ? "1" : "5";
 
 function resolveClient(): PrismaClient {
   if (isCloudflareWorkers()) return workersClientForRequest();
