@@ -80,6 +80,20 @@ function filterHref(filter: Filter, query: string): string {
 }
 
 /**
+ * A URL for the make browser, preserving the active filter and search term. `makeId`
+ * null (or omitted) closes whatever make is open. This is the page's state as a URL,
+ * the same rule the filter chips follow — see the make map for why it is a URL now.
+ */
+function browseHref(filter: Filter, query: string, makeId: string | null): string {
+  const params = new URLSearchParams();
+  if (filter !== "all") params.set("f", filter);
+  if (query !== "") params.set("q", query);
+  if (makeId) params.set("make", makeId);
+  const search = params.toString();
+  return search === "" ? "/admin/vehicles" : `/admin/vehicles?${search}`;
+}
+
+/**
  * `searchParams` is a Promise in Next 16 — verified in
  * `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/page.md`
  * and in `layouts-and-pages.md`. Reading it also opts the route into dynamic
@@ -135,10 +149,18 @@ export default async function VehiclesPage({
   });
 
   /**
-   * The URL to come back to after an action, so a bulk edit on a filtered view does
-   * not dump the operator back on the unfiltered list.
+   * WHICH MAKE IS OPEN, so the list renders one make instead of all of them. See the map
+   * below for why this is URL state (`?make=`) and not a `<details>`: the collapsed markup
+   * of the entire catalogue was what tipped the Worker's 128 MB memory limit.
    */
-  const back = filterHref(filter, rawQuery);
+  const openMake = typeof params.make === "string" ? params.make : "";
+
+  /**
+   * The URL to come back to after an action, so a bulk edit on a filtered view does not
+   * dump the operator back on the unfiltered list — and so a withdraw inside an open make
+   * returns to that same open make rather than collapsing it under them.
+   */
+  const back = browseHref(filter, rawQuery, openMake === "" ? null : openMake);
 
   /*
    * GROUPED BY MAKE, THEN BY CAR, in the order the query already returned them.
@@ -187,6 +209,12 @@ export default async function VehiclesPage({
     excluded: group.excluded,
     cars: [...group.cars.values()],
   }));
+
+  /*
+   * A search is usually narrow, so its hits stay open without a click; a broad one (or a
+   * filter with no search term) falls back to the closed make list, which is the cheap case.
+   */
+  const autoOpenSearch = rawQuery !== "" && groups.length <= 5;
 
   return (
     <div>
@@ -277,36 +305,56 @@ export default async function VehiclesPage({
         </EmptyState>
       ) : (
         <div className="mt-6 space-y-3">
-          {groups.map((group) => (
+          {groups.map((group) => {
             /*
-             * A COLLAPSIBLE GROUP PER MAKE. The owner's note was "cars should be grouped
-             * not all listed per type" — and then "the cars are collapsed", which is the
-             * second level below: inside the make, a `<details>` per car.
+             * A HEADER PER MAKE, AND ONLY THE OPEN MAKE IS RENDERED.
              *
-             * A `<details>` again rather than a client toggle, for the same reason as
-             * everywhere else in this console: it works with scripting disabled, it holds
-             * no state, and it renders the same on the server.
+             * This was a `<details>` per make, and every make's contents were rendered
+             * whether it was open or not — a collapsed `<details>` still renders its
+             * children on the server. Measured: that made this page 4.6 MB of HTML, 2.8 MB
+             * of it the RSC flight payload, on EVERY request, because the whole catalogue
+             * was serialised to say almost nothing. Rendering it was enough to tip the
+             * Worker's 128 MB isolate over — Cloudflare Error 1102.
              *
-             * The OPEN state is chosen so the common case stays cheap:
-             *   - a search is open, because a filtered list is short and hiding it behind
-             *     a closed header would be an extra click for nothing;
-             *   - a make with unmapped cars in it is open, because that is the working
-             *     queue and it should not need a click to see;
-             *   - otherwise it is closed, so "All" is a list of makes, not four hundred rows.
+             * So the make level is URL-driven now (`?make=<id>`), the same rule the filter
+             * chips already follow: the default screen is a list of makes, and opening one
+             * renders that make's cars and nothing else. Opening a make is a navigation
+             * rather than an instant toggle, which is the price of a page measured in
+             * kilobytes instead of megabytes — and it still works with scripting disabled,
+             * because the URL was always the state.
+             *
+             * The car level below stays a `<details>`: one make's cars are small enough to
+             * render, and an instant toggle is worth keeping where it is cheap.
              */
-            <details
+            const isOpen = group.make.id === openMake || autoOpenSearch;
+            return (
+            <div
               key={group.make.id}
-              open={rawQuery !== "" || group.unmapped > 0}
               className="rounded-xl border border-border bg-surface/60"
             >
-              <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 marker:content-none">
-                <span className="font-display text-base font-semibold text-fg/90">{group.make.name}</span>
-                <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
-                  {group.cars.length} car{group.cars.length === 1 ? "" : "s"}
-                </span>
-                {group.unmapped > 0 && <StatusChip tone="warn">{group.unmapped} unmapped</StatusChip>}
-                {group.excluded > 0 && <StatusChip tone="neutral">{group.excluded} excluded</StatusChip>}
-              </summary>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3">
+                <Link
+                  href={browseHref(filter, rawQuery, group.make.id)}
+                  aria-current={isOpen ? "true" : undefined}
+                  className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1"
+                >
+                  <span className="font-display text-base font-semibold text-fg/90">{group.make.name}</span>
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
+                    {group.cars.length} car{group.cars.length === 1 ? "" : "s"}
+                  </span>
+                  {group.unmapped > 0 && <StatusChip tone="warn">{group.unmapped} unmapped</StatusChip>}
+                  {group.excluded > 0 && <StatusChip tone="neutral">{group.excluded} excluded</StatusChip>}
+                </Link>
+                <Link
+                  href={isOpen ? browseHref(filter, rawQuery, null) : browseHref(filter, rawQuery, group.make.id)}
+                  className="shrink-0 text-xs text-fg-muted underline-offset-4 hover:text-accent hover:underline"
+                >
+                  {isOpen ? "Close" : "Open"}
+                </Link>
+              </div>
+
+              {isOpen && (
+                <>
 
               {/*
                 THE WHOLE MAKE, ON ITS OWN BAND ABOVE THE CARS.
@@ -578,15 +626,18 @@ export default async function VehiclesPage({
                   );
                 })}
               </div>
-            </details>
-          ))}
+                </>
+              )}
+            </div>
+            );
+          })}
         </div>
       )}
 
       <p className="mt-6 text-xs text-fg-muted">
-        Every row, no paging: the catalogue is a table, not a scroll. If it ever grows past
-        what is comfortable in one screen this is where a{" "}
-        <code className="font-mono text-accent-dim">?page=</code> parameter belongs.
+        One make is rendered at a time (<code className="font-mono text-accent-dim">?make=</code>)
+        so the screen sends kilobytes rather than the whole catalogue — the collapsed markup was
+        what used to tip the Worker&apos;s memory limit. Every range is still here, still no paging.
       </p>
     </div>
   );
