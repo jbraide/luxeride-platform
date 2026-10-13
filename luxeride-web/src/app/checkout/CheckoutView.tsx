@@ -10,8 +10,8 @@ import {
   EMPTY_DRAFT,
   type CheckoutDraft,
 } from "@/store/order";
-import { LOCATIONS } from "@/data/locations";
 import { fmtNaira } from "@/lib/pricing";
+import type { DeliveryZone } from "@/lib/delivery";
 import { PREPAY_DISCOUNT } from "@/lib/order-pricing";
 import { PREPAY_AVAILABLE } from "@/lib/payment-options";
 import CouponBox, { type DiscountPreview } from "@/components/CouponBox";
@@ -120,7 +120,14 @@ function restoredDraft(): CheckoutDraft {
   return draft.updatedAt === "" ? EMPTY_DRAFT : draft;
 }
 
-export default function CheckoutView() {
+/**
+ * The delivery zones come from the SERVER (the `Location` table).
+ *
+ * They used to be the `LOCATIONS` constant, which `/api/orders` did not charge
+ * from — so the fee shown here and the fee owed came from two different places
+ * and could disagree. The page reads the table and hands it down.
+ */
+export default function CheckoutView({ zones }: { zones: DeliveryZone[] }) {
   const router = useRouter();
   const { items, subtotal, count, clear } = useCartStore();
   const setOrder = useOrderStore((s) => s.setOrder);
@@ -202,7 +209,7 @@ export default function CheckoutView() {
    */
   const offlineRef = useRef<string | null>(null);
 
-  const zone = LOCATIONS.find((l) => l.name === location);
+  const zone = zones.find((l) => l.name === location);
 
   // The client-side total. Provisional by design: requirement 3.4 makes the
   // SERVER's figure the one shown, so this exists only to let the number react
@@ -441,18 +448,23 @@ export default function CheckoutView() {
       return false;
     }
 
-    const result = validateOrderSubmission({
-      name,
-      phone,
-      address,
-      location,
-      paymentMethod: payment,
-      // Identity only. The cart line carries a `unitPrice` and it is deliberately
-      // not sent: §3.1 says the payload carries identity, and there is no field
-      // here for a price to land in.
-      lines: items.map(identityOf),
-      couponCode: coupon,
-    });
+    const result = validateOrderSubmission(
+      {
+        name,
+        phone,
+        address,
+        location,
+        paymentMethod: payment,
+        // Identity only. The cart line carries a `unitPrice` and it is deliberately
+        // not sent: §3.1 says the payload carries identity, and there is no field
+        // here for a price to land in.
+        lines: items.map(identityOf),
+        couponCode: coupon,
+      },
+      // The LIVE zones, so the pre-check that runs before the request cannot reject a
+      // zone the owner has just added (or accept one that was removed).
+      zones,
+    );
 
     if (!result.ok) {
       setErrors(result.errors);
@@ -928,13 +940,13 @@ export default function CheckoutView() {
             aria-describedby={fieldError("location") ? "co-location-error" : undefined}
             className="w-full rounded-xl border border-fg-muted/25 bg-surface px-4 py-3.5 text-sm focus:border-accent focus:outline-none"
           >
-            {/* No default. Defaulting to `LOCATIONS[0]` quoted every non-Lagos
+            {/* No default. Defaulting to the first zone quoted every non-Lagos
                 customer 24–48 h against a real 5–7 days (§6.7). */}
             <option value="" disabled>
               Choose your delivery zone
             </option>
-            {LOCATIONS.map((l) => (
-              <option key={l.name} value={l.name}>
+            {zones.map((l) => (
+              <option key={l.id} value={l.name}>
                 {l.name} — {fmtNaira(l.fee)} · {l.eta}
               </option>
             ))}
@@ -1062,7 +1074,7 @@ export default function CheckoutView() {
             (`trust-and-policies` §9.4) — the guarantee, the fee band and the
             prepay saving in one component, so the four surfaces that quote them
             cannot disagree. */}
-        <TrustStrip variant="summary" />
+        <TrustStrip variant="summary" zones={zones} />
 
         {/* The consent control (§9.6). It gates submission and the handoff.
             `/privacy` WAS the href and it 404s: the policy ships at
@@ -1130,7 +1142,7 @@ export default function CheckoutView() {
         </div>
 
         <p className="text-center text-xs text-fg-muted">
-          We confirm every order on WhatsApp before dispatch. Delivery is {delivery.range()} depending on
+          We confirm every order on WhatsApp before dispatch. Delivery is {delivery.range(zones)} depending on
           your zone — nothing is charged now.
         </p>
 

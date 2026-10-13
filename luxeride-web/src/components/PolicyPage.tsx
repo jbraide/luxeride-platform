@@ -1,6 +1,7 @@
-import { LOCATIONS, WHATSAPP_NUMBER } from "@/data/locations";
+import { WHATSAPP_NUMBER } from "@/data/locations";
 import { fmtNaira } from "@/lib/pricing";
 import { whatsappLink } from "@/lib/whatsapp";
+import type { DeliveryZone } from "@/lib/delivery";
 import type { Policy } from "@/data/policies";
 
 /**
@@ -38,9 +39,12 @@ export function isPublishedParagraph(paragraph: string): boolean {
 export default function PolicyPage({
   policy,
   showZoneTable = false,
+  zones = [],
 }: {
   policy: Policy;
   showZoneTable?: boolean;
+  /** The `Location` rows. Passed in, because this is rendered from the database now. */
+  zones?: DeliveryZone[];
 }) {
   const sections = policy.sections
     .map((section) => ({ ...section, body: section.body.filter(isPublishedParagraph) }))
@@ -65,7 +69,7 @@ export default function PolicyPage({
               </tr>
             </thead>
             <tbody>
-              {LOCATIONS.map((zone) => (
+              {zones.map((zone) => (
                 <tr key={zone.name} className="border-t border-border">
                   <td className="px-4 py-2">{zone.name}</td>
                   <td className="px-4 py-2 font-mono text-accent">{fmtNaira(zone.fee)}</td>

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { announcement } from "@/lib/copy";
 import { loadPromotions } from "@/lib/discounts-server";
+import { listDeliveryZones } from "@/lib/delivery";
 
 /**
  * The announcement / utility bar (`trust-and-policies` §7.1–7.3).
@@ -29,6 +30,9 @@ import { loadPromotions } from "@/lib/discounts-server";
  */
 export default async function AnnouncementBar() {
   const promotions = await loadPromotions();
+  // The "fastest zones" window is the owner's, so it is read from the live zones rather
+  // than a compile-time constant that a fee change could not reach.
+  const zones = await listDeliveryZones();
   const now = new Date();
 
   // Only what is actually RUNNING. A scheduled or ended promotion does not appear, so
@@ -46,7 +50,7 @@ export default async function AnnouncementBar() {
   // when a headline is written to stand alone.
   const offerItem = live ? [live.badge, live.label].filter(Boolean).join(" \u2014 ") : null;
 
-  const items = [offerItem, announcement.delivery, announcement.fastest, announcement.prepay].filter(
+  const items = [offerItem, announcement.delivery, announcement.fastest(zones), announcement.prepay].filter(
     (item): item is string => Boolean(item),
   );
 

@@ -40,7 +40,17 @@ import { BRANDS } from "../src/data/cars.ts";
 import { PRODUCTS, getProductBySlug } from "../src/data/products.ts";
 import { LOCATIONS } from "../src/data/locations.ts";
 import { lineKey, priceOrder, PREPAY_DISCOUNT } from "../src/lib/order-pricing.ts";
-import { validateOrderSubmission, validateZone } from "../src/lib/order-validation.ts";
+import {
+  validateOrderSubmission as validateOrderSubmissionRaw,
+  validateZone as validateZoneRaw,
+} from "../src/lib/order-validation.ts";
+
+// THE ZONE CATALOGUE IS A REQUIRED ARGUMENT NOW, so this file binds the storefront one
+// once rather than repeating `LOCATIONS` at every call site. The default was removed on
+// purpose: a default is what let the fee a customer was shown and the fee `/api/orders`
+// charged come from two different places.
+const validateOrderSubmission = (input, zones = LOCATIONS) => validateOrderSubmissionRaw(input, zones);
+const validateZone = (raw, zones = LOCATIONS) => validateZoneRaw(raw, zones);
 import { CROCKFORD_ALPHABET, isOrderRef, mintOrderRef } from "../src/lib/order-ref.ts";
 
 /**

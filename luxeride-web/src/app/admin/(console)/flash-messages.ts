@@ -89,6 +89,12 @@ export const FLASH_MESSAGES: Record<string, string> = {
 
   // Storefront appearance
   heroLayout: "Saved. The homepage hero is now laid out that way for everyone.",
+
+  // Delivery zones (`/admin/delivery`)
+  deliveryZoneAdded: "Zone added. It is on the checkout, and its fee is what a customer in it will be charged.",
+  deliveryZoneSaved: "Saved. The new fee and window are live at checkout and on the delivery policy.",
+  deliveryZoneDeleted: "Zone deleted, and the removal is in the audit log.",
+  deliveryBulkSaved: "Saved. That fee is now live on every zone you ticked.",
 };
 
 /** The sentence for a flash key, or null when the key is not one we know. */

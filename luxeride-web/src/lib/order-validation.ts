@@ -1,4 +1,4 @@
-import { LOCATIONS, type LocationZone } from "../data/locations.ts";
+import type { LocationZone } from "../data/locations.ts";
 import { validateNGPhone } from "./validation.ts";
 
 import type { ResolvedZone, RowSelection } from "./order-pricing.ts";
@@ -29,17 +29,16 @@ import type { ResolvedZone, RowSelection } from "./order-pricing.ts";
  * the customer sent and not a number anyone supplied. A caller cannot reach
  * `priceOrder()` without a fee the server chose.
  *
- * WHICH CATALOGUE, AND WHY IT IS A PARAMETER
+ * WHICH CATALOGUE, AND WHY IT IS A REQUIRED PARAMETER
  *
- * The default catalogue is `LOCATIONS`, the static storefront module. That is the
- * right default for `/checkout`, which renders fee and ETA before a request is
- * ever made. It is the WRONG catalogue for `POST /api/orders`: §5.5 says the fee
- * comes from the `Location` **row**, and `Order.locationId` is a foreign key into
- * that table — an order priced from `LOCATIONS` could carry a fee that no longer
- * matches any row the order points at. So `validateOrderSubmission` accepts the
- * catalogue as an argument, and the route handler passes the rows it just read.
- * Without this the two halves of §5.5 would contradict each other and the
- * authority would be the static file.
+ * The catalogue is ALWAYS passed in, and there is deliberately NO default. It used to
+ * default to the static `LOCATIONS` module. That was the right figure for `/checkout`,
+ * which renders a fee before a request is made — and the WRONG one for `POST /api/orders`,
+ * where §5.5 says the fee comes from the `Location` ROW and `Order.locationId` is a
+ * foreign key into that table. While a default existed, a caller that forgot the argument
+ * silently priced from a file the admin cannot edit, which is exactly the defect that let
+ * a displayed fee and a charged fee differ. Both callers now pass the rows: the route
+ * handler reads them, and the checkout is handed them by its page.
  *
  * NO EXTERNAL VALIDATION LIBRARY
  *
@@ -227,8 +226,8 @@ export type ValidateOrderResult =
   | { ok: false; errors: OrderFieldErrors };
 
 /**
- * A zone catalogue. `LOCATIONS` satisfies it; so do `Location` rows read from
- * the database, which is where the `slug` comes from.
+ * A zone catalogue — the shape a `Location` row satisfies, which is where the `slug`
+ * comes from.
  */
 export interface ZoneCatalogueEntry extends LocationZone {
   slug?: string | null;
@@ -310,8 +309,8 @@ export function validateAddress(
  */
 export function validateZone(
   raw: unknown,
-  zones: readonly ZoneCatalogueEntry[] = LOCATIONS
-): { ok: true; value: ResolvedZone } | { ok: false; error: string } {
+  zones: readonly ZoneCatalogueEntry[],
+): { ok: true; value: ZoneCatalogueEntry } | { ok: false; error: string } {
   if (typeof raw !== "string" || raw.trim().length === 0) {
     return { ok: false, error: "Choose the zone we deliver to, so the fee and the estimate are right." };
   }
@@ -389,10 +388,9 @@ function validateYear(raw: unknown): { ok: true; value: string } | { ok: false; 
 /**
  * Narrow and bound a whole submission.
  *
- * `zones` is the catalogue the delivery zone is resolved against — `LOCATIONS`
- * for the storefront, the `Location` rows for `POST /api/orders`. See the header
- * note on why the server must not read the static module. Every validation below
- * is unconditional regardless of what a UI already checked.
+ * `zones` is the catalogue the delivery zone is resolved against — the `Location` rows
+ * the caller passes. There is no default on purpose. See the header note. Every
+ * validation below is unconditional regardless of what a UI already checked.
  *
  * Returns every error it found rather than the first, because a form that
  * reveals one field at a time makes a customer play whack-a-mole to discover
@@ -406,7 +404,7 @@ function validateYear(raw: unknown): { ok: true; value: string } | { ok: false; 
  */
 export function validateOrderSubmission(
   input: unknown,
-  zones: readonly ZoneCatalogueEntry[] = LOCATIONS,
+  zones: readonly ZoneCatalogueEntry[],
 ): ValidateOrderResult {
   const errors: OrderFieldErrors = {};
 

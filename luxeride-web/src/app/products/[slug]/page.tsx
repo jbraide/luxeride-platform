@@ -10,6 +10,7 @@ import { StickyBuyBar } from "@/components/StickyBuyBar";
 import ViewItemTracker from "@/components/ViewItemTracker";
 import renderSection from "@/components/funnel/render-section";
 import { getCategory, getProductWithSale, listProducts } from "@/lib/catalogue";
+import { listDeliveryZones } from "@/lib/delivery";
 import { priceRange } from "@/data/products";
 import type { Section } from "@/data/funnel/sections";
 import { resolveMedia } from "@/lib/media-manifest";
@@ -109,9 +110,12 @@ export default async function ProductPage({
   // `resolveMedia` is FILESYSTEM-backed and synchronous, so it is not in the
   // `Promise.all` — wrapping it in `Promise.resolve` to fit it in would be a lie
   // about what is asynchronous.
-  const [products, category] = await Promise.all([
+  const [products, category, deliveryZones] = await Promise.all([
     listProducts(),
     getCategory(product.categorySlug),
+    // The delivery line in the buy box states the same `Location` rows the checkout
+    // charges from, so the two cannot quote different figures.
+    listDeliveryZones(),
   ]);
   const media = resolveMedia(product.slug);
   const [priceMin, priceMax] = priceRange(product);
@@ -253,7 +257,7 @@ export default async function ProductPage({
         {/* The whole buy column, extracted so the route is about routing and
             metadata (§10.2). The guarantee and the delivery band come from
             `TrustStrip`, so the PDP cannot restate a different figure. */}
-        <BuyBox product={product} selectedSlug={selectedSlug} />
+        <BuyBox product={product} selectedSlug={selectedSlug} deliveryZones={deliveryZones} />
       </div>
 
       {/* The fit-guide and ordering process, read from this product's own data.

@@ -1,120 +1,240 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 
-import { LOCATIONS } from "@/data/locations";
+import { listDeliveryZones } from "@/lib/delivery";
 import { fmtNaira } from "@/lib/pricing";
+import EmptyState from "@/components/admin/EmptyState";
 import PageHeader from "@/components/admin/PageHeader";
 import {
   BTN_PRIMARY,
+  BTN_ROW,
   BTN_SECONDARY,
   EYEBROW,
   INPUT,
   LABEL,
-  NUM,
-  TABLE,
-  TABLE_HEAD,
-  TABLE_HEAD_CELL,
-  TABLE_ROW,
+  SECTION_HINT,
+  SECTION_TITLE,
 } from "@/components/admin/ui";
-import { updateDeliveryZone } from "./actions";
+import { messageFor } from "../confirm-guard";
+import { bulkSetDeliveryFee, deleteDeliveryZone, saveDeliveryZone } from "./actions";
 
 export const metadata: Metadata = {
   title: "Delivery zones",
   robots: { index: false, follow: false },
 };
 
-export default async function DeliveryPage() {
-  // Reading a request header here is what keeps this route dynamic rather than
-  // prerendered — the same job the `dynamic = "force-dynamic"` export does on the
-  // screens that read Postgres. The value itself is not used on this page.
-  await headers();
+/**
+ * `/admin/delivery` — the delivery zones, and the ONLY place a fee is set.
+ *
+ * Every figure here is a `Location` row. The checkout, the delivery policy, the contact
+ * page and the PDP's delivery line all read the same rows (`src/lib/delivery.ts`), so a
+ * fee changed here is the fee charged — which was not true before: this screen validated
+ * against a compile-time constant and wrote nothing, while `/api/orders` charged from
+ * the table.
+ *
+ * THE BULK BAR IS THE POINT OF THE REDESIGN. The owner's ask was "assign an amount to
+ * multiple places at once when I select them". So the checkboxes belong to a form that
+ * is NOT their ancestor — `form={bulkFormId}` — which is what lets each zone ALSO carry
+ * its own edit form without nesting one form inside another (illegal, and the classic
+ * reason a one-click control silently stops working).
+ *
+ * No `'use client'`: every control is a plain form, and the refusal rides in the URL.
+ */
+export default async function DeliveryPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const errorCode = typeof params.e === "string" ? params.e : "";
+  const zones = await listDeliveryZones();
+
+  // One id, referenced by every checkbox. The bulk form itself is rendered above the
+  // list rather than wrapping it, so the per-zone forms below can exist at all.
+  const bulkFormId = "bulk-delivery-form";
 
   return (
     <div>
       <PageHeader
         title="Delivery zones"
-        meta="The four zones the checkout uses, the footer sources, and the delivery policy. Every figure comes from this same LOCATIONS register — the single-source rule."
+        meta="What delivery costs and how long it takes, per zone. These are the figures the checkout charges, the delivery policy publishes and the contact page lists — change one here and all of them follow."
         actions={
-          <a href="#configure-zone" className={BTN_SECONDARY}>
-            Configure a zone
+          <a href="#add-zone" className={BTN_SECONDARY}>
+            Add a zone
           </a>
         }
       />
 
-      <table className={`${TABLE} mt-6 overflow-x-auto rounded-lg border border-border`}>
-        <thead className="bg-surface-2">
-          <tr className={TABLE_HEAD}>
-            <th className={`${TABLE_HEAD_CELL} px-4 text-left`}>Zone</th>
-            <th className={`${TABLE_HEAD_CELL} px-4 text-right`}>Fee</th>
-            <th className={`${TABLE_HEAD_CELL} px-4 text-right`}>Fastest ETA</th>
-            <th className={`${TABLE_HEAD_CELL} px-4 text-right`}>Slowest ETA</th>
-          </tr>
-        </thead>
-        <tbody>
-          {LOCATIONS.map((zone) => (
-            <tr key={zone.name} className={TABLE_ROW}>
-              <td className="px-4 py-3 font-medium">{zone.name}</td>
-              <td className={`${NUM} px-4 py-3 font-mono`}>{fmtNaira(zone.fee)}</td>
-              <td className={`${NUM} px-4 py-3 text-fg-muted`}>{zone.eta.split("–")[0]?.trim()}</td>
-              <td className={`${NUM} px-4 py-3 text-fg-muted`}>{zone.eta.split("–")[1]?.trim()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {errorCode && (
+        <p role="alert" className="mt-4 rounded-xl border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+          {messageFor(errorCode)}
+        </p>
+      )}
 
-      <form id="configure-zone" method="post" action={updateDeliveryZone} className="mt-4 rounded-xl border border-dashed border-border bg-surface/40 px-4 py-4">
-        <p className={`${EYEBROW} mb-3`}>Configure zone</p>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-48">
-            <label htmlFor="zoneName" className={LABEL}>Zone</label>
-            <select id="zoneName" name="name" defaultValue="" className={`${INPUT} font-mono`}>
-              <option value="">Select zone</option>
-              {LOCATIONS.map((z) => (
-                <option key={z.name} value={z.name}>{z.name}</option>
-              ))}
-            </select>
+      {zones.length === 0 ? (
+        <EmptyState className="mt-6">
+          No delivery zones yet. Add the first one below — until a zone exists, checkout cannot
+          offer delivery and every order would be refused.
+        </EmptyState>
+      ) : (
+        <>
+          {/*
+            THE BULK BAR. It is its own form so the checkboxes in the list can point at it
+            by id, and it is FIRST because "set a fee on several zones" is the job this
+            screen was rebuilt for.
+          */}
+          <form
+            id={bulkFormId}
+            method="post"
+            action={bulkSetDeliveryFee}
+            className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-border bg-surface/40 px-4 py-4"
+          >
+            <p className={`${EYEBROW} w-full`}>Set one fee on several zones</p>
+            <div className="w-40">
+              <label htmlFor="bulkFee" className={LABEL}>
+                Fee (₦)
+              </label>
+              <input
+                id="bulkFee"
+                name="bulkFee"
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 9000"
+                className={`${INPUT} font-mono`}
+              />
+            </div>
+            <div className="w-48">
+              <label htmlFor="bulkEta" className={LABEL}>
+                Window (optional)
+              </label>
+              <input id="bulkEta" name="bulkEta" placeholder="leave blank to keep" className={INPUT} />
+            </div>
+            <button type="submit" className={BTN_PRIMARY}>
+              Apply to selected
+            </button>
+            <p className={`${SECTION_HINT} w-full`}>
+              Tick the zones below, then set one fee for all of them. Leave the window blank to change
+              only the fee.
+            </p>
+          </form>
+
+          <ul className="mt-4 space-y-2">
+            {zones.map((zone) => (
+              <li key={zone.id} className="rounded-xl border border-border bg-surface/60 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <input
+                    type="checkbox"
+                    name="zoneIds"
+                    value={zone.id}
+                    form={bulkFormId}
+                    aria-label={`Select ${zone.name} for a bulk fee`}
+                    className="h-4 w-4 accent-accent"
+                  />
+                  <span className="font-medium text-fg/90">{zone.name}</span>
+                  <span className="font-mono text-sm text-accent">{fmtNaira(zone.fee)}</span>
+                  <span className="text-xs text-fg-muted">{zone.eta}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-accent-dim">
+                    {zone.slug}
+                  </span>
+                </div>
+
+                <form method="post" action={saveDeliveryZone} className="mt-3 flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="id" value={zone.id} />
+                  <div className="w-56">
+                    <label htmlFor={`name-${zone.id}`} className={LABEL}>
+                      Name
+                    </label>
+                    <input id={`name-${zone.id}`} name="name" defaultValue={zone.name} className={INPUT} />
+                  </div>
+                  <div className="w-36">
+                    <label htmlFor={`fee-${zone.id}`} className={LABEL}>
+                      Fee (₦)
+                    </label>
+                    <input
+                      id={`fee-${zone.id}`}
+                      name="fee"
+                      type="number"
+                      inputMode="numeric"
+                      defaultValue={zone.fee}
+                      className={`${INPUT} font-mono`}
+                    />
+                  </div>
+                  <div className="w-44">
+                    <label htmlFor={`eta-${zone.id}`} className={LABEL}>
+                      Window
+                    </label>
+                    <input id={`eta-${zone.id}`} name="etaText" defaultValue={zone.eta} className={INPUT} />
+                  </div>
+                  <button type="submit" className={BTN_PRIMARY}>
+                    Save
+                  </button>
+                  {/* A separate form is unnecessary here — `formAction` overrides the
+                      save, and `formNoValidate` keeps the browser from validating the
+                      fields above on a one-click delete. */}
+                  <button
+                    type="submit"
+                    formAction={deleteDeliveryZone}
+                    formNoValidate
+                    title={`Remove ${zone.name}. Refused if any order was delivered to it.`}
+                    className={`${BTN_ROW} hover:border-danger hover:text-danger`}
+                  >
+                    Delete
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <section id="add-zone" className="mt-8">
+        <h2 className={SECTION_TITLE}>Add a zone</h2>
+        <p className={SECTION_HINT}>
+          A zone is a place with one fee and one window. The name is what the customer picks at
+          checkout and what an order records, so keep it recognisable.
+        </p>
+
+        <form
+          method="post"
+          action={saveDeliveryZone}
+          className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-border bg-surface/40 px-4 py-4"
+        >
+          <div className="w-56">
+            <label htmlFor="new-zone-name" className={LABEL}>
+              Name
+            </label>
+            <input id="new-zone-name" name="name" required placeholder="e.g. Kaduna & Kano" className={INPUT} />
           </div>
-          <div className="w-40">
-            <label htmlFor="zoneFee" className={LABEL}>Fee (NGN)</label>
+          <div className="w-36">
+            <label htmlFor="new-zone-fee" className={LABEL}>
+              Fee (₦)
+            </label>
             <input
-              id="zoneFee"
+              id="new-zone-fee"
               name="fee"
               type="number"
               inputMode="numeric"
-              placeholder="e.g. 9000"
+              required
+              placeholder="e.g. 14000"
               className={`${INPUT} font-mono`}
             />
           </div>
-          <div className="w-48">
-            <label htmlFor="zoneEta" className={LABEL}>ETA text</label>
-            <input
-              id="zoneEta"
-              name="etaText"
-              type="text"
-              placeholder="e.g. 24–48 hours"
-              className={INPUT}
-            />
+          <div className="w-44">
+            <label htmlFor="new-zone-eta" className={LABEL}>
+              Window
+            </label>
+            <input id="new-zone-eta" name="etaText" required placeholder="e.g. 4–6 days" className={INPUT} />
           </div>
           <button type="submit" className={BTN_PRIMARY}>
-            Save zone
+            Add zone
           </button>
-        </div>
-      </form>
+        </form>
+      </section>
 
-      <div className="mt-6 rounded-lg border border-border bg-surface-2 px-5 py-4 text-sm text-fg-muted">
-        <strong>Transport / delivery policy reference.</strong> The zones, fees and ETAs
-        above are the single source for: the checkout delivery block (`CheckoutView.tsx`),
-        the footer (`Footer.tsx` — M4.7 verified links `/policies/returns`), the announcement
-        bar (`AnnouncementBar.tsx` — M4.6 verified), and the `delivery` policy (`policies/[slug]/page.tsx`).
-        Changing a fee or ETA here propagates to all surfaces that read `LOCATIONS` (`src/lib/availability.ts`
-        `formatDeliverySummary()` derives the range from this table, not from a hardcoded constant — M1.8 verified).
-        The remaining policy slots (`returns`, `privacy`, `terms`) are hidden from production
-        (`policies/[slug]/page.tsx` drops empty/unpublished sections; M4.3 fix verified by `grep -rni &apos;TODO(owner)&apos;`
-        returning 0 hits); they must be filled before the site makes a real legal promise (D-07 / D-11).
-        Generation data for floor-mats (`seat-covers/floor-mats-generations.mjs`) matches `scripts/vehicle-years.data.mjs`
-        format (verified by `ls` + `head` of both files); the full catalogue generation split (`fitment-engine`
-        §2.11 / M2.2 / D-03) remains blocked until the first Confirmed layout is entered (`liveLayoutCountLive()` = 0 today).
-      </div>
+      <p className="mt-6 max-w-3xl text-xs leading-relaxed text-fg-muted">
+        Deleting is refused while an order points at a zone, because the order carries the zone it was
+        promised. Change its fee to ₦0 instead, or rename it. Every change here is written to the audit
+        log.
+      </p>
     </div>
   );
 }

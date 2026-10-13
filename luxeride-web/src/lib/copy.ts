@@ -1,4 +1,5 @@
-import { LOCATIONS, WHATSAPP_NUMBER } from "@/data/locations";
+import { WHATSAPP_NUMBER } from "@/data/locations";
+import type { DeliveryZone } from "@/lib/delivery";
 import { fmtNaira } from "@/lib/pricing";
 import { whatsappLink } from "@/lib/whatsapp";
 
@@ -21,7 +22,12 @@ export const prepay = Object.freeze({
   label: `Save ${fmtNaira(2000)}`,
 });
 
-// ── Delivery figures, derived from LOCATIONS so they cannot drift ────────────
+// ── Delivery figures, derived from the zones the CALLER passes ───────────────
+//
+// These took no argument and read a compile-time constant, which meant the band on every
+// trust strip kept printing a figure the admin could no longer change. They take the live
+// `Location` rows now, so the band and the checkout cannot state different numbers. A
+// TYPE-only import of `DeliveryZone`, so a Client Component can still import this module.
 
 function etaBounds(eta: string): [number, number] | null {
   const match = /(\d+)\s*(?:[–-]|to)?\s*(\d+)?\s*(hour|day)/i.exec(eta);
@@ -40,28 +46,32 @@ function formatHours(hours: number): string {
 
 export const delivery = Object.freeze({
   /** `₦6,000 – ₦12,000`, the fee band, never a single figure. */
-  range(): string {
-    const fees = LOCATIONS.map((l) => l.fee);
+  range(zones: readonly DeliveryZone[]): string {
+    const fees = zones.map((l) => l.fee);
+    if (fees.length === 0) return "";
     const low = Math.min(...fees);
     const high = Math.max(...fees);
     return low === high ? fmtNaira(low) : `${fmtNaira(low)}–${fmtNaira(high)}`;
   },
   /** The full sentence a policy page or a footer may quote. */
-  summary(): string {
-    return `Delivery is ${this.range()} depending on your zone. Your zone's exact fee is calculated at checkout.`;
+  summary(zones: readonly DeliveryZone[]): string {
+    const band = this.range(zones);
+    return band
+      ? `Delivery is ${band} depending on your zone. Your zone's exact fee is calculated at checkout.`
+      : "Delivery is quoted by zone and confirmed at checkout.";
   },
   /** `24 hours to 7 days`, the fastest-to-slowest window across the zones. */
-  window(): string {
-    const bounds = LOCATIONS.map((l) => etaBounds(l.eta)).filter((b): b is [number, number] => b !== null);
+  window(zones: readonly DeliveryZone[]): string {
+    const bounds = zones.map((l) => etaBounds(l.eta)).filter((b): b is [number, number] => b !== null);
     if (bounds.length === 0) return "";
     const low = Math.min(...bounds.map((b) => b[0]));
     const high = Math.max(...bounds.map((b) => b[1]));
     return `${formatHours(low)} to ${formatHours(high)}`;
   },
   /** The quickest zone's own window, e.g. `24–48 hours`. */
-  fastestWindow(): string {
+  fastestWindow(zones: readonly DeliveryZone[]): string {
     let best: { value: number; eta: string } | null = null;
-    for (const zone of LOCATIONS) {
+    for (const zone of zones) {
       const bounds = etaBounds(zone.eta);
       if (!bounds) continue;
       if (!best || bounds[0] < best.value) best = { value: bounds[0], eta: zone.eta };
@@ -76,7 +86,11 @@ export const delivery = Object.freeze({
  */
 export const announcement = Object.freeze({
   delivery: "Nationwide delivery",
-  fastest: delivery.fastestWindow() ? `${delivery.fastestWindow()} in the fastest zones` : "",
+  /** Takes the zones, because the windows are the owner's and live in the database. */
+  fastest(zones: readonly DeliveryZone[]): string {
+    const window = delivery.fastestWindow(zones);
+    return window ? `${window} in the fastest zones` : "";
+  },
   prepay: `${prepay.label} when you prepay by bank transfer`,
 });
 
@@ -165,13 +179,26 @@ const BANNED_PATTERNS: { pattern: RegExp; why: string }[] = [
   { pattern: /aggregateRating|ratingValue/i, why: "a fabricated rating" },
 ];
 
+/**
+ * A sample catalogue for the load-time honesty check ONLY, so the check needs no
+ * database. The scan is about CLAIMS (stock counts, urgency, ratings), not about figures,
+ * so any well-formed zone set exercises it. It is not rendered anywhere.
+ */
+const SAMPLE_ZONES: readonly DeliveryZone[] = [
+  { id: "sample", slug: "sample", name: "Sample zone", fee: 6000, eta: "24–48 hours" },
+];
+
 function assertCopy(): void {
   const serialized = JSON.stringify({
     guarantee,
     guaranteeShort,
     prepay,
-    delivery: { range: delivery.range(), summary: delivery.summary(), window: delivery.window() },
-    announcement,
+    delivery: {
+      range: delivery.range(SAMPLE_ZONES),
+      summary: delivery.summary(SAMPLE_ZONES),
+      window: delivery.window(SAMPLE_ZONES),
+    },
+    announcement: { ...announcement, fastest: announcement.fastest(SAMPLE_ZONES) },
     contact: { ...contact, whatsappLink: "(fn)" },
     fittedCopy,
     refusals,

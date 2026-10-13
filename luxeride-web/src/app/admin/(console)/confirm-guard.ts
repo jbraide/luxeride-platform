@@ -305,6 +305,17 @@ export const FAILURE_MESSAGES = {
     "This code has been used, so deleting it would leave an old order unexplainable. Switch it off instead — that keeps the history.",
   badSeatRows:
     "Choose 2 rows, 3 rows, or \"ask them\". \"Ask them\" is right for a car sold as both.",
+
+  // Delivery zones (`delivery/actions.ts`). A refusal here is a form state, so these
+  // are the sentences the delivery screen shows beside the form that was refused.
+  deliveryZoneNameRequired: "A zone needs a name — it is what the customer picks at checkout.",
+  deliveryEtaRequired: "Give the zone a window, e.g. \"24–48 hours\". The checkout shows it beside the fee.",
+  deliveryFeeInvalid: "The fee has to be a whole number of naira, and cannot be negative.",
+  deliveryZoneExists: "A zone with that name already exists. Edit the existing one instead.",
+  deliveryZoneNotFound: "That zone is no longer there — it may have been deleted in another tab.",
+  deliveryZoneInUse:
+    "That zone has orders against it, so deleting it would leave them without a delivery record. Rename it instead, or set its fee to 0.",
+  deliveryNoSelection: "Tick at least one zone before applying a fee to the selection.",
 } as const;
 
 export type FailureCode = keyof typeof FAILURE_MESSAGES;

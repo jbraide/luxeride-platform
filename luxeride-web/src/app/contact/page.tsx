@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import ContactForm from "@/components/ContactForm";
 import SocialLinks from "@/components/SocialLinks";
-import { LOCATIONS, WHATSAPP_NUMBER } from "@/data/locations";
+import { WHATSAPP_NUMBER } from "@/data/locations";
+import { listDeliveryZones } from "@/lib/delivery";
 import { business, published } from "@/data/business";
 import { contact, guarantee, refusals } from "@/lib/copy";
 import { pageMetadata } from "@/lib/seo";
@@ -11,8 +12,10 @@ import { whatsappLink } from "@/lib/whatsapp";
  * `/contact` — the business-legitimacy surface (`trust-and-policies` §6.1–6.3).
  *
  * A Server Component with no state. The only client island is `ContactForm`,
- * which is a message box that hands off to WhatsApp; there is no server write and
- * no database, so the page cannot fail because a service is down.
+ * which is a message box that hands off to WhatsApp; there is no server write.
+ * It reads the delivery zones, so the service area it lists is the same
+ * `Location` rows the checkout charges from — a hard-coded list here was the one
+ * place a zone rename could leave behind.
  *
  * WHY THIS PAGE IS LOAD-BEARING RATHER THAN DECORATION
  *
@@ -56,15 +59,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export default function ContactPage() {
+export default async function ContactPage() {
   const legalName = published(business.legalName);
   const registrationNumber = published(business.registrationNumber);
   const hours = published(business.hours);
   const responseExpectation = published(business.responseExpectation);
 
-  // Derived from LOCATIONS, so this page and the checkout cannot disagree about
-  // where delivery reaches.
-  const serviceArea = LOCATIONS.map((zone) => zone.name);
+  // Derived from the delivery zones, so this page and the checkout cannot disagree
+  // about where delivery reaches.
+  const serviceArea = (await listDeliveryZones()).map((zone) => zone.name);
 
   return (
     <article className="mx-auto max-w-3xl px-5 py-12">

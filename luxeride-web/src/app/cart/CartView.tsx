@@ -11,9 +11,10 @@ import { track } from "@/lib/analytics";
 import { LinkButton } from "@/components/Button";
 import { TrustStrip } from "@/components/TrustStrip";
 import { delivery } from "@/lib/copy";
+import type { DeliveryZone } from "@/lib/delivery";
 import { optionLabel } from "@/lib/select-variation";
 
-export default function CartView() {
+export default function CartView({ zones }: { zones: DeliveryZone[] }) {
   const { items, removeItem, setQty, subtotal, count, clear } = useCartStore();
   const mounted = useHasMounted();
 
@@ -181,14 +182,14 @@ export default function CartView() {
           §5.7). It used to say "calculated at checkout" with no number at all,
           which left the biggest objection on the page unanswered. */}
       <p className="mt-1 text-xs text-fg-muted">
-        Delivery is {delivery.range()} depending on your zone.{" "}
+        Delivery is {delivery.range(zones)} depending on your zone.{" "}
         <Link href="/policies/delivery" className="text-accent hover:underline">
           See delivery
         </Link>
       </p>
 
       <div className="mt-4">
-        <TrustStrip variant="cta" />
+        <TrustStrip variant="cta" zones={zones} />
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">

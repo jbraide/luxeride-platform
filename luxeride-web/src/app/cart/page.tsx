@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import CartView from "./CartView";
+import { listDeliveryZones } from "@/lib/delivery";
 import { pageMetadata } from "@/lib/seo";
 
 /**
@@ -23,7 +24,11 @@ export const metadata: Metadata = {
  * store and must therefore be a Client Component. This split is what lets the
  * route export `metadata` (M3.2) — metadata exports are Server-Component only —
  * and it follows the pattern already used by `src/app/fit-finder/page.tsx`.
+ *
+ * It also reads the DELIVERY ZONES here: the cart quotes a fee band, and that
+ * band has to be the same `Location` rows the checkout charges from.
  */
-export default function CartPage() {
-  return <CartView />;
+export default async function CartPage() {
+  const zones = await listDeliveryZones();
+  return <CartView zones={zones} />;
 }

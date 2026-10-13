@@ -89,7 +89,7 @@ test("a Location row is accepted by its slug, and carries its canonical name", (
 
   // The same identifier against the static catalogue is unknown, because that
   // module has no slug column at all.
-  assert.equal(validateOrderSubmission(submission({ location: "zone-2" })).ok, false);
+  assert.equal(validateOrderSubmission(submission({ location: "zone-2" }), LOCATIONS).ok, false);
 });
 
 test("an empty catalogue refuses every zone rather than falling back", () => {
@@ -101,8 +101,13 @@ test("an empty catalogue refuses every zone rather than falling back", () => {
   assert.ok(result.errors.location);
 });
 
-test("LOCATIONS remains the default catalogue", () => {
-  const result = validateOrderSubmission(submission());
+test("the catalogue is passed explicitly — LOCATIONS is no longer a default", () => {
+  // It USED to default to the static module, and that default is what let a fee
+  // displayed on the storefront and a fee charged by `/api/orders` come from two
+  // different places. The parameter is required now; a storefront-side pre-check passes
+  // the rows it was handed, and passing the static module explicitly still resolves a
+  // zone exactly as it always did.
+  const result = validateOrderSubmission(submission(), LOCATIONS);
   assert.equal(result.ok, true);
   assert.equal(result.value.zone.fee, LOCATIONS[0].fee);
   assert.equal(result.value.zone.slug, null, "the static module carries no slug");

@@ -1,4 +1,4 @@
-import { LOCATIONS } from "@/data/locations";
+import type { DeliveryZone } from "@/lib/delivery";
 import { priceRange, type Product } from "@/data/products";
 import { fmtNaira } from "@/lib/pricing";
 
@@ -62,20 +62,27 @@ function formatHours(hours: number): string {
 }
 
 /**
- * The delivery figures, derived from `LOCATIONS` so the PDP, the footer and the
- * Fit Finder cannot disagree with the checkout about what delivery costs or how
- * long it takes. Today that is ₦6,000–₦12,000 and 24 hours to 7 days; change a
- * fee in `src/data/locations.ts` and every surface follows.
+ * The delivery figures, derived from the CALLER'S zones — the `Location` rows the
+ * checkout charges from — so the PDP, the footer and the Fit Finder cannot disagree
+ * with the checkout about what delivery costs or how long it takes.
  *
- * The exact fee is not quoted here because the zone is only known at checkout —
- * there is no zone step in the funnel (`_CONTEXT.md` §8, gap 1).
+ * It takes the zones as an argument rather than importing them because the zones now
+ * live in the database, and this is a plain function called from Server Components that
+ * have already loaded them. Reading them here would mean a second query per render and a
+ * second place that can go stale.
+ *
+ * The exact fee is not quoted here because the zone is only known at checkout.
  */
-export function formatDeliverySummary(): string {
-  const fees = LOCATIONS.map((l) => l.fee);
+export function formatDeliverySummary(zones: readonly DeliveryZone[]): string {
+  if (zones.length === 0) {
+    return "Delivery is quoted by zone and confirmed on WhatsApp with your order.";
+  }
+
+  const fees = zones.map((l) => l.fee);
   const feeLow = Math.min(...fees);
   const feeHigh = Math.max(...fees);
 
-  const bounds = LOCATIONS.map((l) => etaBounds(l.eta)).filter((b): b is [number, number] => b !== null);
+  const bounds = zones.map((l) => etaBounds(l.eta)).filter((b): b is [number, number] => b !== null);
   const timeLow = bounds.length > 0 ? Math.min(...bounds.map((b) => b[0])) : null;
   const timeHigh = bounds.length > 0 ? Math.max(...bounds.map((b) => b[1])) : null;
 

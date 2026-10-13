@@ -6,6 +6,7 @@ import { formatDeliverySummary, formatPriceFrom } from "@/lib/availability";
 import ProductFaq from "@/components/ProductFaq";
 import { describeBundleContents } from "@/lib/bundle-price";
 import { fmtNaira } from "@/lib/pricing";
+import type { DeliveryZone } from "@/lib/delivery";
 import { MAT_TYPE_VARIATION } from "@/data/fitment-catalogue";
 import VariationSelect from "@/components/VariationSelect";
 
@@ -59,10 +60,13 @@ const MAX_CHIP_OPTIONS = 6;
 export function BuyBox({
   product,
   selectedSlug = null,
+  deliveryZones,
 }: {
   product: Product;
   /** The option the `?variation=` query named, resolved against the product. */
   selectedSlug?: string | null;
+  /** The `Location` rows, so the delivery line states the same figures the checkout charges. */
+  deliveryZones: DeliveryZone[];
 }) {
   const bundle = product.bundle;
   const options = product.variations ?? [];
@@ -222,7 +226,7 @@ export function BuyBox({
       )}
 
       <p className="mt-3 text-xs text-fg-muted">{product.availability}</p>
-      <p className="mt-3 text-xs text-fg-muted">{formatDeliverySummary()}</p>
+      <p className="mt-3 text-xs text-fg-muted">{formatDeliverySummary(deliveryZones)}</p>
 
       <div className="mt-6">
         {/* The layer travels INTO the funnel. `?product=` alone locks the product and
@@ -239,7 +243,7 @@ export function BuyBox({
       </div>
 
       <div className="mt-4">
-        <TrustStrip variant="cta" />
+        <TrustStrip variant="cta" zones={deliveryZones} />
       </div>
 
       <ProductFaq product={product} />

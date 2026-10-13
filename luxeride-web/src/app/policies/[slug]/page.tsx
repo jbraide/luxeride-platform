@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import PolicyPage from "@/components/PolicyPage";
 import { POLICY_SLUGS, getPolicy } from "@/data/policies";
+import { listDeliveryZones } from "@/lib/delivery";
 import { pageMetadata } from "@/lib/seo";
 
 /**
@@ -37,5 +38,9 @@ export default async function PolicyRoute({ params }: { params: Promise<{ slug: 
   const { slug } = await params;
   const policy = getPolicy(slug);
   if (!policy) notFound();
-  return <PolicyPage policy={policy} showZoneTable={policy.slug === "delivery"} />;
+  // The delivery policy's zone table is the LIVE `Location` rows, so a fee change in
+  // the admin reaches this page. `revalidatePath("/policies/delivery")` in the delivery
+  // action is what refreshes it, since this route is prerendered.
+  const zones = policy.slug === "delivery" ? await listDeliveryZones() : [];
+  return <PolicyPage policy={policy} showZoneTable={policy.slug === "delivery"} zones={zones} />;
 }

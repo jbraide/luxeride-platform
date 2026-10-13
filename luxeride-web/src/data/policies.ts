@@ -1,10 +1,11 @@
-import { LOCATIONS } from "@/data/locations";
-
 /**
  * The policy content module (`storefront-catalog` §5.5).
  *
- * A typed static record: no database, no CMS. `delivery` is populated
- * COMPLETELY from `LOCATIONS` so no zone, fee or ETA is retyped. The other three
+ * A typed static record: no database, no CMS. The `delivery` policy's zone TABLE is
+ * rendered from the live `Location` rows (`PolicyPage.tsx` receives them), so no zone,
+ * fee or ETA is retyped here — the prose points at the table rather than restating it,
+ * because a hard-coded list of names in a paragraph is the one thing that cannot
+ * follow an admin edit. The other three
  * carry clearly-marked owner-input slots rather than invented legal text —
  * `scripts/check-placeholders.mjs` fails while any remain (`trust-and-policies`
  * §12.1 and M4.10). The slot token is written inline, not via a constant, so the
@@ -29,8 +30,6 @@ export interface Policy {
   sections: PolicySection[];
 }
 
-const zoneNames = LOCATIONS.map((l) => l.name).join(", ");
-
 export const POLICIES: Record<PolicySlug, Policy> = {
   delivery: {
     slug: "delivery",
@@ -52,7 +51,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         heading: "Zones, fees and timings",
         body: [
           "Your zone's exact fee and window are shown at checkout and repeated in your WhatsApp order message. The table below is the same data.",
-          `We currently deliver to: ${zoneNames}. Anywhere else is quoted individually on WhatsApp.`,
+          `Every zone we deliver to is in the table above, with its fee and its window. Anywhere else is quoted individually on WhatsApp.`,
         ],
       },
       {

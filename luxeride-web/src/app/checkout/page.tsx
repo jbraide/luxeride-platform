@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import CheckoutView from "./CheckoutView";
+import { listDeliveryZones } from "@/lib/delivery";
 import { pageMetadata } from "@/lib/seo";
 
 /**
@@ -23,7 +24,12 @@ export const metadata: Metadata = {
  * This split is what lets the route export `metadata` with
  * `robots: { index: false, follow: true }` (M3.2) — metadata exports are
  * Server-Component only.
+ *
+ * It also reads the DELIVERY ZONES here and passes them down: the fee the
+ * customer is shown has to come from the same `Location` rows `/api/orders`
+ * charges from, and a Client Component cannot read Postgres.
  */
-export default function CheckoutPage() {
-  return <CheckoutView />;
+export default async function CheckoutPage() {
+  const zones = await listDeliveryZones();
+  return <CheckoutView zones={zones} />;
 }
