@@ -183,13 +183,18 @@ export interface ValidatedOrderLine {
    * unspecified option", which is what a single-option product means.
    */
   variationSlug: string | null;
+  /**
+   * The car this line is for. ALL THREE ARE EMPTY on a shop-only line — a product bought
+   * without a car — and the resolution step refuses an empty car for a car-specific
+   * product, which is the only place the product's own requirement is known.
+   */
   brand: string;
   model: string;
   /**
    * The canonical string form of the model year, as the cart holds it
-   * (`CartItem.year` is a `string`), narrowed to a plausible integer.
-   * `OrderItem.yearSnapshot` is an `Int`, so the write path does `Number(...)`
-   * — from this validated value, never from the raw request.
+   * (`CartItem.year` is a `string`), narrowed to a plausible integer — or `""` for a
+   * shop-only line. `OrderItem.yearSnapshot` is nullable, so the write path stores null
+   * for that case rather than a sentinel year.
    */
   year: string;
   rows: RowSelection;
@@ -246,6 +251,24 @@ function boundedText(raw: unknown, max: number): string | null {
   const trimmed = raw.trim();
   if (trimmed.length === 0 || trimmed.length > max) return null;
   return trimmed;
+}
+
+/**
+ * A bounded string that MAY be empty — the car fields of a shop-only line.
+ *
+ * `boundedText` refuses an empty string because it is used for fields that must have a
+ * value. The brand, model and year are only required when the product is bought BY CAR,
+ * and that is a property of the resolved `Product`, which this module never sees — so an
+ * empty car travels through validation and the resolution step in `/api/orders` refuses
+ * it for a car-specific product, where the answer is actually known. A value that is
+ * present but malformed (a non-string, or an over-long one) is still refused here.
+ */
+function optionalText(raw: unknown, max: number): { ok: true; value: string } | { ok: false } {
+  if (raw === undefined || raw === null) return { ok: true, value: "" };
+  if (typeof raw !== "string") return { ok: false };
+  const trimmed = raw.trim();
+  if (trimmed.length > max) return { ok: false };
+  return { ok: true, value: trimmed };
 }
 
 /** `name`, with the checkout's own "the rider should ask for this" rule kept. */
@@ -368,6 +391,11 @@ export function validateQty(raw: unknown): { ok: true; value: number } | { ok: f
 
 /** The model year: a string on the wire, a plausible integer underneath. */
 function validateYear(raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
+  // NO CAR. An absent year is a shop-only line, not a mistake — see `optionalText`. The
+  // car's requirement is settled in `/api/orders`, against the product that decides it.
+  if (raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "")) {
+    return { ok: true, value: "" };
+  }
   // An integer number is accepted as the same value in its other form, not
   // corrected: 2020 and "2020" are one year. Anything else is an error, because
   // coercing a value is how a wrong year becomes a real order.
@@ -473,15 +501,15 @@ export function validateOrderSubmission(
         push("variationSlug", "That option is not valid.");
       }
 
-      const brand = boundedText(raw.brand, BRAND_MAX_LENGTH);
-      if (brand === null) {
-        push("brand", "Choose the make of the car this is for.");
-      }
+      // OPTIONAL. A shop-only product is bought without a car, and whether THIS line needs
+      // one is a property of the resolved `Product`, not of the payload — so an empty car
+      // travels through here and `/api/orders` refuses it for a car-specific product,
+      // where the answer is known. A present-but-malformed one is still refused below.
+      const brand = optionalText(raw.brand, BRAND_MAX_LENGTH);
+      if (!brand.ok) push("brand", "That make is not valid.");
 
-      const model = boundedText(raw.model, MODEL_MAX_LENGTH);
-      if (model === null) {
-        push("model", "Choose the model this is for.");
-      }
+      const model = optionalText(raw.model, MODEL_MAX_LENGTH);
+      if (!model.ok) push("model", "That model is not valid.");
 
       const year = validateYear(raw.year);
       if (!year.ok) push("year", year.error);
@@ -497,8 +525,8 @@ export function validateOrderSubmission(
       // whole submission on the error map.
       if (
         productSlug === null ||
-        brand === null ||
-        model === null ||
+        !brand.ok ||
+        !model.ok ||
         !year.ok ||
         !rows.ok ||
         !qty.ok
@@ -509,8 +537,8 @@ export function validateOrderSubmission(
       lines.push({
         productSlug,
         variationSlug,
-        brand,
-        model,
+        brand: brand.value,
+        model: model.value,
         year: year.value,
         rows: rows.value,
         qty: qty.value,

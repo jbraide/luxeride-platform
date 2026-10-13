@@ -123,3 +123,32 @@ test("the zero-fee label is the word, not a naira figure", () => {
   assert.equal(ZERO_FEE_LABEL, "Free");
   assert.ok(!ZERO_FEE_LABEL.includes("0"), "it must not carry a figure");
 });
+
+test("a line with NO car passes validation — whether one is needed is the product's call", () => {
+  // A shop-only product (a seat cover) is bought without a make, model or year. That
+  // requirement belongs to the resolved `Product`, which this module never sees, so it is
+  // enforced in `/api/orders`; refusing an empty car here would refuse a legitimate line.
+  const result = validateOrderSubmission(
+    submission({
+      lines: [{ productSlug: DOUBLE_LAYER, brand: "", model: "", year: "", rows: null, qty: 1 }],
+    }),
+    LOCATIONS,
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.value.lines[0].brand, "");
+  assert.equal(result.value.lines[0].model, "");
+  assert.equal(result.value.lines[0].year, "");
+});
+
+test("a car that is present but malformed is still refused", () => {
+  // Optional is not unvalidated: a 5000-character make is a request that did not come
+  // from this catalogue, and an over-long one is refused rather than truncated.
+  const result = validateOrderSubmission(
+    submission({
+      lines: [{ productSlug: DOUBLE_LAYER, brand: "x".repeat(200), model: "Camry", year: "2020", rows: null, qty: 1 }],
+    }),
+    LOCATIONS,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.errors["lines.0.brand"]);
+});

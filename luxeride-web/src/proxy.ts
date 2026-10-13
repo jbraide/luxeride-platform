@@ -93,23 +93,41 @@ function toLogin(request: NextRequest): NextResponse {
   return response;
 }
 
+/**
+ * Pass the request through, tagging it with its own path and query.
+ *
+ * WHY: a layout cannot receive `searchParams`, and Next 16 sends a layout no `x-invoke-path`
+ * or `next-url` header — so the console shell had no way to know which screen it was on, or
+ * what a refusal had left in the URL. The read fell back to `/admin` every time, which is why
+ * the sidebar never highlighted the current screen and the corner alert could not see a
+ * refusal. The proxy already has `request.nextUrl`, so it forwards it.
+ *
+ * The value is origin-relative (path + search, never a host), so there is nothing here for a
+ * caller to aim somewhere else with.
+ */
+function forward(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set("x-luxeride-path", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return NextResponse.next({ request: { headers } });
+}
+
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
   // The sign-in page and the sign-out route are outside the gate by necessity:
   // a gate that protected the login page would be a gate with no way through it.
   if (pathname === LOGIN_PATH || pathname === SESSION_PATH || pathname === LOGOUT_PATH) {
-    return NextResponse.next();
+    return forward(request);
   }
 
   // 1. The session cookie.
   const user = verifySession(sessionFromRequest(request));
-  if (user) return NextResponse.next();
+  if (user) return forward(request);
 
   // 2. HTTP Basic Auth, unchanged.
   const credentials = parseBasicAuth(request.headers.get("authorization"));
   if (credentials && verifyAdminCredentials(credentials.user, credentials.password)) {
-    return NextResponse.next();
+    return forward(request);
   }
 
   // 3. Refused. A browser navigating to a page gets sent to sign in; everything

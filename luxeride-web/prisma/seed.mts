@@ -50,7 +50,7 @@ import { shouldSeedTable } from "./seed-guard.ts";
 
 const prisma = new PrismaClient();
 
-/** "Lagos Mainland & Island" -> "lagos-mainland-and-island". */
+/** "FCT (Abuja)" -> "fct-abuja". */
 function slugify(value: string): string {
   return value
     .toLowerCase()

@@ -6,6 +6,7 @@ import PageHeader from "@/components/admin/PageHeader";
 import EmptyState from "@/components/admin/EmptyState";
 import StatusChip from "@/components/admin/StatusChip";
 import { TABLE, TABLE_HEAD, TABLE_HEAD_CELL, TABLE_ROW, chip } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/vehicles` — the reviewable car list (`fitment-engine` §8.3).
@@ -281,12 +282,11 @@ export default async function VehiclesPage({
           aria-label="Search make or model"
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent"
         />
-        <button
-          type="submit"
+        <SubmitButton
           className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
         >
           Search
-        </button>
+        </SubmitButton>
       </form>
 
       <p className="mt-3 max-w-3xl text-xs leading-relaxed text-fg-muted">
@@ -390,27 +390,25 @@ export default async function VehiclesPage({
                   <input type="hidden" name="back" value={back} />
                   <input type="hidden" name="makeId" value={group.make.id} />
                   <input type="hidden" name="active" value="off" />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     formNoValidate
                     title={`Stop offering every ${group.make.name} in the catalogue — every model, every year range. Their prices and photographs are kept, and "Put all live" brings them back.`}
                     className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-danger hover:text-danger"
                   >
                     Withdraw all {group.make.name}
-                  </button>
+                  </SubmitButton>
                 </form>
                 <form method="post" action={setMakeActive} className="contents">
                   <input type="hidden" name="back" value={back} />
                   <input type="hidden" name="makeId" value={group.make.id} />
                   <input type="hidden" name="active" value="on" />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     formNoValidate
                     title={`Offer every ${group.make.name} again.`}
                     className="rounded-lg border border-accent/50 px-3 py-1 text-xs text-accent transition-colors hover:bg-accent hover:text-on-accent"
                   >
                     Put all live
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
 
@@ -460,28 +458,26 @@ export default async function VehiclesPage({
                           <input type="hidden" name="makeId" value={group.make.id} />
                           <input type="hidden" name="model" value={car.model} />
                           <input type="hidden" name="active" value="off" />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             formNoValidate
                             title={`Stop offering every year range of the ${car.model}. Its prices and photographs are kept, and "Put all live" brings them back.`}
                             className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-danger hover:text-danger"
                           >
                             Withdraw all
-                          </button>
+                          </SubmitButton>
                         </form>
                         <form method="post" action={setCarActive} className="contents">
                           <input type="hidden" name="back" value={back} />
                           <input type="hidden" name="makeId" value={group.make.id} />
                           <input type="hidden" name="model" value={car.model} />
                           <input type="hidden" name="active" value="on" />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             formNoValidate
                             title={`Offer every year range of the ${car.model} again.`}
                             className="rounded-lg border border-accent/50 px-3 py-1 text-xs text-accent transition-colors hover:bg-accent hover:text-on-accent"
                           >
                             Put all live
-                          </button>
+                          </SubmitButton>
                         </form>
 
                         <span aria-hidden className="hidden h-4 w-px bg-border sm:block" />
@@ -496,32 +492,29 @@ export default async function VehiclesPage({
                           className="contents"
                         >
                           <input type="hidden" name="back" value={back} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             name="active"
                             value="off"
                             formNoValidate
                             className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-danger hover:text-danger"
                           >
                             Withdraw
-                          </button>
-                          <button
-                            type="submit"
+                          </SubmitButton>
+                          <SubmitButton
                             name="active"
                             value="on"
                             formNoValidate
                             className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted transition-colors hover:border-accent hover:text-accent"
                           >
                             Put live
-                          </button>
-                          <button
-                            type="submit"
+                          </SubmitButton>
+                          <SubmitButton
                             formAction={deleteVehicles}
                             formNoValidate
                             className="rounded-lg border border-danger/60 px-3 py-1 text-xs text-danger transition-colors hover:bg-danger hover:text-on-accent"
                           >
                             Delete
-                          </button>
+                          </SubmitButton>
                         </form>
                       </div>
 
@@ -598,8 +591,7 @@ export default async function VehiclesPage({
                                         name="active"
                                         value={vehicle.active ? "off" : "on"}
                                       />
-                                      <button
-                                        type="submit"
+                                      <SubmitButton
                                         formNoValidate
                                         title={
                                           vehicle.active
@@ -613,21 +605,20 @@ export default async function VehiclesPage({
                                         }`}
                                       >
                                         {vehicle.active ? "Withdraw" : "Put live"}
-                                      </button>
+                                      </SubmitButton>
                                     </form>
                                     {/* The destructive one. It is a separate form so the button
                                         submits nothing but this range's id. */}
                                     <form method="post" action={deleteVehicle} className="contents">
                                       <input type="hidden" name="back" value={back} />
                                       <input type="hidden" name="vehicleId" value={vehicle.id} />
-                                      <button
-                                        type="submit"
+                                      <SubmitButton
                                         formNoValidate
                                         title="Remove this year range for good. Its prices and photographs go with it."
                                         className="rounded-lg border border-danger/60 px-3 py-1 text-xs text-danger transition-colors hover:bg-danger hover:text-on-accent"
                                       >
                                         Delete
-                                      </button>
+                                      </SubmitButton>
                                     </form>
                                   </div>
                                 </td>

@@ -1,7 +1,7 @@
 // NO IMPORTS. Deliberately, and it is load-bearing rather than tidiness.
 //
 // `flash.ts` needs `next/headers` and `next/navigation`, which are SERVER APIs, and
-// `AdminNotice` is a Client Component that needs the message table. When both reached
+// `AdminToast` is a Client Component that needs the message table. When both reached
 // the same module the build failed with "You're importing a module that depends on
 // next/headers into a React Client Component module" — which is the bundler correctly
 // refusing to pull a server API into the browser.
@@ -90,11 +90,13 @@ export const FLASH_MESSAGES: Record<string, string> = {
   // Storefront appearance
   heroLayout: "Saved. The homepage hero is now laid out that way for everyone.",
 
-  // Delivery zones (`/admin/delivery`)
-  deliveryZoneAdded: "Zone added. It is on the checkout, and its fee is what a customer in it will be charged.",
+  // Delivery zones (`/admin/delivery`) — one row per Nigerian state
+  deliveryZoneAdded: "State added. It is on the checkout, and its fee is what a customer in it will be charged.",
   deliveryZoneSaved: "Saved. The new fee and window are live at checkout and on the delivery policy.",
-  deliveryZoneDeleted: "Zone deleted, and the removal is in the audit log.",
-  deliveryBulkSaved: "Saved. That fee is now live on every zone you ticked.",
+  deliveryZoneDeleted: "State deleted, and the removal is in the audit log.",
+  deliveryZoneWithdrawn: "Withdrawn. That state is off the checkout and every published figure, and its orders are untouched.",
+  deliveryZoneRestored: "Back on the menu. That state is on the checkout again at the fee shown.",
+  deliveryBulkSaved: "Saved. That fee is now live on every state you chose.",
 };
 
 /** The sentence for a flash key, or null when the key is not one we know. */

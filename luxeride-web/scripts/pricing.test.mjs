@@ -382,6 +382,19 @@ test("an empty order is refused", () => {
   assert.equal(priceOrder({ lines: [], zone: ZONE, paymentMethod: "pod" }).ok, false);
 });
 
+test("a line with NO tier prices from the product's regular figure (a shop-only line)", () => {
+  // A shop-only product is bought without a car, so there is no brand and no tier. The
+  // honest figure is `regular`; pricing from `premium` here would add a brand uplift to an
+  // order that has no brand.
+  const order = priced({
+    lines: [{ ...matsLine({ brand: PREMIUM_BRAND }), tier: null }],
+    zone: ZONE,
+    paymentMethod: "pod",
+  });
+  assert.equal(order.lines[0].unitPrice, option(MATS, DOUBLE_LAYER).regular);
+  assert.notEqual(order.lines[0].unitPrice, option(MATS, DOUBLE_LAYER).premium);
+});
+
 // ─── Validation: reject, never clamp ───────────────────────────────────────────
 
 function submission(overrides = {}) {
@@ -446,7 +459,7 @@ test("a quantity outside 1-99 is REJECTED, not clamped", () => {
 });
 
 test("an unknown delivery zone is rejected", () => {
-  for (const location of ["", "   ", "Lagos", "lagos mainland & island", "Timbuktu", 42, null]) {
+  for (const location of ["", "   ", "Lagos Island", "lagos mainland & island", "Timbuktu", 42, null]) {
     const result = validateOrderSubmission(submission({ location }));
     assert.equal(result.ok, false, `zone ${JSON.stringify(location)} must not be accepted`);
     assert.ok(result.errors.location, `zone ${JSON.stringify(location)} must name the field`);
@@ -465,20 +478,24 @@ test("the zone is accepted by its exact name or by its slug", () => {
       .replace(/^-|-$/g, "");
   const locationRows = LOCATIONS.map((zone) => ({ ...zone, slug: slugify(zone.name) }));
 
-  // The name every surface uses today.
-  assert.equal(validateOrderSubmission(submission({ location: LOCATIONS[0].name })).ok, true);
-  assert.equal(validateZone(LOCATIONS[0].name).ok, true);
-  assert.equal(validateZone(LOCATIONS[0].name).value.fee, 9000);
+  // A state every surface serves today. Named rather than indexed, because the seed is
+  // alphabetical now: `LOCATIONS[0]` is "Abia", and a test that reads it as "Lagos" is
+  // a test that breaks the next time somebody adds a state that sorts earlier.
+  const lagos = LOCATIONS.find((zone) => zone.name === "Lagos");
+  assert.ok(lagos, "Lagos is one of the seeded states");
+  assert.equal(validateOrderSubmission(submission({ location: lagos.name })).ok, true);
+  assert.equal(validateZone(lagos.name).ok, true);
+  assert.equal(validateZone(lagos.name).value.fee, lagos.fee);
 
   // The slug the same zone carries as a `Location` row.
-  const bySlug = validateZone("lagos-mainland-and-island", locationRows);
+  const bySlug = validateZone("lagos", locationRows);
   assert.equal(bySlug.ok, true);
-  assert.equal(bySlug.value.fee, LOCATIONS[0].fee, "the fee comes from the row, not the identifier");
-  assert.equal(bySlug.value.name, LOCATIONS[0].name, "and the canonical name travels with it");
+  assert.equal(bySlug.value.fee, lagos.fee, "the fee comes from the row, not the identifier");
+  assert.equal(bySlug.value.name, lagos.name, "and the canonical name travels with it");
 
   // Not a slug when the catalogue has none: `LOCATIONS` is a storefront module
   // and never grew the column, so a slug against it is simply unknown.
-  assert.equal(validateZone("lagos-mainland-and-island").ok, false);
+  assert.equal(validateZone("lagos").ok, false);
 });
 
 test("an unknown payment method is rejected", () => {
@@ -681,5 +698,7 @@ test("the fixtures read the real catalogue, not a copy of it", () => {
   // And the product itself keeps the single-layer figures as its fallback quote.
   assert.equal(option(MATS, "single-layer").regular, 45000);
   assert.equal(getProductBySlug(MATS).regular, 45000);
-  assert.equal(LOCATIONS.length, 4);
+  // The 36 states and the FCT. The count is asserted so a state dropped by accident is a
+  // failing test rather than a silent gap in the checkout.
+  assert.equal(LOCATIONS.length, 37);
 });

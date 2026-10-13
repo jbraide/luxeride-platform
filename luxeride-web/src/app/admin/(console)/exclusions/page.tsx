@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { createExclusion, deleteExclusion } from "../actions";
 import { MAX_REASON_LENGTH, MAX_TRIM_LENGTH, messageFor, readEcho, readFailures } from "../confirm-guard";
 import PageHeader from "@/components/admin/PageHeader";
-import FieldErrors from "@/components/admin/FieldErrors";
 import EmptyState from "@/components/admin/EmptyState";
 import {
   BTN_PRIMARY,
@@ -17,6 +16,7 @@ import {
   SECTION_TITLE,
   inputState,
 } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/exclusions` — the known non-fits (`fitment-engine` §8.6).
@@ -82,8 +82,6 @@ export default async function ExclusionsPage({
         }
       />
 
-      <FieldErrors failures={failures} message={messageFor} />
-
       <section className="mt-8">
         <h3 className={SECTION_TITLE}>
           Recorded refusals <span className="font-mono text-xs text-accent-dim">{exclusions.length}</span>
@@ -114,9 +112,9 @@ export default async function ExclusionsPage({
                   </span>
                   <form method="post" action={deleteExclusion}>
                     <input type="hidden" name="exclusionId" value={exclusion.id} />
-                    <button type="submit" className={BTN_ROW}>
+                    <SubmitButton className={BTN_ROW}>
                       Remove
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-fg-muted">{exclusion.reason}</p>
@@ -266,9 +264,9 @@ export default async function ExclusionsPage({
             </p>
           </div>
 
-          <button type="submit" className={BTN_PRIMARY}>
+          <SubmitButton className={BTN_PRIMARY}>
             Record the exclusion
-          </button>
+          </SubmitButton>
         </form>
       </section>
     </div>

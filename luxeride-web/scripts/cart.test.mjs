@@ -32,6 +32,7 @@ import {
   clampQty,
   mergeLine,
   removeLine,
+  sanitiseCartItems,
   setLineQty,
 } from "../src/store/cart.ts";
 import { lineKey } from "../src/lib/order-pricing.ts";
@@ -143,4 +144,43 @@ test("the persisted shape has a version, so a stale cart can be migrated", () =>
   // Rehydration repairs a cart the old always-push `addItem` wrote, and it can only
   // recognise one if the version is recorded.
   assert.equal(typeof CART_STORE_VERSION, "number");
+});
+
+test("a line with NO car is kept — a shop-only product is bought without one", () => {
+  // A seat cover is bought without a make, model or year. Dropping it here would make the
+  // cart silently lose a line the customer deliberately added.
+  const kept = sanitiseCartItems([
+    {
+      id: "g",
+      productSlug: "seat-covers",
+      productName: "Seat Covers",
+      brand: "",
+      model: "",
+      year: "",
+      rows: null,
+      unitPrice: 100000,
+      qty: 1,
+    },
+  ]);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].brand, "");
+});
+
+test("a PARTIALLY-named car is dropped, because the server would refuse the whole order", () => {
+  // A brand with no model is a car-specific line that lost a field, not a shop-only one.
+  // Keeping it would make `/api/orders` reject every other line in the cart with it.
+  const kept = sanitiseCartItems([
+    {
+      id: "p",
+      productSlug: "floor-mats",
+      productName: "Floor Mats",
+      brand: "Toyota",
+      model: "",
+      year: "2020",
+      rows: null,
+      unitPrice: 68000,
+      qty: 1,
+    },
+  ]);
+  assert.equal(kept.length, 0);
 });

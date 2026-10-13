@@ -276,6 +276,12 @@ type ProductRow = {
   rowApplicable: boolean;
   threeRowSurcharge: number | null;
   /**
+   * The owner's switch: whether this product is bought BY CAR. It is the one field that
+   * decides whether a line needs a make, model and year — see the check in
+   * `resolveCatalogue` — so the pricing path has to carry it.
+   */
+  isCarSpecific: boolean;
+  /**
    * The category this product sits in, needed by the discount resolver so a
    * CATEGORY-scoped promotion can match a line. Loaded as a slug rather than
    * joined, so the resolver compares strings and never an id.
@@ -356,6 +362,7 @@ async function resolveCatalogue(
       premium: row.premium,
       rowApplicable: row.rowApplicable,
       threeRowSurcharge: row.threeRowSurcharge,
+      isCarSpecific: row.isCarSpecific,
       categorySlug: categorySlugsById.get(row.categoryId) ?? "",
       variations: row.variations.map((variation) => ({
         slug: variation.slug,
@@ -389,7 +396,25 @@ async function resolveCatalogue(
       errors[`lines.${index}.variationSlug`] =
         `"${line.variationSlug}" is not an option of ${line.productSlug}. Remove that line from your cart and try again.`;
     }
-    if (!makes.has(line.brand)) {
+    const product = products.get(line.productSlug);
+    // A CAR IS REQUIRED ONLY FOR A CAR-SPECIFIC PRODUCT, and this is the only place the
+    // requirement can be enforced: it is a property of the product, and validation never
+    // resolves one. A shop-only line (a seat cover, mud flaps) arrives with an empty car
+    // and is accepted; a floor-mat line missing its make is refused by field, exactly as
+    // it was before the fields became optional at validation time.
+    if (product?.isCarSpecific) {
+      if (line.brand === "") {
+        errors[`lines.${index}.brand`] = "Choose the make of the car this is for.";
+      }
+      if (line.model === "") {
+        errors[`lines.${index}.model`] = "Choose the model this is for.";
+      }
+      if (line.year === "") {
+        errors[`lines.${index}.year`] = "Enter the model year.";
+      }
+    }
+    // A make we do not price for is refused whether the line needed one or not.
+    if (line.brand !== "" && !makes.has(line.brand)) {
       errors[`lines.${index}.brand`] =
         `"${line.brand}" is not a make we price for. Remove that line and try again.`;
     }
@@ -476,7 +501,7 @@ async function priceSubmission(
 > {
   const toPrice: OrderLineToPrice[] = value.lines.map((line) => {
     const product = catalogue.products.get(line.productSlug) as ProductRow;
-    const make = catalogue.makes.get(line.brand) as MakeRow;
+    const make = catalogue.makes.get(line.brand);
     return {
       productSlug: line.productSlug,
       // Which layer. `unitPriceFor` reads it, so this is where a double-layer order
@@ -488,11 +513,11 @@ async function priceSubmission(
       rows: line.rows,
       qty: line.qty,
       product,
-      // `Make.defaultTier` is a plain `String` column and `Tier` is a union, so
-      // this cast is unchecked on purpose. `priceOrder` re-validates the value
-      // with its own `isTier`, so a row reading "Premium" or "" refuses the
-      // whole order naming the line, rather than silently pricing at regular.
-      tier: make.defaultTier as Tier,
+      // `Make.defaultTier` is a plain `String` column and `Tier` is a union, so the cast
+      // is unchecked on purpose; `priceOrder` re-validates it with `isTier`. NULL comes
+      // from a shop-only line, which has no brand and therefore no tier — `unitPriceFor`
+      // takes the product's `regular` figure for it.
+      tier: make ? (make.defaultTier as Tier) : null,
     };
   });
 
@@ -817,10 +842,13 @@ async function writeOrder(args: WriteArgs): Promise<
                   // Null when the catalogue has no such car yet, which is a
                   // legitimate line rather than a failed one.
                   vehicleId: line.vehicleId,
-                  brandSnapshot: line.brand,
-                  modelSnapshot: line.model,
+                  // NULL for a shop-only line — no car. See the schema note on the columns:
+                  // an empty car is a real state, and it is null rather than "" so a reader
+                  // cannot mistake it for a make called nothing.
+                  brandSnapshot: line.brand === "" ? null : line.brand,
+                  modelSnapshot: line.model === "" ? null : line.model,
                   // From the VALIDATED year, never from the raw request.
-                  yearSnapshot: Number(line.year),
+                  yearSnapshot: line.year === "" ? null : Number(line.year),
                   rows: line.rows,
                   // Frozen at write time and never re-derived: that is what keeps
                   // a March order correct after a price change or a layout split.
@@ -907,7 +935,10 @@ export async function POST(request: Request): Promise<Response> {
   // no field error, because no field the customer typed is wrong.
   let locationRows: LocationRow[];
   try {
-    locationRows = await prisma.location.findMany({ orderBy: { fee: "asc" } });
+    // ACTIVE ONLY. A withdrawn zone is off the checkout, so an order naming it is not a
+    // zone we serve — refusing it here is what stops the admin's "withdraw" from being
+    // cosmetic while a stale tab or a hand-crafted POST still prices against it.
+    locationRows = await prisma.location.findMany({ where: { active: true }, orderBy: { fee: "asc" } });
   } catch (error) {
     console.error("orders: could not read Location rows:", error);
     return rejected(
@@ -1045,9 +1076,11 @@ export async function POST(request: Request): Promise<Response> {
           // whose body drifted must be answered with what the order ON FILE says, and
           // the layer is part of that.
           variationSlug: item.variation?.slug ?? null,
-          brand: item.brandSnapshot,
-          model: item.modelSnapshot,
-          year: String(item.yearSnapshot),
+          // Null on a shop-only line; the wire shape and the cart use an empty string for
+          // "no car", so it is normalised here rather than leaking a null into `CartItem`.
+          brand: item.brandSnapshot ?? "",
+          model: item.modelSnapshot ?? "",
+          year: item.yearSnapshot === null ? "" : String(item.yearSnapshot),
           rows: item.rows as RowSelection,
           qty: item.qty,
         };

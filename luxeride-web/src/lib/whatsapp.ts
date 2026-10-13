@@ -61,7 +61,10 @@ export function buildOrderMessage(input: OrderMessageInput, preview = false): st
   const lines = input.items
     .map((i) => {
       const rowLine = i.rows ? ` (${i.rows}-Row)` : "";
-      return `📦 ${i.qty}x ${i.productName} — ${i.year} ${i.brand} ${i.model}${rowLine} — ${fmtNaira(i.unitPrice * i.qty)}`;
+      // A shop-only line has no car, so its brand, model and year are empty — printing
+      // them would leave a bare "—  —" in the message. The car half is dropped instead.
+      const car = [i.year, i.brand, i.model].filter(Boolean).join(" ");
+      return `📦 ${i.qty}x ${i.productName}${car ? ` — ${car}` : ""}${rowLine} — ${fmtNaira(i.unitPrice * i.qty)}`;
     })
     .join("\n");
 

@@ -92,9 +92,10 @@ interface ViewOrder {
   lines: {
     key: string;
     productName: string;
-    brand: string;
-    model: string;
-    year: number;
+    /** The car, or null on a shop-only line — bought without one. See the mapping below. */
+    brand: string | null;
+    model: string | null;
+    year: number | null;
     rows: string | null;
     qty: number;
     lineTotal: number;
@@ -243,7 +244,9 @@ export default async function OrderReferencePage({
         {view.lines.map((line) => (
           <div key={line.key} className="flex justify-between text-sm">
             <span>
-              {line.qty}x {line.productName} — {line.year} {line.brand} {line.model}
+              {line.qty}x {line.productName}
+              {/* The car, or nothing: a shop-only line is bought without one. */}
+              {line.brand ? ` — ${line.year} ${line.brand} ${line.model}` : ""}
               {line.rows ? ` (${line.rows}-Row)` : ""}
             </span>
             <span className="font-mono text-accent">{fmtNaira(line.lineTotal)}</span>

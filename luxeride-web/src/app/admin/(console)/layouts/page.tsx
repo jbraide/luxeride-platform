@@ -5,6 +5,7 @@ import PageHeader from "@/components/admin/PageHeader";
 import EmptyState from "@/components/admin/EmptyState";
 import StatusChip from "@/components/admin/StatusChip";
 import { TABLE, TABLE_HEAD, TABLE_HEAD_CELL, TABLE_ROW, chip } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/layouts` — every floor pan on file (`fitment-engine` §8.5).
@@ -100,12 +101,11 @@ export default async function LayoutsPage({
           aria-label="Search code, name or make"
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:border-accent"
         />
-        <button
-          type="submit"
+        <SubmitButton
           className="rounded-lg border border-border px-4 py-2 text-sm text-fg hover:border-accent"
         >
           Search
-        </button>
+        </SubmitButton>
       </form>
 
       {layouts.length === 0 ? (

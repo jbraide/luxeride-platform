@@ -162,8 +162,16 @@ export interface OrderLineIdentity {
  */
 export interface OrderLineToPrice extends OrderLineIdentity {
   product: PriceableProduct;
-  /** From `Make.defaultTier`, seeded from `BRANDS[brand].tier`. */
-  tier: Tier;
+  /**
+   * From `Make.defaultTier`, seeded from `BRANDS[brand].tier`.
+   *
+   * NULL when the line has no car — a shop-only product, bought without a make or model.
+   * The tier exists to pick a brand's price band, and with no brand there is nothing to
+   * pick: `unitPriceFor` falls to the product's own `regular` figure, which the owner sets
+   * for such a product knowing there is no premium uplift to add. Every car line still
+   * carries a tier, and a value that is neither a tier nor null is still refused below.
+   */
+  tier: Tier | null;
 }
 
 export interface PricedLine extends OrderLineIdentity {
@@ -171,7 +179,8 @@ export interface PricedLine extends OrderLineIdentity {
   index: number;
   /** `lineKey()` of this line — the cart's merge key (`cart-checkout` §8.1). */
   key: string;
-  tier: Tier;
+  /** The brand's tier, or null for a line with no car. See `OrderLineToPrice.tier`. */
+  tier: Tier | null;
   productName: string;
   unitPrice: number;
   lineTotal: number;
@@ -270,7 +279,9 @@ function isTier(value: unknown): value is Tier {
  * Three things it does that are easy to get wrong, and all three are the spec's words:
  *
  * - the tier selects the **product's** `premium` or `regular` figure; it never
- *   multiplies or applies a percentage.
+ *   multiplies or applies a percentage. With NO tier — a shop-only line, bought
+ *   without a car — it takes `regular`, which is the only figure that can be quoted
+ *   to a customer whose brand we do not know.
  * - the three-row surcharge applies **only** when the product is row-applicable
  *   AND three rows were chosen. A row selection supplied for a non-row product
  *   is ignored and charges nothing (`commerce-backend` § Error Handling), which
@@ -286,7 +297,7 @@ function isTier(value: unknown): value is Tier {
  */
 function unitPriceFor(
   product: PriceableProduct,
-  tier: Tier,
+  tier: Tier | null,
   rows: RowSelection,
   variationSlug?: string | null,
 ): number {
@@ -370,7 +381,7 @@ export function priceOrder(input: {
     if (typeof line?.product !== "object" || line.product === null) {
       fail("product", `No Product row for slug "${String(line?.productSlug)}".`);
     }
-    if (!isTier(line.tier)) {
+    if (line.tier !== null && !isTier(line.tier)) {
       fail("tier", `Brand tier must be "regular" or "premium"; got ${JSON.stringify(line.tier)}.`);
     }
     if (line.product && !isNairaAmount(line.product.regular)) {

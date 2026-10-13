@@ -9,9 +9,11 @@ import { useState } from "react";
  *
  * The console's shell explains that it has no `'use client'` anywhere, and that is
  * true of every screen with a FORM — because a form must work with scripting off,
- * and a Server Action does. This button is the documented exception, next to
- * `AdminNotice`: the clipboard is a browser API with no server equivalent, so
- * copying the WhatsApp message a customer will send cannot be done from the server.
+ * and a Server Action does. This button is one of the documented exceptions, beside
+ * `SubmitButton` and `AdminToast`: the clipboard is a browser API with no server
+ * equivalent, so copying the WhatsApp message a customer will send cannot be done
+ * from the server. (The same description used to name `AdminNotice`, which the corner
+ * alert replaced.)
  *
  * ── WHY IT DOES NOT REPLACE ANYTHING ─────────────────────────────────────────
  *

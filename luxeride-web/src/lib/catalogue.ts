@@ -213,6 +213,11 @@ function toProduct(row: ProductRow): Product {
     note: row.note ?? "",
     availability: row.availability ?? "",
     images: row.images,
+    // The owner's per-product switch. Selected by `productSelect` since the column
+    // existed, but not COPIED onto the storefront shape until 2026-10-13 — which is why
+    // the PDP offered "Select My Car" for a shop-only product: the flag never left the
+    // database. `AdminToast`-style honesty aside, the bug was simply a missing line here.
+    isCarSpecific: row.isCarSpecific,
     variations: row.variations.map(toVariation),
     materials: row.materials ?? undefined,
     inBox: row.inBox.length > 0 ? row.inBox : undefined,

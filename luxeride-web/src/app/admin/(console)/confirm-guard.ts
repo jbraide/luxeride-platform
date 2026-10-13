@@ -891,9 +891,13 @@ export function readFailures(
       // the two separators are now unambiguous, and several failures survive.
       for (const pair of entry.split(",")) {
         const separator = pair.lastIndexOf("~");
-        if (separator === -1) continue;
-        const field = pair.slice(0, separator);
-        const code = pair.slice(separator + 1);
+        // A BARE CODE IS A PAGE-LEVEL REFUSAL. `/admin/delivery` refuses a whole form
+        // ("the fee has to be a whole number"), not a named field, and encodes just the
+        // code with no `field~` prefix. The guard against junk is the `in` test below,
+        // not the separator, so accepting a bare code is safe: an unknown string is still
+        // dropped rather than rendered.
+        const field = separator === -1 ? "" : pair.slice(0, separator);
+        const code = separator === -1 ? pair : pair.slice(separator + 1);
         if (code in FAILURE_MESSAGES) failures.set(field, code as FailureCode);
       }
   }

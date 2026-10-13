@@ -3,8 +3,9 @@ import Link from "next/link";
 import { headers } from "next/headers";
 
 import { prisma } from "@/lib/db";
-import AdminNotice from "@/components/AdminNotice";
-import { readFlash } from "./flash";
+import AdminToast from "@/components/admin/AdminToast";
+import { flashMessage, readFlash } from "./flash";
+import { messageFor, readFailures } from "./confirm-guard";
 
 /**
  * The admin console shell (`fitment-engine` §8.1).
@@ -25,12 +26,14 @@ import { readFlash } from "./flash";
  * The rule is that every screen works with scripting disabled: no `useActionState`, no
  * client-side validation, no optimistic UI, so the server is the only implementation of
  * the evidence gate and every refusal renders as the same HTML whether the browser has
- * script or not. `AdminNotice` is the one deliberate exception — the flash has to time
- * itself out — which is why this says "almost".
+ * script or not. Two Client Components are deliberate exceptions — `SubmitButton`, which
+ * shows a running form, and `AdminToast`, which times the alert out — which is why this
+ * says "almost".
  *
- * ACTIVE-LINK HIGHLIGHTING IS DONE HERE, ON THE SERVER. The pathname arrives in a header
- * Next already sets (`x-invoke-path` on a Server Action POST, `next-url` on a render), so
- * marking the current link costs no client component and no round trip. This used to be
+ * ACTIVE-LINK HIGHLIGHTING IS DONE HERE, ON THE SERVER. The current path and query arrive
+ * in a header `src/proxy.ts` sets, so marking the current link costs no client component
+ * and no round trip. This used to read `x-invoke-path`/`next-url`, which Next 16 does not
+ * send to a layout at all — the read silently fell back to `/admin` on every screen.
  * recorded as a cost we had accepted; the header made it free.
  *
  * WHY THE SIGN-OUT IS A BUTTON
@@ -54,7 +57,8 @@ export const metadata: Metadata = {
  * is what the owner checks: which cars are covered, and what each one is priced at per
  * year range. CATALOGUE is what the shop sells: the categories, the products, and their
  * variations. PRICE is what a customer pays less than the confirmed figure, and when —
- * its own group because it is the only other screen that moves money. Grouping (§8.4) is deliberately NOT here yet: the
+ * plus delivery, which is the other figure that rides on top of the confirmed price
+ * rather than inside it. Grouping (§8.4) is deliberately NOT here yet: the
  * screen cannot be built honestly until §9.3's conflict rule is settled, because
  * every one of the 212 seeded layouts is `inferred` and §9.3 as written treats
  * `inferred` as conflicting — which would refuse every possible selection. A link
@@ -73,8 +77,10 @@ const NAV: { href: string; label: string; group: "Orders" | "Fitment" | "Catalog
   { href: "/admin/audit", label: "Audit", group: "Fitment" },
   { href: "/admin/categories", label: "Categories", group: "Catalogue" },
   { href: "/admin/products", label: "Products", group: "Catalogue" },
-  // Price, not catalogue: what a customer pays less than the confirmed figure, and
-  // when. Its own group because it is the only screen here that moves money.
+  // Price, not catalogue: what a customer pays ON TOP of the confirmed figure (delivery)
+  // and what they pay LESS of it (a promotion, a coupon). One group, because all three
+  // move the same number.
+  { href: "/admin/delivery", label: "Delivery", group: "Price" },
   { href: "/admin/promotions", label: "Promotions", group: "Price" },
   { href: "/admin/coupons", label: "Coupons", group: "Price" },
 ];
@@ -88,10 +94,13 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   // The pathname is read so the Dismiss link can return to THIS screen rather than
   // the dashboard. It comes from the header Next already sends, so it costs nothing
   // and needs no client component.
-  const [confirmed, key, pathname] = await Promise.all([
+  const [confirmed, key, requestUrl] = await Promise.all([
     prisma.layout.count({ where: { status: "confirmed" } }),
     readFlash(),
-    headers().then((h) => h.get("x-invoke-path") ?? h.get("next-url") ?? "/admin"),
+    // Set by `src/proxy.ts`. A layout cannot receive `searchParams`, and Next 16 sends no
+    // path or URL request header of its own, so the proxy forwards the current path AND
+    // query — the query carries a refusal, the path marks the active nav item.
+    headers().then((h) => h.get("x-luxeride-path") ?? "/admin"),
   ]);
 
   /**
@@ -101,11 +110,18 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
    * the dashboard: `/admin` is a prefix of every route, and a naive `startsWith` would
    * mark all eleven links at once on any nested screen.
    *
-   * `x-invoke-path` is the header Next sets on a Server Action POST; `next-url` is set
-   * on an ordinary render. Both are supplied by the framework, so this costs no client
-   * component and no extra round trip.
+   * `x-luxeride-path` is set by the proxy for every authorised console request, so this
+   * costs no client component and no extra round trip.
    */
-  const path = pathname.split("?")[0].replace(/\/$/, "") || "/admin";
+  const path = requestUrl.split("?")[0].replace(/\/$/, "") || "/admin";
+
+  // THE REFUSAL, READ OFF THE SAME URL. A refusal is a form state and rides in the query
+  // (`?e=field~code,…`); a layout cannot receive `searchParams`, so it is parsed from the
+  // header URL the pathname already came from. `readFailures` checks every code against the
+  // failure table, so nothing but a known sentence can reach the toast.
+  const failures = readFailures(
+    Object.fromEntries(new URL(requestUrl, "http://admin.invalid").searchParams),
+  );
   const currentPath = NAV.map((item) => item.href)
     .filter((href) => path === href || path.startsWith(`${href}/`))
     .sort((a, b) => b.length - a.length)[0];
@@ -263,10 +279,15 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
           JavaScript: the dismiss goes to `/admin/flash/clear`, which deletes the
           cookie and comes back.
         */}
-          {/* The ONE notice for the whole console: resolved and rendered by the
-              server, timed out by the client. `AdminNotice` explains why it is the
-              console's only Client Component, and why every form still works without JS. */}
-          <AdminNotice flashKey={key} currentPath={pathname} />
+          {/* The ONE alert for the whole console, in the corner: a success receipt or a
+              refusal summary, resolved on the server and timed out by the client.
+              `AdminToast` explains why it is a Client Component and why every form still
+              works without JavaScript. */}
+          <AdminToast
+            notice={flashMessage(key)}
+            errors={[...failures].map(([field, code]) => ({ field, message: messageFor(code) }))}
+            currentPath={path}
+          />
 
           {children}
         </div>

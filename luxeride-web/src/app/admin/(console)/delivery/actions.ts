@@ -10,7 +10,10 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { flashBack } from "../flash";
 
 /**
- * DELIVERY ZONES: create, edit, delete, and set the same fee on many at once.
+ * DELIVERY ZONES: create, edit, withdraw/restore, delete, and set one fee on many at once.
+ *
+ * A ZONE IS A NIGERIAN STATE. The table holds all 36 plus the FCT, and the fee on a state
+ * here is the fee a customer in that state is charged — there is no cluster in between.
  *
  * WHAT WAS WRONG WITH THE OLD ACTION
  *
@@ -57,10 +60,20 @@ function refusal(code: string): never {
 /** Every surface that renders a fee or a zone name. */
 function revalidateDelivery(): void {
   revalidatePath("/admin/delivery");
-  // The policy page and the contact page are PRERENDERED, so a fee change has to
-  // invalidate them or the site will keep publishing last week's prices.
+  // WHY THIS LIST IS THIS LONG. Most of these pages are PRERENDERED, so a fee change
+  // has to invalidate each one or the site keeps publishing last week's prices. The
+  // storefront's announcement bar (`AnnouncementBar`) reads the zones and is rendered by
+  // the ROOT layout, which means every statically-rendered storefront page carries a
+  // zone-derived string — the four policies included. `/cart` and `/checkout` were the
+  // ones actually being missed: both are static, and without this line a fee edited in
+  // the admin did not reach the page that charges it until the next deploy.
   revalidatePath("/policies/delivery");
+  revalidatePath("/policies/returns");
+  revalidatePath("/policies/privacy");
+  revalidatePath("/policies/terms");
   revalidatePath("/contact");
+  revalidatePath("/cart");
+  revalidatePath("/checkout");
 }
 
 /**
@@ -164,9 +177,11 @@ export async function saveDeliveryZone(formData: FormData): Promise<void> {
  * SET ONE FEE ON MANY ZONES AT ONCE — the owner's actual ask: "assign an amount to
  * multiple places at once when I select them".
  *
- * Ticked ids only. Unlike the vehicles screen there is no filter here that narrows the
- * list behind the operator's back, so the ids on screen ARE the selection — the reason
- * that screen reads by make instead of by id does not apply to a four-row table.
+ * Two ways to choose them, and both are needed: the boxes beside each state (apply to
+ * the ticked ones), and `scope=all` (apply to every state on the menu) — because the
+ * console has no JavaScript and nobody is going to tick all 37 boxes to set a nationwide
+ * price. Unlike the vehicles screen there is no filter here that narrows the list behind
+ * the operator's back, so the ids on screen ARE the selection.
  *
  * Only the zones that actually change are written, each audited on its own row, and a
  * repeat of the same fee reports `unchanged` rather than inventing a change.
@@ -174,9 +189,19 @@ export async function saveDeliveryZone(formData: FormData): Promise<void> {
 export async function bulkSetDeliveryFee(formData: FormData): Promise<void> {
   requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
 
-  const ids = formData
-    .getAll("zoneIds")
-    .filter((value): value is string => typeof value === "string" && value !== "");
+  // WHICH ZONES. "Apply to all" is how 37 state fees get set at once: the console ships
+  // no JavaScript, so a "select all" checkbox cannot be wired up, and ticking 37 boxes by
+  // hand is exactly the tedium the owner asked to be spared. It targets every ACTIVE zone,
+  // never a withdrawn one — a withdrawn zone has no fee to show anyone.
+  const scope = text(formData, "scope");
+  const ids =
+    scope === "all"
+      ? (await prisma.location.findMany({ where: { active: true }, select: { id: true } })).map(
+          (row) => row.id,
+        )
+      : formData
+          .getAll("zoneIds")
+          .filter((value): value is string => typeof value === "string" && value !== "");
 
   if (ids.length === 0) refusal("deliveryNoSelection");
 
@@ -229,10 +254,67 @@ export async function bulkSetDeliveryFee(formData: FormData): Promise<void> {
 }
 
 /**
- * REMOVE a zone. Refused while an order points at it: `Order.locationId` is a restricted
- * foreign key, and the honest answer to "can I delete Lagos?" is "not while Lagos orders
- * exist" rather than a database error. Withdrawing the zone from the checkout is not
- * offered because there is no "inactive" column — a zone is either on the menu or gone.
+ * WITHDRAW or RESTORE a zone — the answer to "I do not want to sell into this state any
+ * more" that is not "delete it".
+ *
+ * A zone with orders against it can never be deleted (`Order.locationId` is restricted),
+ * so before this the only options were to keep quoting a fee the owner no longer charges
+ * or to lose the order's delivery record. Withdrawal keeps the row, its orders and its
+ * history, and takes it off the checkout, the delivery policy and the fee band — the same
+ * shape as withdrawing a car or a product elsewhere in the console.
+ *
+ * The state machine is one boolean, so this toggles it and refuses to invent a change:
+ * withdrawing an already-withdrawn zone reports `unchanged` rather than writing an audit
+ * row that says something happened when nothing did.
+ */
+export async function setDeliveryZoneActive(formData: FormData): Promise<void> {
+  requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));
+
+  const id = text(formData, "id");
+  const active = text(formData, "active") === "true";
+  if (id === "") refusal("deliveryZoneNotFound");
+
+  const zone = await prisma.location.findUnique({
+    where: { id },
+    select: { name: true, active: true },
+  });
+  if (!zone) refusal("deliveryZoneNotFound");
+
+  if (zone.active === active) {
+    revalidateDelivery();
+    await flashBack("/admin/delivery", "unchanged");
+    return;
+  }
+
+  const who = process.env.ADMIN_USER ?? null;
+  await prisma.$transaction([
+    prisma.location.update({ where: { id }, data: { active } }),
+    prisma.auditEntry.create({
+      data: {
+        entity: "Location",
+        entityId: id,
+        action: "update",
+        field: "active",
+        before: zone.active,
+        after: active,
+        note: active
+          ? `delivery zone "${zone.name}" put back on the menu`
+          : `delivery zone "${zone.name}" withdrawn — off the checkout and every published figure, kept for the orders that point at it`,
+        who,
+      },
+    }),
+  ]);
+
+  revalidateDelivery();
+  await flashBack("/admin/delivery", active ? "deliveryZoneRestored" : "deliveryZoneWithdrawn");
+}
+
+/**
+ * REMOVE a zone for good. Refused while an order points at it — `Order.locationId` is a
+ * restricted foreign key, and the honest answer to "can I delete Lagos?" is "not while
+ * Lagos orders exist" rather than a database error. Since withdrawal now exists, DELETE is
+ * reserved for a zone that was added by mistake and never used; anything with history is
+ * withdrawn instead, which is why the button is the quiet one on the row.
  */
 export async function deleteDeliveryZone(formData: FormData): Promise<void> {
   requireAdmin(new Request(ACTION_REQUEST_URL, { headers: await headers() }));

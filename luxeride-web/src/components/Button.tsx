@@ -14,8 +14,19 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
 }
 
+/**
+ * The button's classes for a variant, so a plain `<a>` can wear the same shape.
+ *
+ * Exported for the WhatsApp CTA on a shop-only product (`BuyBox`, `StickyBuyBar`): that
+ * action leaves the site, so it cannot be a `<Link>` or a `<Button>`, but it must not look
+ * like a different class of control from the "Select My Car" button it replaces.
+ */
+export function buttonClass(variant: Variant = "primary", className = ""): string {
+  return `${base} ${variants[variant]} ${className}`;
+}
+
 export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
-  return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
+  return <button className={buttonClass(variant, className)} {...props} />;
 }
 
 export function LinkButton({
@@ -33,7 +44,7 @@ export function LinkButton({
   children: React.ReactNode;
 }) {
   return (
-    <Link href={href} onClick={onClick} className={`${base} ${variants[variant]} ${className}`}>
+    <Link href={href} onClick={onClick} className={buttonClass(variant, className)}>
       {children}
     </Link>
   );

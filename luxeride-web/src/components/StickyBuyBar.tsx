@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { formatPriceFrom } from "@/lib/availability";
 import { findVariation } from "@/lib/select-variation";
+import { fmtNaira } from "@/lib/pricing";
 import type { Product } from "@/data/products";
+import ShopAddToCart from "@/components/ShopAddToCart";
 
 /**
  * The mobile sticky buy bar (`storefront-catalog` §10.2).
@@ -30,6 +32,9 @@ export function StickyBuyBar({
   selectedSlug?: string | null;
 }) {
   const selected = findVariation(product, selectedSlug);
+  // A shop-only item is not bought by car, so the bar offers the cart rather than the Fit
+  // Finder — the same rule `BuyBox` applies, through the same client control.
+  const carSpecific = product.isCarSpecific !== false;
   const pricedFor: Product = selected
     ? {
         ...product,
@@ -41,6 +46,8 @@ export function StickyBuyBar({
       }
     : product;
   const price = formatPriceFrom(pricedFor);
+  // One figure for a shop-only line — its `regular` — for the reason `BuyBox` gives.
+  const shopUnitPrice = selected ? selected.regular : product.regular;
 
   return (
     <div
@@ -53,16 +60,29 @@ export function StickyBuyBar({
             {product.name}
             {selected ? ` — ${selected.name}` : ""}
           </p>
-          <p className="font-mono text-sm font-bold text-accent">{price.from}</p>
+          <p className="font-mono text-sm font-bold text-accent">
+            {carSpecific ? price.from : fmtNaira(shopUnitPrice)}
+          </p>
         </div>
-        <Link
-          href={`/fit-finder?product=${product.slug}${
-            selected ? `&variation=${encodeURIComponent(selected.slug)}` : ""
-          }`}
-          className="flex-shrink-0 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-on-accent active:scale-[0.98]"
-        >
-          Select My Car
-        </Link>
+        {carSpecific ? (
+          <Link
+            href={`/fit-finder?product=${product.slug}${
+              selected ? `&variation=${encodeURIComponent(selected.slug)}` : ""
+            }`}
+            className="flex-shrink-0 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-on-accent active:scale-[0.98]"
+          >
+            Select My Car
+          </Link>
+        ) : (
+          <ShopAddToCart
+            productSlug={product.slug}
+            productName={product.name}
+            variationSlug={selected?.slug ?? null}
+            unitPrice={shopUnitPrice}
+            image={product.images[0]}
+            size="compact"
+          />
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { prisma } from "@/lib/db";
 import EmptyState from "@/components/admin/EmptyState";
-import FieldErrors from "@/components/admin/FieldErrors";
 import PageHeader from "@/components/admin/PageHeader";
 import StatusChip from "@/components/admin/StatusChip";
 import {
@@ -20,6 +19,7 @@ import {
 } from "@/components/admin/ui";
 import { createProduct } from "../catalogue-actions";
 import { messageFor, readEcho, readFailures, slugify } from "../catalogue-guard";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/products` — every product in the shop, and the place to add one.
@@ -143,8 +143,6 @@ export default async function ProductsPage({
         })}
       </nav>
 
-
-      <FieldErrors failures={failures} message={messageFor} />
 
       {/* ── Existing products ────────────────────────────────────────────── */}
       <section className="mt-8">
@@ -408,9 +406,9 @@ export default async function ProductsPage({
             </div>
 
             <div className="sm:col-span-3">
-              <button type="submit" className={BTN_PRIMARY}>
+              <SubmitButton className={BTN_PRIMARY}>
                 Create product
-              </button>
+              </SubmitButton>
             </div>
           </form>
         )}

@@ -500,6 +500,11 @@ export default function CheckoutView({ zones }: { zones: DeliveryZone[] }) {
 
     let response: OrderAcceptedResponse | null = null;
 
+    // The moment of commitment, fired BEFORE the request. It is the only way to
+    // tell a form someone abandoned from one that reached the server and failed —
+    // without it the drop between `checkout_start` and `lead` is unattributable.
+    track("checkout_submit", { itemCount, subtotal: cartSubtotal, zone: zone?.name ?? null });
+
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -534,10 +539,16 @@ export default function CheckoutView({ zones }: { zones: DeliveryZone[] }) {
               }
             : (rejected?.fieldErrors ?? { request: "We could not take that order. Try again in a moment." }),
         );
+        track("order_failed", {
+          reason: "rejected",
+          status: res.status,
+          code: rejected?.reason ?? null,
+        });
         setPhase({ step: "form" });
         return;
       }
     } catch {
+      track("order_failed", { reason: "unreachable", status: 0, code: null });
       // Requirement 12.4: an unreachable endpoint keeps the cart, keeps the
       // draft, and offers a retry AND a manual WhatsApp fallback built from the
       // customer's own details. The reference in that message is the browser-
@@ -725,8 +736,10 @@ export default function CheckoutView({ zones }: { zones: DeliveryZone[] }) {
                 {/* The layer on the receipt. A Floor Mats order that does not say which
                     layer is a receipt for half a description, and the price beside it
                     is one of two. */}
-                {optionLabel(line.variationSlug) ? ` (${optionLabel(line.variationSlug)})` : ""} —{" "}
-                {line.year} {line.brand} {line.model}
+                {optionLabel(line.variationSlug) ? ` (${optionLabel(line.variationSlug)})` : ""}
+                {/* The car, or nothing: a shop-only line has none, and printing the empty
+                    fields would leave a dangling " — ". */}
+                {line.brand ? ` — ${line.year} ${line.brand} ${line.model}` : ""}
                 {line.rows ? ` (${line.rows}-Row)` : ""}
               </span>
               <span className="font-mono text-accent">{fmtNaira(line.lineTotal)}</span>

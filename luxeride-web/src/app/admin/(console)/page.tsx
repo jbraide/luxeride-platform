@@ -9,6 +9,7 @@ import { messageFor, readFailures } from "./catalogue-guard";
 import EmptyState from "@/components/admin/EmptyState";
 import PageHeader from "@/components/admin/PageHeader";
 import StatusChip from "@/components/admin/StatusChip";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin` — the console dashboard (`fitment-engine` §8.2, milestone M9.3).
@@ -572,12 +573,11 @@ export default async function AdminPage({
             </div>
           </fieldset>
 
-          <button
-            type="submit"
+          <SubmitButton
             className="mt-3 rounded-lg border border-accent bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
           >
             Save layout
-          </button>
+          </SubmitButton>
         </form>
       </section>
 

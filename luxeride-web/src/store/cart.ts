@@ -196,9 +196,10 @@ export function removeLine(items: readonly CartItem[], id: string): CartItem[] {
  *
  * WHAT IS DROPPED, and why it is that list and not a wider one:
  *
- * - a missing slug, make, model or year — the line cannot be quoted at all, and
+ * - a missing slug, or a PARTIALLY-named car — the line cannot be quoted, and
  *   `validateOrderSubmission` would reject the WHOLE order for it (§5.3), so
- *   keeping it costs the customer every other line in the cart.
+ *   keeping it costs the customer every other line in the cart. An ENTIRELY absent car
+ *   is NOT dropped: that is a shop-only line, and it is valid.
  * - a non-finite or negative `unitPrice` — a price is not a thing you can fix by
  *   guessing at it.
  * - a non-numeric `qty`.
@@ -231,11 +232,17 @@ export function sanitiseCartItems(raw: unknown): CartItem[] {
         ? candidate.unitPrice
         : null;
 
+    // A LINE WITH NO CAR IS VALID: a shop-only product is bought without a make or model.
+    // A PARTIAL car is not — that is a car-specific line that lost a field, the server
+    // would refuse the whole order for it, and it is dropped here like the other unusable
+    // lines. `null` is "absent"; the stored value is the empty string, matching
+    // `CartItem`'s `string` car fields.
+    const hasCar = brand !== null && model !== null && year !== null;
+    const noCar = brand === null && model === null && year === null;
+
     if (
       productSlug === null ||
-      brand === null ||
-      model === null ||
-      year === null ||
+      (!hasCar && !noCar) ||
       qty === null ||
       unitPrice === null
     ) {
@@ -243,6 +250,9 @@ export function sanitiseCartItems(raw: unknown): CartItem[] {
     }
     if (!(candidate.rows === null || candidate.rows === "2" || candidate.rows === "3")) continue;
     const option = optionSlug(candidate.variationSlug);
+    const carBrand = brand ?? "";
+    const carModel = model ?? "";
+    const carYear = year ?? "";
 
     const line: CartItem = {
       // The line key doubles as the fallback id: it is already unique per line
@@ -255,18 +265,18 @@ export function sanitiseCartItems(raw: unknown): CartItem[] {
           // cart written by an older build gets ids keyed without it and a line added
           // afterwards finds no match for itself.
           variationSlug: option,
-          brand,
-          model,
-          year,
+          brand: carBrand,
+          model: carModel,
+          year: carYear,
           rows: candidate.rows,
           qty,
         }),
       productSlug,
       variationSlug: option,
       productName: text(candidate.productName) ?? productSlug,
-      brand,
-      model,
-      year,
+      brand: carBrand,
+      model: carModel,
+      year: carYear,
       rows: candidate.rows,
       unitPrice,
       qty,

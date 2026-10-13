@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { prisma } from "@/lib/db";
 import EmptyState from "@/components/admin/EmptyState";
-import FieldErrors from "@/components/admin/FieldErrors";
 import PageHeader from "@/components/admin/PageHeader";
 import StatusChip from "@/components/admin/StatusChip";
 import {
@@ -22,6 +21,7 @@ import {
   readFailures,
   toDateTimeInput,
 } from "../promo-guard";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/coupons` — the codes a customer types.
@@ -99,8 +99,6 @@ export default async function CouponsPage({
           </a>
         }
       />
-
-      <FieldErrors failures={failures} message={messageFor} />
 
       <section className="mt-8">
         <h3 className="font-display text-base font-semibold">
@@ -222,9 +220,9 @@ export default async function CouponsPage({
                       {refusal(`endsAt__${coupon.id}`)}
                     </div>
                     <div className="flex items-end">
-                      <button type="submit" className={BTN_SECONDARY}>
+                      <SubmitButton className={BTN_SECONDARY}>
                         Save
-                      </button>
+                      </SubmitButton>
                     </div>
                     <div className="flex items-end gap-3 sm:col-span-3">
                       <label className="flex items-center gap-2 text-sm text-fg/80">
@@ -236,8 +234,7 @@ export default async function CouponsPage({
                         />
                         Switched on
                       </label>
-                      <button
-                        type="submit"
+                      <SubmitButton
                         formAction={deleteCoupon}
                         disabled={coupon.redemptions > 0}
                         title={
@@ -248,7 +245,7 @@ export default async function CouponsPage({
                         className="text-xs text-fg-muted underline-offset-4 hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         Delete
-                      </button>
+                      </SubmitButton>
                     </div>
                   </form>
                 </li>
@@ -349,9 +346,9 @@ export default async function CouponsPage({
               />
             </div>
             <div className="sm:col-span-3">
-              <button type="submit" className={BTN_PRIMARY}>
+              <SubmitButton className={BTN_PRIMARY}>
                 Create coupon
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </div>

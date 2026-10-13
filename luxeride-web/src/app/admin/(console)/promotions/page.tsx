@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { prisma } from "@/lib/db";
 import EmptyState from "@/components/admin/EmptyState";
-import FieldErrors from "@/components/admin/FieldErrors";
 import PageHeader from "@/components/admin/PageHeader";
 import StatusChip from "@/components/admin/StatusChip";
 import {
@@ -24,6 +23,7 @@ import {
   readFailures,
   toDateTimeInput,
 } from "../promo-guard";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/promotions` — time-boxed price reductions, created and managed here.
@@ -106,8 +106,6 @@ export default async function PromotionsPage({
           </a>
         }
       />
-
-      <FieldErrors failures={failures} message={messageFor} />
 
       {/* ── Existing ──────────────────────────────────────────────────────── */}
       <section className="mt-8">
@@ -233,9 +231,9 @@ export default async function PromotionsPage({
                       {refusal(`endsAt__${promotion.id}`)}
                     </div>
                     <div className="flex items-end">
-                      <button type="submit" className={BTN_SECONDARY}>
+                      <SubmitButton className={BTN_SECONDARY}>
                         Save
-                      </button>
+                      </SubmitButton>
                     </div>
                     <div className="flex items-end gap-3 sm:col-span-3">
                       <label className="flex items-center gap-2 text-sm text-fg/80">
@@ -247,13 +245,12 @@ export default async function PromotionsPage({
                         />
                         Switched on
                       </label>
-                      <button
-                        type="submit"
+                      <SubmitButton
                         formAction={deletePromotion}
                         className="text-xs text-fg-muted underline-offset-4 hover:text-danger"
                       >
                         Delete
-                      </button>
+                      </SubmitButton>
                     </div>
                   </form>
                 </li>
@@ -413,9 +410,9 @@ export default async function PromotionsPage({
             </div>
 
             <div className="sm:col-span-3">
-              <button type="submit" className={BTN_PRIMARY}>
+              <SubmitButton className={BTN_PRIMARY}>
                 Create promotion
-              </button>{" "}
+              </SubmitButton>{" "}
               <Link href="/admin/coupons" className="ml-3 text-sm text-fg-muted underline-offset-4 hover:text-accent hover:underline">
                 Coupons \u2192
               </Link>

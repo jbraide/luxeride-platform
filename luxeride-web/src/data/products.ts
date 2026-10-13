@@ -86,6 +86,22 @@ export interface Product {
   images: string[]; // paths under /public
 
   /**
+   * WHETHER THE FIT FINDER OFFERS THIS — the owner's per-product switch.
+   *
+   * Added to the storefront shape 2026-10-13. The column was always SELECTED (`productSelect`
+   * in `src/lib/catalogue.ts`) but never copied onto this type, so the PDP could not tell a
+   * car-cut product from a shop-only one and offered "Select My Car & Add to Cart" for both.
+   * The flag was honoured by the Fit Finder and ignored everywhere else.
+   *
+   * OPTIONAL because the seed fixture in this file deliberately does not set it: the column
+   * defaults to `true` and the flag is the owner's decision in `/admin/products`, so the
+   * fixture stays the shape it has always been. `toProduct()` always sets it from the row, so
+   * a product read from the database is never missing it, and `!== false` reads an absent one
+   * as the database default.
+   */
+  isCarSpecific?: boolean;
+
+  /**
    * The options on this product. Added 2026-10-04.
    *
    * ALWAYS present, and always at least one long, on a database-backed product:

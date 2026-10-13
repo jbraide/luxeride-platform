@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { prisma } from "@/lib/db";
 import EmptyState from "@/components/admin/EmptyState";
-import FieldErrors from "@/components/admin/FieldErrors";
 import PageHeader from "@/components/admin/PageHeader";
 import {
   BTN_DANGER,
@@ -25,6 +24,7 @@ import {
   updateCategory,
 } from "../catalogue-actions";
 import { messageFor, readEcho, readFailures, slugify } from "../catalogue-guard";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/categories` — the shop's top level, created and managed here.
@@ -107,8 +107,6 @@ export default async function CategoriesPage({
         }
       />
 
-      <FieldErrors failures={failures} message={messageFor} />
-
       {/* ── Existing categories ───────────────────────────────────────────── */}
       <section className="mt-8">
         <h3 className={SECTION_TITLE}>
@@ -173,9 +171,9 @@ export default async function CategoriesPage({
                     {refusal(`slug__${category.id}`)}
                   </div>
                   <div className="flex items-end">
-                    <button type="submit" className={BTN_SECONDARY}>
+                    <SubmitButton className={BTN_SECONDARY}>
                       Save
-                    </button>
+                    </SubmitButton>
                   </div>
                   <div className="sm:col-span-3">
                     <label htmlFor={`blurb__${category.id}`} className={LABEL}>
@@ -189,8 +187,7 @@ export default async function CategoriesPage({
                     />
                   </div>
                   <div className="flex items-end">
-                    <button
-                      type="submit"
+                    <SubmitButton
                       formAction={deleteCategory}
                       disabled={category._count.products > 0}
                       title={
@@ -201,7 +198,7 @@ export default async function CategoriesPage({
                       className={BTN_DANGER}
                     >
                       Delete
-                    </button>
+                    </SubmitButton>
                   </div>
                 </form>
 
@@ -246,10 +243,10 @@ export default async function CategoriesPage({
                         </select>
                         {refusal("toCategoryId")}
                       </div>
-                      <button type="submit" className={BTN_SECONDARY}>
+                      <SubmitButton className={BTN_SECONDARY}>
                         Move {category._count.products} product
                         {category._count.products === 1 ? "" : "s"}
-                      </button>
+                      </SubmitButton>
                     </form>
 
                     <details className="mt-3 rounded-lg border border-danger/40 px-4 py-3">
@@ -264,13 +261,12 @@ export default async function CategoriesPage({
                       </p>
                       <form method="post" action={deleteCategoryAndProducts} className="mt-2">
                         <input type="hidden" name="id" value={category.id} />
-                        <button
-                          type="submit"
+                        <SubmitButton
                           className={BTN_DANGER}
                         >
                           Delete this category and its {category._count.products} product
                           {category._count.products === 1 ? "" : "s"}
-                        </button>
+                        </SubmitButton>
                       </form>
                     </details>
                   </div>
@@ -331,9 +327,9 @@ export default async function CategoriesPage({
             <input id="new-blurb" name="blurb" defaultValue={echo("blurb")} className={INPUT} />
           </div>
           <div className="sm:col-span-3">
-            <button type="submit" className={BTN_PRIMARY}>
+            <SubmitButton className={BTN_PRIMARY}>
               Create category
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </section>

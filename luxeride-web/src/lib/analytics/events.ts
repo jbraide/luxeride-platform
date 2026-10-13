@@ -39,8 +39,10 @@ export type LuxeEventName =
   // invisible, which is the one thing an ad run needs to be judged on.
   | "cart_view"
   | "checkout_start"
+  | "checkout_submit"
   | "checkout_validation_error"
   | "order_prepared"
+  | "order_failed"
   | "handoff_attempted"
   | "handoff_confirmed";
 
@@ -110,13 +112,21 @@ export const EVENT_REGISTRY: Record<LuxeEventName, EventDefinition> = {
   },
   ref_code_copied: { meta: "RefCodeCopied", metaType: "custom", ga4: "ref_code_copied" },
   cart_view: { meta: "CartView", metaType: "custom", ga4: "view_cart" },
-  checkout_start: { meta: "CheckoutStart", metaType: "custom", ga4: "begin_checkout" },
+  // `checkout_start` is the checkout PAGE opening; `begin_checkout` is the cart
+  // BUTTON being clicked. They are different moments, so they carry different GA4
+  // names — mapping both to GA4's `begin_checkout` counted that event twice.
+  checkout_start: { meta: "CheckoutStart", metaType: "custom", ga4: "checkout_start" },
+  // The form being submitted, fired BEFORE the network call, and its failure
+  // outcome. Without these a drop between `checkout_start` and `lead` cannot be
+  // split into "abandoned the form" and "the server refused or was unreachable".
+  checkout_submit: { meta: "CheckoutSubmit", metaType: "custom", ga4: "checkout_submit" },
   checkout_validation_error: {
     meta: "CheckoutValidationError",
     metaType: "custom",
     ga4: "checkout_validation_error",
   },
   order_prepared: { meta: "OrderPrepared", metaType: "custom", ga4: "order_prepared" },
+  order_failed: { meta: "OrderFailed", metaType: "custom", ga4: "order_failed" },
   handoff_attempted: { meta: "HandoffAttempted", metaType: "custom", ga4: "handoff_attempted" },
   handoff_confirmed: { meta: "HandoffConfirmed", metaType: "custom", ga4: "handoff_confirmed" },
 };
@@ -215,6 +225,12 @@ export interface CheckoutStartPayload {
   /** The zone name, never the customer's address. */
   zone: string | null;
 }
+export interface CheckoutSubmitPayload {
+  itemCount: number;
+  subtotal: number;
+  /** The zone name, never the customer's address. */
+  zone: string | null;
+}
 export interface CheckoutValidationErrorPayload {
   /** Which control failed — a field name, never the value typed into it. */
   field: "name" | "phone" | "address" | "zone" | "consent";
@@ -227,6 +243,14 @@ export interface OrderPreparedPayload {
   itemCount: number;
   /** The short campaign key, or `(not set)`. Never a raw UTM or click id (§6.5). */
   campaign: string;
+}
+export interface OrderFailedPayload {
+  /** `rejected` — the server answered with a refusal. `unreachable` — the request never landed. */
+  reason: "rejected" | "unreachable";
+  /** The HTTP status when there was a response, `0` when the request threw. */
+  status: number;
+  /** The server's own code when it named one (`catalogue_unavailable`, a field path). Never customer data. */
+  code: string | null;
 }
 export interface HandoffAttemptedPayload {
   ref: string;
@@ -257,8 +281,10 @@ export interface EventMap {
   ref_code_copied: RefCodeCopiedPayload;
   cart_view: CartViewPayload;
   checkout_start: CheckoutStartPayload;
+  checkout_submit: CheckoutSubmitPayload;
   checkout_validation_error: CheckoutValidationErrorPayload;
   order_prepared: OrderPreparedPayload;
+  order_failed: OrderFailedPayload;
   handoff_attempted: HandoffAttemptedPayload;
   handoff_confirmed: HandoffConfirmedPayload;
 }

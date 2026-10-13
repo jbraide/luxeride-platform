@@ -868,6 +868,37 @@ export default function FitFinder({
         </div>
       )}
 
+      {/*
+        WHICH CAR, ON EVERY STEP AFTER THE CHOICE.
+
+        The owner: "I didn't know what car I selected on the next step." The year, layer
+        and row steps are all questions ABOUT a car, and nothing on them named the one
+        being answered — so a mis-tap in the search list was invisible until the result
+        card several screens later. Shown only on the steps that ASK about the car and not
+        on the outcome screens, which already name it.
+      */}
+      {(step === "year" || step === "product" || step === "row") && brand && model && (
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/60 px-4 py-2.5">
+          <p className="min-w-0 truncate text-sm text-fg/85">
+            <span className="text-fg-muted">Your car:</span>{" "}
+            <span className="font-medium">
+              {brand} {model}
+            </span>
+            {/* The year is only named once it has been CHOSEN — on the year step itself
+                the dropdown is still open, so printing the current value would state a
+                decision the customer has not made. */}
+            {step !== "year" && <span className="text-fg-muted"> · {year}</span>}
+          </p>
+          <button
+            type="button"
+            onClick={() => setStep("car")}
+            className="flex-shrink-0 text-xs text-accent underline-offset-4 hover:underline"
+          >
+            Change
+          </button>
+        </div>
+      )}
+
       {step === "car" && (
         <div>
           <h2 className="font-display text-2xl font-semibold">What do you drive?</h2>

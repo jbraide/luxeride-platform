@@ -485,8 +485,16 @@ model Location {
   /// e.g. "24–48 hours".
   etaText String
 
+  /// A withdrawn zone stays on every order that already points at it — `Order.locationId`
+  /// is a restricted foreign key, so deleting the row would strand them — but leaves the
+  /// checkout and every published figure. This is what lets the owner retire a zone the
+  /// way he retires a car or a product, instead of being told "you cannot delete this".
+  active Boolean @default(true)
+
   createdAt DateTime @default(now())
   orders    Order[]
+
+  @@index([active])
 }
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
@@ -575,9 +583,14 @@ model OrderItem {
 
   /// Snapshots of what was bought, frozen. A vehicle rename must not rewrite
   /// history.
-  brandSnapshot String
-  modelSnapshot String
-  yearSnapshot  Int
+  ///
+  /// NULL when the line has NO CAR. A shop-only product (`Product.isCarSpecific: false`)
+  /// is bought without a make, model or year — the owner's whole point of the switch — and
+  /// the order still has to be writable. So "no car" is a real state on the row rather
+  /// than an empty string standing in for one, and the readers omit the car when it is null.
+  brandSnapshot String?
+  modelSnapshot String?
+  yearSnapshot  Int?
   /// "2" | "3" | null.
   rows          String?
 

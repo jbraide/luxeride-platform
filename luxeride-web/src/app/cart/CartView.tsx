@@ -111,7 +111,21 @@ export default function CartView({ zones }: { zones: DeliveryZone[] }) {
           // Camry. The controls therefore name the car as well: with the product
           // alone, every "Increase quantity of Double Layer Mats" on the page
           // was the same control as far as a screen reader was concerned.
-          const car = `${item.year} ${item.brand} ${item.model}`;
+          //
+          // A SHOP-ONLY LINE HAS NO CAR — the three fields are empty — so the car
+          // half drops out rather than leaving a gap, and the controls say "no car"
+          // instead of trailing an unmatched "for ".
+          const car = [item.year, item.brand, item.model].filter(Boolean).join(" ");
+          const carLabel = car || "no car needed";
+          // What tells THIS line apart from its neighbours: the car, the row count and
+          // the option. The option matters because the layer is part of the line's
+          // identity — a cart holding both layers shows two lines both reading "Floor
+          // Mats" with nothing to tell them apart, and they are charged differently.
+          const details = [
+            car,
+            item.rows ? `${item.rows}-Row` : "",
+            item.variationSlug ? optionLabel(item.variationSlug) : "",
+          ].filter(Boolean);
           return (
             <div key={item.id} className="flex gap-4 rounded-xl border border-border bg-surface p-4">
               {item.image && (
@@ -124,18 +138,13 @@ export default function CartView({ zones }: { zones: DeliveryZone[] }) {
               )}
               <div className="flex-1">
                 <p className="font-display font-semibold">{item.productName}</p>
-                <p className="mt-0.5 text-xs text-fg-muted">
-                  {car}
-                  {item.rows ? ` · ${item.rows}-Row` : ""}
-                  {/* WHICH OPTION. The layer is part of the line's identity, so a cart
-                      holding both layers shows two lines both reading "Floor Mats" with
-                      nothing to tell them apart — and they are charged differently. */}
-                  {item.variationSlug ? ` · ${optionLabel(item.variationSlug)}` : ""}
-                </p>
+                {details.length > 0 && (
+                  <p className="mt-0.5 text-xs text-fg-muted">{details.join(" · ")}</p>
+                )}
                 <div className="mt-2 flex items-center gap-3">
                   <div className="flex items-center rounded-lg border border-fg-muted/25">
                     <button
-                      aria-label={`Decrease quantity of ${item.productName} for ${car}`}
+                      aria-label={`Decrease quantity of ${item.productName} for ${carLabel}`}
                       className="px-3 py-1 text-fg/70 hover:text-accent"
                       // Not disabled at 1: `setLineQty` removes the line at zero,
                       // which is what §7.2 asks this control to do. It used to be a
@@ -147,7 +156,7 @@ export default function CartView({ zones }: { zones: DeliveryZone[] }) {
                     </button>
                     <span className="w-8 text-center font-mono text-sm">{item.qty}</span>
                     <button
-                      aria-label={`Increase quantity of ${item.productName} for ${car}`}
+                      aria-label={`Increase quantity of ${item.productName} for ${carLabel}`}
                       // Disabled at the ceiling `validateQty` enforces, so the cart
                       // can never hold a quantity the server would reject whole
                       // (`cart-checkout` §7.3, `commerce-backend` §5.3).
@@ -159,7 +168,7 @@ export default function CartView({ zones }: { zones: DeliveryZone[] }) {
                     </button>
                   </div>
                   <button
-                    aria-label={`Remove ${item.productName} for ${car} from cart`}
+                    aria-label={`Remove ${item.productName} for ${carLabel} from cart`}
                     onClick={() => removeItem(item.id)}
                     className="text-xs text-fg-muted hover:text-fg"
                   >

@@ -6,11 +6,9 @@ import { fmtNaira } from "@/lib/pricing";
 import { ZERO_FEE_LABEL } from "@/lib/order-pricing";
 import { customerThreadLink } from "@/lib/whatsapp";
 import { ORDER_STATUSES, orderStatusHint, orderStatusLabel } from "@/lib/order-status";
-import { messageFor, readFailures } from "../../confirm-guard";
 import { setOrderStatus } from "../../order-actions";
 import CopyButton from "./CopyButton";
 import PageHeader from "@/components/admin/PageHeader";
-import FieldErrors from "@/components/admin/FieldErrors";
 import StatusChip, { type StatusTone } from "@/components/admin/StatusChip";
 import {
   BTN_GHOST,
@@ -27,6 +25,7 @@ import {
   TABLE_HEAD_CELL,
   TABLE_ROW,
 } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/orders/[id]` — one order, and the only place its status changes.
@@ -100,7 +99,6 @@ export default async function OrderDetailPage({
 }) {
   const { id } = await params;
   const query = await searchParams;
-  const failures = readFailures(query);
 
   const order = await prisma.order.findUnique({
     where: { id },
@@ -164,8 +162,6 @@ export default async function OrderDetailPage({
         }
       />
 
-      <FieldErrors failures={failures} message={messageFor} />
-
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── LEFT: what was ordered ─────────────────────────────────────── */}
         <div>
@@ -196,11 +192,18 @@ export default async function OrderDetailPage({
                     )}
                   </td>
                   <td className="py-2 pr-4 text-xs text-fg-muted">
-                    {item.brandSnapshot} {item.modelSnapshot}
-                    <span className="block font-mono text-[11px] text-accent-dim">
-                      {item.yearSnapshot}
-                      {item.rows ? ` · ${item.rows}-row` : ""}
-                    </span>
+                    {/* NULL car columns are a shop-only line — bought without a car. */}
+                    {item.brandSnapshot ? (
+                      <>
+                        {item.brandSnapshot} {item.modelSnapshot}
+                        <span className="block font-mono text-[11px] text-accent-dim">
+                          {item.yearSnapshot}
+                          {item.rows ? ` · ${item.rows}-row` : ""}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-accent-dim">No car needed</span>
+                    )}
                   </td>
                   <td className={`py-2 pr-4 font-mono text-sm ${NUM}`}>{item.qty}</td>
                   <td className={`py-2 pr-4 font-mono text-sm text-fg-muted ${NUM}`}>
@@ -333,9 +336,9 @@ export default async function OrderDetailPage({
               />
             </label>
 
-            <button type="submit" className={`mt-3 ${BTN_PRIMARY}`}>
+            <SubmitButton className={`mt-3 ${BTN_PRIMARY}`}>
               Save status
-            </button>
+            </SubmitButton>
           </form>
 
           {attribution.length > 0 && (

@@ -140,46 +140,70 @@ export default async function ProductPage({
 
   const optionNames = (product.variations ?? []).map((variation) => variation.name);
 
+  // A shop-only product is bought without a car, so none of this page's car language
+  // applies to it. `!== false` reads an absent flag as the column's default (`true`).
+  const carSpecific = product.isCarSpecific !== false;
+
   const productFunnelSections: Section[] = [];
   if (mechanismItems.length > 0) {
     productFunnelSections.push({
       kind: "heading",
       level: 2,
-      eyebrow: "How it fits",
-      title: `${product.name}, made for your car`,
+      eyebrow: carSpecific ? "How it fits" : "What it is",
+      title: carSpecific ? `${product.name}, made for your car` : `${product.name}, at a glance`,
     });
     productFunnelSections.push({ kind: "mechanism", items: mechanismItems });
   }
   productFunnelSections.push({ kind: "heading", level: 2, title: "How ordering works" });
   productFunnelSections.push({
     kind: "steps",
-    steps: [
-      {
-        title: "Tell us your car",
-        body: "Open the Fit Finder and pick your model and year, so the fit and the price are confirmed against the exact car.",
-      },
-      {
-        title: "Choose your option",
-        body:
-          optionNames.length > 1
-            ? // NAMED when there are only a few, COUNTED when there are many. Seat Covers
-              // has eighteen, and `join(", ")` printed all of them — a wall of colourways
-              // in the middle of a paragraph, which reads as a rendering fault rather
-              // than as instructions.
-              optionNames.length <= 4
-              ? `Pick from the options on this page — ${optionNames.join(", ")} — and the choice travels into the Fit Finder with you.`
-              : `Pick the option you want from the ${optionNames.length} on this page, and the choice travels into the Fit Finder with you.`
-            : "The option you pick on this page travels into the Fit Finder with you.",
-      },
-      {
-        title: "We confirm the fit",
-        body: "We confirm your exact model and year on WhatsApp before dispatch, so nothing is made on a guess.",
-      },
-      {
-        title: "Pay when it arrives",
-        body: "Pay the rider on delivery, nationwide — or prepay by bank transfer for the saving.",
-      },
-    ],
+    steps: carSpecific
+      ? [
+          {
+            title: "Tell us your car",
+            body: "Open the Fit Finder and pick your model and year, so the fit and the price are confirmed against the exact car.",
+          },
+          {
+            title: "Choose your option",
+            body:
+              optionNames.length > 1
+                ? // NAMED when there are only a few, COUNTED when there are many. Seat Covers
+                  // has eighteen, and `join(", ")` printed all of them — a wall of colourways
+                  // in the middle of a paragraph, which reads as a rendering fault rather
+                  // than as instructions.
+                  optionNames.length <= 4
+                  ? `Pick from the options on this page — ${optionNames.join(", ")} — and the choice travels into the Fit Finder with you.`
+                  : `Pick the option you want from the ${optionNames.length} on this page, and the choice travels into the Fit Finder with you.`
+                : "The option you pick on this page travels into the Fit Finder with you.",
+          },
+          {
+            title: "We confirm the fit",
+            body: "We confirm your exact model and year on WhatsApp before dispatch, so nothing is made on a guess.",
+          },
+          {
+            title: "Pay when it arrives",
+            body: "Pay the rider on delivery, nationwide — or prepay by bank transfer for the saving.",
+          },
+        ]
+      : [
+          {
+            title: "Choose your option",
+            body:
+              optionNames.length > 1
+                ? optionNames.length <= 4
+                  ? `Pick from the options on this page — ${optionNames.join(", ")}.`
+                  : `Pick the option you want from the ${optionNames.length} on this page.`
+                : "Tell us what you would like, and we take it from there.",
+          },
+          {
+            title: "Add it to your cart",
+            body: `${product.name} is bought without a car, so there is nothing to fit. Add it with anything else you are buying and check out in one go.`,
+          },
+          {
+            title: "Pay when it arrives",
+            body: "Pay the rider on delivery, nationwide — or prepay by bank transfer for the saving.",
+          },
+        ],
   });
 
   /**

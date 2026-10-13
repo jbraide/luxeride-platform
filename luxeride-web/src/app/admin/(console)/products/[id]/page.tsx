@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 
 import { prisma } from "@/lib/db";
 import EmptyState from "@/components/admin/EmptyState";
-import FieldErrors from "@/components/admin/FieldErrors";
 import PageHeader from "@/components/admin/PageHeader";
 import StatusChip from "@/components/admin/StatusChip";
 import {
@@ -39,6 +38,7 @@ import {
 import BundlePricePreview from "../../bundle-price-preview";
 import { messageFor, readEcho, readFailures, slugify, STOCK_STATES } from "../../catalogue-guard";
 import { BUNDLE_DISCOUNT_KINDS } from "@/lib/bundle-price";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 /**
  * `/admin/products/[id]` — one product, and its VARIATIONS.
@@ -219,8 +219,6 @@ export default async function ProductDetailPage({
           Off the shop. Its order history and prices are kept, and it can be put back at any time.
         </p>
       )}
-
-      <FieldErrors failures={failures} message={messageFor} />
 
       {/* ── The product ──────────────────────────────────────────────────── */}
       <section className="mt-8">
@@ -425,9 +423,9 @@ export default async function ProductDetailPage({
           </div>
 
           <div className="sm:col-span-3 flex flex-wrap items-center gap-4">
-            <button type="submit" className={BTN_PRIMARY}>
+            <SubmitButton className={BTN_PRIMARY}>
               Save product
-            </button>
+            </SubmitButton>
             <Link href="/admin/products" className={BTN_GHOST}>
               Back to products
             </Link>
@@ -547,9 +545,9 @@ export default async function ProductDetailPage({
                     {refusal(`sku__${variation.id}`)}
                   </div>
                   <div className="flex items-end">
-                    <button type="submit" className={BTN_SECONDARY}>
+                    <SubmitButton className={BTN_SECONDARY}>
                       Save
-                    </button>
+                    </SubmitButton>
                   </div>
 
                   <div className="sm:col-span-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
@@ -577,8 +575,7 @@ export default async function ProductDetailPage({
                       </span>
                     </span>
                     <span className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="submit"
+                      <SubmitButton
                         formAction={deleteVariation}
                         disabled={variation._count.orderItems > 0}
                         title={
@@ -589,11 +586,10 @@ export default async function ProductDetailPage({
                         className="text-xs text-fg-muted underline-offset-4 hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         Delete
-                      </button>
+                      </SubmitButton>
                       {/* Requirement 6.3: a variation that cannot be deleted still has an
                           honest, reversible path — off the product page, kept for the order. */}
-                      <button
-                        type="submit"
+                      <SubmitButton
                         formAction={variation.archivedAt ? unarchiveVariation : archiveVariation}
                         title={
                           variation.archivedAt
@@ -603,7 +599,7 @@ export default async function ProductDetailPage({
                         className={BTN_GHOST}
                       >
                         {variation.archivedAt ? "Put back" : "Archive"}
-                      </button>
+                      </SubmitButton>
                     </span>
                   </div>
                 </form>
@@ -699,9 +695,9 @@ export default async function ProductDetailPage({
             {refusal("stockState")}
           </div>
           <div className="sm:col-span-6">
-            <button type="submit" className={BTN_PRIMARY}>
+            <SubmitButton className={BTN_PRIMARY}>
               Add variation
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </section>
@@ -732,8 +728,7 @@ export default async function ProductDetailPage({
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <form method="post" action={deleteProduct}>
             <input type="hidden" name="id" value={product.id} />
-            <button
-              type="submit"
+            <SubmitButton
               disabled={product._count.layoutVariants > 0 || product._count.orderItems > 0}
               title={
                 product._count.layoutVariants > 0 || product._count.orderItems > 0
@@ -743,12 +738,11 @@ export default async function ProductDetailPage({
               className={BTN_DANGER}
             >
               Delete product
-            </button>
+            </SubmitButton>
           </form>
           <form method="post" action={product.archivedAt ? unarchiveProduct : archiveProduct}>
             <input type="hidden" name="id" value={product.id} />
-            <button
-              type="submit"
+            <SubmitButton
               title={
                 product.archivedAt
                   ? "Put this product back on the shop"
@@ -757,7 +751,7 @@ export default async function ProductDetailPage({
               className={BTN_SECONDARY}
             >
               {product.archivedAt ? "Put back on the shop" : "Archive instead"}
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </section>
@@ -937,14 +931,13 @@ function BundleEditor({
                       className={`${INPUT} mt-0.5 font-mono`}
                     />
                   </div>
-                  <button
-                    type="submit"
+                  <SubmitButton
                     formAction={removeBundleItem}
                     className={BTN_DANGER}
                     title={`Take ${item.product.name} out of this bundle`}
                   >
                     Take out
-                  </button>
+                  </SubmitButton>
                 </li>
               ))}
             </ul>
@@ -1021,13 +1014,12 @@ function BundleEditor({
                   className={`${INPUT} mt-0.5 font-mono ${inputState(failures.has("qty"))}`}
                 />
               </div>
-              <button
-                type="submit"
+              <SubmitButton
                 formAction={addBundleItem}
                 className={BTN_SECONDARY}
               >
                 Add
-              </button>
+              </SubmitButton>
             </div>
           </div>
           {refusal("qty")}
@@ -1113,9 +1105,9 @@ function BundleEditor({
         />
 
         <div className="mt-4">
-          <button type="submit" className={BTN_PRIMARY}>
+          <SubmitButton className={BTN_PRIMARY}>
             Save bundle
-          </button>
+          </SubmitButton>
         </div>
 
         {/* Requirement 5.2: an explicit, named way to remove the bundle, with the
@@ -1131,8 +1123,7 @@ function BundleEditor({
               unticking the box above, this is refused while any order names the product, because
               the composition is what explains that order.
             </p>
-            <button
-              type="submit"
+            <SubmitButton
               formAction={removeBundle}
               disabled={product._count.orderItems > 0}
               title={
@@ -1143,7 +1134,7 @@ function BundleEditor({
               className={BTN_DANGER}
             >
               Remove this bundle
-            </button>
+            </SubmitButton>
           </div>
         )}
       </form>

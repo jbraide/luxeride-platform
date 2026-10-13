@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LinkButton } from "@/components/Button";
 import { TrustStrip } from "@/components/TrustStrip";
+import ShopAddToCart from "@/components/ShopAddToCart";
 import type { Product } from "@/data/products";
 import { formatDeliverySummary, formatPriceFrom } from "@/lib/availability";
 import ProductFaq from "@/components/ProductFaq";
@@ -9,6 +10,7 @@ import { fmtNaira } from "@/lib/pricing";
 import type { DeliveryZone } from "@/lib/delivery";
 import { MAT_TYPE_VARIATION } from "@/data/fitment-catalogue";
 import VariationSelect from "@/components/VariationSelect";
+import { whatsappLink } from "@/lib/whatsapp";
 
 /**
  * Whether these options are the two mat LAYERS, rather than options of some other
@@ -72,6 +74,17 @@ export function BuyBox({
   const options = product.variations ?? [];
   const selected = options.find((option) => option.slug === selectedSlug) ?? null;
 
+  /**
+   * WHETHER THIS IS BOUGHT BY CAR.
+   *
+   * `Product.isCarSpecific` is the owner's switch, and the Fit Finder has always respected
+   * it (`fitment-live.ts`). The PDP did not, because the flag never reached this component —
+   * so a shop-only Seat Cover still offered "Select My Car & Add to Cart" and dropped the
+   * customer into a funnel that does not stock it. `!== false` reads a missing flag as the
+   * column's default (`true`, "in the Fit Finder").
+   */
+  const carSpecific = product.isCarSpecific !== false;
+
   /*
    * WHAT THE PRICE SAYS. With an option chosen the band belongs to THAT option — the
    * whole product's band would put the single-layer figure beside a double-layer
@@ -102,6 +115,16 @@ export function BuyBox({
     : product;
   const price = formatPriceFrom(pricedFor);
 
+  /**
+   * THE ONE PRICE A SHOP-ONLY PRODUCT IS ACTUALLY CHARGED.
+   *
+   * A car-specific band is honest: `regular` and `premium` are two brand tiers a particular
+   * car lands in. A shop-only product has no car and so no tier, and the server charges its
+   * `regular` figure — so printing the band would advertise an upper figure nobody is ever
+   * quoted, and the cart would contradict the page.
+   */
+  const shopUnitPrice = selected ? selected.regular : product.regular;
+
   /*
    * WHAT A BUNDLE IS MADE OF, AND WHAT IT SAVES.
    *
@@ -129,10 +152,12 @@ export function BuyBox({
       <h1 className="font-display text-3xl font-semibold">{product.name}</h1>
       <p className="mt-2 text-fg-muted">{product.note}</p>
 
-      <p className="mt-5 font-mono text-2xl font-bold text-accent">{price.from}</p>
+      <p className="mt-5 font-mono text-2xl font-bold text-accent">
+        {carSpecific ? price.from : fmtNaira(shopUnitPrice)}
+      </p>
       <p className="mt-1 text-xs text-fg-muted">
         {selected ? `${selected.name} · ` : ""}
-        {price.range} — {price.reason}
+        {carSpecific ? `${price.range} — ${price.reason}` : "One price — no car needed."}
       </p>
 
       {/*
@@ -170,9 +195,13 @@ export function BuyBox({
             })}
           </div>
           <p className="mt-2 text-xs text-fg-muted">
-            {selected
-              ? "Prices above are for the option you picked. The Fit Finder will confirm it is cut for your car."
-              : "Prices vary by option, and by your car. Pick one and the Fit Finder will confirm the fit and the exact price."}
+            {carSpecific
+              ? selected
+                ? "Prices above are for the option you picked. The Fit Finder will confirm it is cut for your car."
+                : "Prices vary by option, and by your car. Pick one and the Fit Finder will confirm the fit and the exact price."
+              : selected
+                ? "That is the price for the option you picked."
+                : "Prices vary by option — pick one to see its price."}
           </p>
         </fieldset>
       )}
@@ -229,17 +258,44 @@ export function BuyBox({
       <p className="mt-3 text-xs text-fg-muted">{formatDeliverySummary(deliveryZones)}</p>
 
       <div className="mt-6">
-        {/* The layer travels INTO the funnel. `?product=` alone locks the product and
-            skips the layer question, which for a two-option product means the customer
-            is quoted the product's floor without ever being asked — so the option is
-            carried here whenever one is selected. */}
-        <LinkButton
-          href={`/fit-finder?product=${product.slug}${
-            selectedSlug ? `&variation=${encodeURIComponent(selectedSlug)}` : ""
-          }`}
-        >
-          Select My Car &amp; Add to Cart
-        </LinkButton>
+        {carSpecific ? (
+          /* The layer travels INTO the funnel. `?product=` alone locks the product and
+             skips the layer question, which for a two-option product means the customer
+             is quoted the product's floor without ever being asked — so the option is
+             carried here whenever one is selected. */
+          <LinkButton
+            href={`/fit-finder?product=${product.slug}${
+              selectedSlug ? `&variation=${encodeURIComponent(selectedSlug)}` : ""
+            }`}
+          >
+            Select My Car &amp; Add to Cart
+          </LinkButton>
+        ) : (
+          <>
+            {/* A shop-only item is bought WITHOUT a car, so it goes into the SAME cart the
+                Fit Finder fills — no car asked. Its line carries no brand, model or year,
+                and the server prices it from the product's `regular` figure. */}
+            <ShopAddToCart
+              productSlug={product.slug}
+              productName={product.name}
+              variationSlug={selectedSlug}
+              unitPrice={shopUnitPrice}
+              image={product.images[0]}
+            />
+            <p className="mt-2 text-xs text-fg-muted">
+              Sold without a car — no model or year needed.{" "}
+              <a
+                href={whatsappLink(
+                  `Hi! I'd like the ${product.name}${selected ? ` (${selected.name})` : ""}. Could you confirm the price and delivery?`,
+                )}
+                className="text-accent hover:underline"
+              >
+                Order on WhatsApp
+              </a>{" "}
+              if you would rather.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="mt-4">

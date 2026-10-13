@@ -26,7 +26,6 @@ import {
 import { DEFAULT_LEAD_TIME } from "@/lib/copy";
 import { FLOOR_MAT_GENERATIONS } from "@/data/floor-mats-generations";
 import PageHeader from "@/components/admin/PageHeader";
-import FieldErrors from "@/components/admin/FieldErrors";
 import EmptyState from "@/components/admin/EmptyState";
 import StatusChip, { type StatusTone } from "@/components/admin/StatusChip";
 import {
@@ -45,6 +44,7 @@ import {
   SECTION_TITLE,
   inputState,
 } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 
 
 /**
@@ -251,8 +251,7 @@ export default async function LayoutDetailPage({
             <form method="post" action={setLayoutActive} className="contents">
               <input type="hidden" name="layoutId" value={layout.id} />
               <input type="hidden" name="active" value={layout.active ? "off" : "on"} />
-              <button
-                type="submit"
+              <SubmitButton
                 formNoValidate
                 className={`rounded-lg border px-4 py-1.5 text-sm transition-colors ${
                   layout.active
@@ -261,7 +260,7 @@ export default async function LayoutDetailPage({
                 }`}
               >
                 {layout.active ? "Withdraw this car" : "Put it live"}
-              </button>
+              </SubmitButton>
             </form>
           </>
         }
@@ -270,8 +269,6 @@ export default async function LayoutDetailPage({
         {layout.internalCode} · {layout.id}
       </p>
 
-
-      <FieldErrors failures={failures} message={messageFor} />
 
       {/* ── Ranges ────────────────────────────────────────────────────────── */}
       <section className="mt-8">
@@ -329,8 +326,7 @@ export default async function LayoutDetailPage({
                       <input type="hidden" name="layoutId" value={layout.id} />
                       <input type="hidden" name="vehicleId" value={vehicle.id} />
                       <input type="hidden" name="active" value={vehicle.active ? "off" : "on"} />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         formNoValidate
                         title={
                           vehicle.active
@@ -344,14 +340,14 @@ export default async function LayoutDetailPage({
                         }`}
                       >
                         {vehicle.active ? "Withdraw" : "Put live"}
-                      </button>
+                      </SubmitButton>
                     </form>
                     <form method="post" action={removeRange}>
                       <input type="hidden" name="layoutId" value={layout.id} />
                       <input type="hidden" name="vehicleId" value={vehicle.id} />
-                      <button type="submit" className={BTN_ROW}>
+                      <SubmitButton className={BTN_ROW}>
                         Remove range
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </div>
@@ -390,9 +386,9 @@ export default async function LayoutDetailPage({
                                   <form method="post" action={removeRangeImage}>
                                     <input type="hidden" name="layoutId" value={layout.id} />
                                     <input type="hidden" name="imageId" value={image.id} />
-                                    <button type="submit" className={BTN_GHOST}>
+                                    <SubmitButton className={BTN_GHOST}>
                                       Remove
-                                    </button>
+                                    </SubmitButton>
                                   </form>
                                 </li>
                               ))}
@@ -461,9 +457,9 @@ export default async function LayoutDetailPage({
                         className={INPUT}
                       />
                     </div>
-                    <button type="submit" className={BTN_SECONDARY}>
+                    <SubmitButton className={BTN_SECONDARY}>
                       Add photo
-                    </button>
+                    </SubmitButton>
                   </form>
                 ))}
               </li>
@@ -508,9 +504,9 @@ export default async function LayoutDetailPage({
             />
             {refusal("yearTo")}
           </div>
-          <button type="submit" className={BTN_PRIMARY}>
+          <SubmitButton className={BTN_PRIMARY}>
             Add range
-          </button>
+          </SubmitButton>
           <p className="w-full text-xs leading-relaxed text-fg-muted">
             Adds a year range of this same {layout.make.name} model onto this car. Two ranges for one
             car may not overlap — a year has to resolve to one floor pan.
@@ -660,13 +656,12 @@ export default async function LayoutDetailPage({
               <form key={option.value} method="post" action={setSeatRows}>
                 <input type="hidden" name="layoutId" value={layout.id} />
                 <input type="hidden" name="seatRows" value={option.value} />
-                <button
-                  type="submit"
+                <SubmitButton
                   aria-pressed={layout.seatRows === option.value}
                   className={layout.seatRows === option.value ? BTN_PRIMARY : BTN_SECONDARY}
                 >
                   {option.label}
-                </button>
+                </SubmitButton>
               </form>
             ))}
           </div>
@@ -955,9 +950,9 @@ export default async function LayoutDetailPage({
           </details>
 
           <div className="flex flex-wrap items-center gap-4">
-            <button type="submit" disabled={retired || ranges.length === 0} className={BTN_PRIMARY}>
+            <SubmitButton disabled={retired || ranges.length === 0} className={BTN_PRIMARY}>
               {isConfirmed ? "Save again" : "Confirm this car"}
-            </button>
+            </SubmitButton>
             <Link href="/admin/layouts" className={BTN_GHOST}>
               Back to layouts
             </Link>
